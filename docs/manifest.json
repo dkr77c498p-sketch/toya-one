@@ -1,0 +1,23 @@
+{
+
+  "name": "TOYA One",
+
+  "short_name": "TOYA One",
+
+  "description": "株式会社TOYA 作業日報・現場管理",
+
+  "start_url": "./",
+
+  "scope": "./",
+
+  "display": "standalone",
+
+  "background_color": "#b8ff00",
+
+  "theme_color": "#b8ff00",
+
+  "orientation": "portrait-primary",
+
+  "lang": "ja"
+
+}
