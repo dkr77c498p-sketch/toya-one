@@ -105,12 +105,12 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.0.5 社員利用状況・登録管理表示修正版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.1.0 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
 <button data-page="recordsPage">日報一覧</button>
-<button data-page="attachmentPage">アタッチメント</button><button data-page="masterPage">登録管理</button>
+<button data-page="attachmentPage">アタッチメント</button><button data-page="masterPage" style="display:none">登録管理</button>
 </nav>
 </header>
 
@@ -146,7 +146,7 @@ textarea{min-height:105px;resize:vertical}
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.0.5｜<span>項目はそのまま</span>、社員利用状況を登録管理に確実表示。</div>
+<div class="tap-guide">v5.1.0｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
 <label>現場名</label><select id="site"></select>
@@ -201,7 +201,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.0.5 社員利用状況・登録管理表示修正版：写真を分類して日報と一緒にこのiPhoneへ保存し、日報一覧から見返せます。</p></div>
+<p class="note">クラウド版 v5.1.0：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -250,7 +250,7 @@ textarea{min-height:105px;resize:vertical}
   <p class="note">管理者だけ表示。最終利用、日報保存、同期、写真保存の履歴を確認できます。</p>
   <div id="activityList"><div class="empty">「利用状況を更新」を押してください。</div></div>
 </div>
-<div class="card"><h2>データ管理</h2><div class="toolbar"><button class="btn dark" onclick="backupData()">バックアップ</button><label class="btn light" style="text-align:center;padding-top:11px">復元<input id="restoreFile" type="file" accept=".json" style="display:none"></label></div><button class="btn danger" style="width:100%" onclick="resetAll()">全データ削除</button><p class="note">バックアップはJSONファイルとして保存できます。</p></div>
+<div class="card" id="adminDataCard" style="display:none"><h2>データ管理</h2><div class="toolbar"><button class="btn dark" onclick="backupData()">バックアップ</button><label class="btn light" style="text-align:center;padding-top:11px">復元<input id="restoreFile" type="file" accept=".json" style="display:none"></label></div><button class="btn danger" style="width:100%" onclick="resetAll()">この端末の全データ削除</button><p class="note">管理者専用。この端末に保存したデータをJSONファイルとして保存できます。</p></div>
 </section>
 </main>
 
@@ -268,6 +268,16 @@ textarea{min-height:105px;resize:vertical}
       <div style="display:flex;gap:7px;flex-wrap:wrap"><button class="back-link" type="button" onclick="closePhotoViewer();document.querySelector('[data-page=&quot;recordsPage&quot;]').click()">← 日報一覧</button><button class="btn dark" type="button" onclick="closePhotoViewer()">閉じる</button></div>
     </div>
     <div id="savedPhotoGrid" class="photo-viewer-grid"></div>
+  </div>
+</div>
+
+<div id="reportDetailViewer" class="photo-viewer" onclick="if(event.target===this)closeCloudReportDetail()">
+  <div class="photo-viewer-box">
+    <div class="photo-viewer-head">
+      <div id="reportDetailTitle" class="photo-viewer-title">作業日報</div>
+      <button class="btn dark" type="button" onclick="closeCloudReportDetail()">閉じる</button>
+    </div>
+    <div id="reportDetailContent"></div>
   </div>
 </div>
 
@@ -300,7 +310,11 @@ const cloudClient=(window.supabase&&window.supabase.createClient)
   : null;
 let cloudProfile=null;
 let activityOpenedLogged=false;
-const TOYA_APP_URL='https://dkr77c498p-sketch.github.io/toya-one/TOYA_One_v5_0_5_activity_master_fix.html';
+const TOYA_APP_URL='https://dkr77c498p-sketch.github.io/toya-one/';
+let cloudReportsCache=[];
+let cloudPhotoCount={};
+let cloudProfilesCache={};
+let cloudSitesCache=[];
 
 function cloudMsg(msg,type=''){
   const el=$('#cloudStatus');
@@ -337,22 +351,40 @@ async function cloudLoadActivity(){
   const box=$('#activityList');
   box.innerHTML='<div class="empty">読み込み中…</div>';
   try{
-    const [{data:profiles,error:pErr},{data:acts,error:aErr}]=await Promise.all([
+    const [{data:profiles,error:pErr},{data:acts,error:aErr},{data:reports,error:rErr}]=await Promise.all([
       cloudClient.from('profiles').select('id,name,role,active').eq('company_id',cloudProfile.company_id).order('name'),
-      cloudClient.from('user_activity').select('user_id,activity_type,activity_at,details').eq('company_id',cloudProfile.company_id).order('activity_at',{ascending:false}).limit(1000)
+      cloudClient.from('user_activity').select('user_id,activity_type,activity_at,details').eq('company_id',cloudProfile.company_id).order('activity_at',{ascending:false}).limit(1000),
+      cloudClient.from('daily_reports').select('id,created_by,created_at').eq('company_id',cloudProfile.company_id)
     ]);
-    if(pErr)throw pErr;if(aErr)throw aErr;
+    if(pErr)throw pErr;if(aErr)throw aErr;if(rErr)throw rErr;
+    const reportIds=(reports||[]).map(r=>r.id);
+    let photos=[];
+    if(reportIds.length){
+      const {data,error}=await cloudClient.from('report_photos').select('report_id').eq('company_id',cloudProfile.company_id).in('report_id',reportIds);
+      if(error)throw error;
+      photos=data||[];
+    }
     const rows=(profiles||[]).map(p=>{
       const mine=(acts||[]).filter(a=>a.user_id===p.id);
       const last=mine[0];
-      const lastReport=mine.find(a=>a.activity_type==='report_save');
-      const reports=mine.filter(a=>a.activity_type==='report_save').length;
-      const photos=mine.filter(a=>a.activity_type==='photo_save').reduce((n,a)=>n+Number(a.details?.count||0),0);
+      const ownReports=(reports||[]).filter(r=>r.created_by===p.id);
+      const ownReportIds=new Set(ownReports.map(r=>r.id));
+      const lastReport=ownReports.slice().sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))[0];
+      const ownPhotos=(photos||[]).filter(x=>ownReportIds.has(x.report_id)).length;
       const lastSync=mine.find(a=>a.activity_type==='sync');
-      return `<div class="record"><div class="record-title">${cloudHtml(p.name||'名前未設定')} <span class="badge">${cloudHtml(p.role||'employee')}</span></div><div class="meta">最終利用：${cloudHtml(fmtActivityTime(last?.activity_at))}${last?`（${cloudHtml(activityLabel(last.activity_type))}）`:''}</div><div class="meta">最終日報：${cloudHtml(fmtActivityTime(lastReport?.activity_at))}／日報 ${reports}件／写真 ${photos}枚／最終同期 ${cloudHtml(fmtActivityTime(lastSync?.activity_at))}</div></div>`;
+      return `<div class="record"><div class="record-title">${cloudHtml(p.name||'名前未設定')} <span class="badge">${cloudHtml(p.role||'employee')}</span></div><div class="meta">最終利用：${cloudHtml(fmtActivityTime(last?.activity_at))}${last?`（${cloudHtml(activityLabel(last.activity_type))}）`:''}</div><div class="meta">クラウド登録：日報 ${ownReports.length}件／写真 ${ownPhotos}枚／最終登録 ${cloudHtml(fmtActivityTime(lastReport?.created_at))}／最終同期 ${cloudHtml(fmtActivityTime(lastSync?.activity_at))}</div></div>`;
     });
     box.innerHTML=rows.length?rows.join(''):'<div class="empty">社員プロフィールがありません。</div>';
   }catch(e){box.innerHTML=`<div class="cloud-bad">利用状況の読込エラー：${cloudHtml(e?.message||e)}</div>`;}
+}
+
+function applyCloudRoleUI(){
+  const isAdmin=cloudProfile?.role==='admin';
+  const ac=$('#activityCard');if(ac)ac.style.display=isAdmin?'block':'none';
+  const dc=$('#adminDataCard');if(dc)dc.style.display=isAdmin?'block':'none';
+  const masterNav=document.querySelector('nav [data-page="masterPage"]');
+  if(masterNav)masterNav.style.display=isAdmin?'block':'none';
+  if(!isAdmin&&$('#masterPage')?.classList.contains('active'))document.querySelector('[data-page="homePage"]')?.click();
 }
 
 async function cloudRefreshSession(){
@@ -360,7 +392,7 @@ async function cloudRefreshSession(){
   const {data:{session}}=await cloudClient.auth.getSession();
   if(!session){
     cloudProfile=null;
-    const ac=$('#activityCard'); if(ac)ac.style.display='none';
+    applyCloudRoleUI();
     $('#cloudLoggedOut').style.display='block';
     $('#cloudLoggedIn').style.display='none';
     cloudMsg('クラウド未接続');
@@ -375,12 +407,19 @@ async function cloudRefreshSession(){
   cloudProfile=profile;
   $('#cloudLoggedOut').style.display='none';
   $('#cloudLoggedIn').style.display='block';
-  const ac=$('#activityCard'); if(ac)ac.style.display=profile.role==='admin'?'block':'none';
+  applyCloudRoleUI();
   $('#cloudUserName').textContent=profile.name||session.user.email||'ログイン中';
   $('#cloudUserMeta').textContent=`${session.user.email||''}｜権限：${profile.role||'employee'}`;
   cloudMsg('Supabaseに接続済み','ok');
   if(!activityOpenedLogged){activityOpenedLogged=true;await cloudLogActivity('app_open');}
-  if(profile.role==='admin')cloudLoadActivity();
+  try{
+    await cloudFetchReports();
+    renderHome();
+    if(profile.role==='admin')cloudLoadActivity();
+  }catch(e){
+    console.error(e);
+    cloudMsg('クラウド共有設定の更新が必要です：'+(e?.message||e),'warn');
+  }
 }
 async function cloudLogin(){
   if(!cloudClient)return alert('Supabase接続を初期化できませんでした。');
@@ -399,7 +438,9 @@ async function cloudLogout(){
   if(!cloudClient)return;
   await cloudClient.auth.signOut();
   $('#cloudReportList').innerHTML='';
+  cloudReportsCache=[];cloudPhotoCount={};cloudProfilesCache={};cloudSitesCache=[];
   await cloudRefreshSession();
+  renderHome();
 }
 async function cloudEnsureSite(name){
   if(!cloudProfile)throw new Error('ログインしてください');
@@ -419,8 +460,14 @@ function cloudWorkText(d){
 }
 async function cloudSaveReport(d){
   if(!cloudClient||!cloudProfile)return {skipped:true};
+  const {data:{session}}=await cloudClient.auth.getSession();
   const siteId=await cloudEnsureSite(d.site);
   const sourceReportId=String(d.id);
+  const reportData=JSON.parse(JSON.stringify({
+    ...d,
+    cloudSubmittedById:session?.user?.id||null,
+    cloudSubmittedByName:cloudProfile.name||''
+  }));
   const row={
     company_id:cloudProfile.company_id,
     site_id:siteId,
@@ -434,7 +481,10 @@ async function cloudSaveReport(d){
     start_time:d.start||null,
     end_time:d.end||null,
     overtime_hours:Number(d.overtime||0),
-    notes:d.memo||''
+    notes:d.memo||'',
+    created_by:session?.user?.id||null,
+    report_data:reportData,
+    updated_at:new Date().toISOString()
   };
 
   // 1) すでに同じiPhone日報IDがある場合は更新だけする
@@ -645,34 +695,94 @@ async function cloudSyncLocalReports(){
   await cloudLoadReports();
   if(cloudProfile?.role==='admin')cloudLoadActivity();
 }
+function cloudNormalizeReport(r){
+  const full=(r.report_data&&typeof r.report_data==='object')?r.report_data:{};
+  const creator=cloudProfilesCache[r.created_by]?.name||full.cloudSubmittedByName||'登録者情報なし';
+  return {
+    ...full,
+    id:full.id??r.source_report_id??r.id,
+    cloudId:r.id,
+    date:full.date||r.report_date||'',
+    site:full.site||r.sites?.name||'現場未設定',
+    writer:full.writer||r.recorder_name||'',
+    weather:full.weather||r.weather||'',
+    workTypes:Array.isArray(full.workTypes)?full.workTypes:[],
+    details:full.details||r.work_content||'',
+    workers:Array.isArray(full.workers)?full.workers:[],
+    meikenCount:Number(full.meikenCount||0),
+    asahiCount:Number(full.asahiCount||r.dispatch_count||0),
+    start:full.start||r.start_time||'',
+    end:full.end||r.end_time||'',
+    overtime:Number(full.overtime||r.overtime_hours||0),
+    memo:full.memo||r.notes||'',
+    vehicles:Array.isArray(full.vehicles)?full.vehicles:[],
+    leaseVehicles:Array.isArray(full.leaseVehicles)?full.leaseVehicles:[],
+    machines:Array.isArray(full.machines)?full.machines:[],
+    leaseMachines:Array.isArray(full.leaseMachines)?full.leaseMachines:[],
+    attachments:Array.isArray(full.attachments)?full.attachments:[],
+    leaseAttachments:Array.isArray(full.leaseAttachments)?full.leaseAttachments:[],
+    items:Array.isArray(full.items)?full.items:[],
+    photoCount:Number(cloudPhotoCount[r.id]||0),
+    cloudCreatedById:r.created_by||full.cloudSubmittedById||null,
+    cloudCreatedByName:creator,
+    _workerTotal:Number(r.worker_count||0)+Number(r.dispatch_count||0),
+    _hasFullData:Boolean(r.report_data)
+  };
+}
+
+async function cloudFetchReports(){
+  if(!cloudProfile)return [];
+  const [{data:profiles,error:pErr},{data:sites,error:sErr},{data:rows,error:rErr}]=await Promise.all([
+    cloudClient.from('profiles').select('id,name,role').eq('company_id',cloudProfile.company_id),
+    cloudClient.from('sites').select('id,name,status').eq('company_id',cloudProfile.company_id).order('name'),
+    cloudClient.from('daily_reports').select('id,source_report_id,created_by,created_at,updated_at,report_data,report_date,recorder_name,weather,work_content,worker_count,dispatch_count,start_time,end_time,overtime_hours,notes,sites(name)').eq('company_id',cloudProfile.company_id).order('report_date',{ascending:false}).order('created_at',{ascending:false}).limit(500)
+  ]);
+  if(pErr)throw pErr;if(sErr)throw sErr;if(rErr)throw rErr;
+  cloudProfilesCache=Object.fromEntries((profiles||[]).map(p=>[p.id,p]));
+  cloudSitesCache=sites||[];
+  cloudPhotoCount={};
+  const ids=(rows||[]).map(r=>r.id);
+  if(ids.length){
+    const {data:photos,error}=await cloudClient.from('report_photos').select('report_id').eq('company_id',cloudProfile.company_id).in('report_id',ids);
+    if(error)throw error;
+    (photos||[]).forEach(p=>cloudPhotoCount[p.report_id]=(cloudPhotoCount[p.report_id]||0)+1);
+  }
+  cloudReportsCache=(rows||[]).map(cloudNormalizeReport);
+  renderSelectors();
+  populateLedgerSites();
+  return cloudReportsCache;
+}
+
+function cloudReportButtons(d){
+  const title=encodeURIComponent(`${d.date||''} ${d.site||'現場未設定'}`);
+  return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px"><button class="btn dark" onclick="showCloudReportDetail('${d.cloudId}')">日報詳細を見る</button>${d.photoCount?`<button class="btn light" onclick="cloudShowPhotos('${d.cloudId}',decodeURIComponent('${title}'))">クラウド写真を見る（${d.photoCount}）</button>`:''}</div>`;
+}
+
 async function cloudLoadReports(){
   if(!cloudProfile)return;
   const box=$('#cloudReportList');
   box.innerHTML='<div class="meta">読み込み中…</div>';
-  const {data,error}=await cloudClient.from('daily_reports')
-    .select('id,report_date,recorder_name,weather,work_content,worker_count,dispatch_count,start_time,end_time,overtime_hours,notes,sites(name)')
-    .eq('company_id',cloudProfile.company_id)
-    .order('report_date',{ascending:false})
-    .limit(50);
-  if(error){ box.innerHTML=`<div class="cloud-bad">読込エラー：${cloudHtml(error.message)}</div>`; return; }
-  if(!data||!data.length){ box.innerHTML='<div class="empty">クラウド日報はまだありません。</div>'; return; }
+  try{
+    const data=await cloudFetchReports();
+    if(!data.length){box.innerHTML='<div class="empty">クラウド日報はまだありません。</div>';renderHome();return;}
+    box.innerHTML=data.slice(0,50).map(d=>`<div class="cloud-item"><b>${cloudHtml(d.date)}　${cloudHtml(d.site)}</b><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}／${cloudHtml(d.start)}〜${cloudHtml(d.end)}／作業者 ${d._workerTotal}名${d.photoCount?`／写真 ${d.photoCount}枚`:''}</div>${cloudReportButtons(d)}</div>`).join('');
+    await renderHome();
+    if($('#recordsPage')?.classList.contains('active'))await renderRecords();
+  }catch(e){box.innerHTML=`<div class="cloud-bad">読込エラー：${cloudHtml(e?.message||e)}</div>`;}
+}
 
-  const ids=data.map(r=>r.id);
-  const photoCount={};
-  const {data:photos,error:photoErr}=await cloudClient.from('report_photos')
-    .select('report_id')
-    .eq('company_id',cloudProfile.company_id)
-    .in('report_id',ids);
-  if(!photoErr && photos){
-    photos.forEach(p=>photoCount[p.report_id]=(photoCount[p.report_id]||0)+1);
-  }
-
-  box.innerHTML=data.map(r=>{
-    const n=photoCount[r.id]||0;
-    const title=encodeURIComponent(`${r.report_date||''} ${r.sites?.name||'現場未設定'}`);
-    return `<div class="cloud-item"><b>${cloudHtml(r.report_date||'')}　${cloudHtml(r.sites?.name||'現場未設定')}</b><div class="meta">${cloudHtml(r.recorder_name||'')}／${cloudHtml(r.start_time||'')}〜${cloudHtml(r.end_time||'')}／作業者 ${Number(r.worker_count||0)+Number(r.dispatch_count||0)}名${n?`／写真 ${n}枚`:''}</div><div style="white-space:pre-wrap;font-size:12px">${cloudHtml(r.work_content||'')}</div>${n?`<button class="btn light cloud-photo-btn" style="margin-top:8px" data-cloud-report="${r.id}" data-cloud-title="${title}">クラウド写真を見る（${n}）</button>`:''}</div>`;
-  }).join('');
-  $$('.cloud-photo-btn').forEach(btn=>btn.onclick=()=>cloudShowPhotos(btn.dataset.cloudReport,decodeURIComponent(btn.dataset.cloudTitle||'')));
+function showCloudReportDetail(cloudId){
+  const d=cloudReportsCache.find(x=>String(x.cloudId)===String(cloudId));
+  if(!d)return alert('クラウド日報が見つかりません。再読み込みしてください。');
+  $('#reportDetailTitle').textContent=`${d.date} ${d.site}`;
+  const safe=cloudHtml(lineText(d)).replaceAll('\n','<br>');
+  $('#reportDetailContent').innerHTML=`<div class="record"><div class="record-title">クラウド共有日報</div><div class="meta">クラウド登録者：${cloudHtml(d.cloudCreatedByName)}／記入者：${cloudHtml(d.writer||'未設定')}</div></div><div style="line-height:1.8;padding:12px 2px">${safe}</div>${cloudReportButtons(d)}<button class="btn light" style="margin-top:10px" onclick="printCloudReport('${d.cloudId}')">PDF表示</button>`;
+  $('#reportDetailViewer').classList.add('open');
+}
+function closeCloudReportDetail(){$('#reportDetailViewer').classList.remove('open')}
+function printCloudReport(cloudId){
+  const d=cloudReportsCache.find(x=>String(x.cloudId)===String(cloudId));if(!d)return;
+  printReportObject(d);
 }
 
 const LS={reports:'toya_reports_v5',draft:'toya_draft_v5',sites:'toya_sites_v5',vehicles:'toya_vehicles_v5',machines:'toya_machines_v5',attachments:'toya_attachments_v1'};
@@ -738,7 +848,9 @@ function checked(n){return $$(`input[name="${n}"]:checked`).map(x=>x.value)}
 function esc(s){return (s||'').trim()}
 function showStatus(m){const s=$('#status');s.textContent=m;s.style.display='block';setTimeout(()=>s.style.display='none',2500)}
 function renderSelectors(){
- const sites=get(LS.sites,defaults.sites),vs=get(LS.vehicles,defaults.vehicles),ms=get(LS.machines,defaults.machines),ats=get(LS.attachments,defaults.attachments);
+ const localSites=get(LS.sites,defaults.sites);
+ const sites=cloudProfile&&cloudSitesCache.length?[...new Set([...cloudSitesCache.filter(x=>x.status!=='inactive').map(x=>x.name),...localSites])]:localSites;
+ const vs=get(LS.vehicles,defaults.vehicles),ms=get(LS.machines,defaults.machines),ats=get(LS.attachments,defaults.attachments);
  $('#site').innerHTML=sites.map(x=>`<option>${x}</option>`).join('');
  $('#vehicleChoices').innerHTML=vs.map(x=>`<label class="choice"><input type="checkbox" name="vehicle" value="${x}">${x}</label>`).join('');
  $('#machineChoices').innerHTML=ms.map(x=>`<label class="choice"><input type="checkbox" name="machine" value="${x}">${x}</label>`).join('');
@@ -1034,7 +1146,7 @@ const PHOTO_CATEGORIES=['着工前','養生','施工中','積込','搬出','完�
 function populateLedgerSites(){
   const sel=$('#ledgerSite');
   if(!sel)return;
-  const reports=get(LS.reports,[]);
+  const reports=cloudProfile?cloudReportsCache:get(LS.reports,[]);
   const sites=[...new Set(reports.filter(d=>(d.photoCount||0)>0 && d.site).map(d=>d.site))];
   const current=sel.value;
   sel.innerHTML=sites.length
@@ -1044,6 +1156,21 @@ function populateLedgerSites(){
 }
 
 async function getSiteLedgerData(site){
+  if(cloudProfile){
+    const reports=cloudReportsCache.filter(r=>(r.site||'現場名をあとで変更')===site);
+    const ids=reports.map(r=>r.cloudId);
+    const items=[];
+    if(!ids.length)return {reports,items};
+    const {data,error}=await cloudClient.from('report_photos').select('id,report_id,storage_path,category,description,original_name').eq('company_id',cloudProfile.company_id).in('report_id',ids);
+    if(error)throw error;
+    for(const p of data||[]){
+      const report=reports.find(r=>String(r.cloudId)===String(p.report_id))||{};
+      const {data:signed,error:signedErr}=await cloudClient.storage.from('toya-photos').createSignedUrl(p.storage_path,3600);
+      if(signedErr)continue;
+      items.push({reportId:p.report_id,date:report.date||'',writer:report.writer||'',site:report.site||site,category:p.category||'その他',description:p.description||'',name:p.original_name||'',blob:null,dataUrl:signed?.signedUrl||''});
+    }
+    return {reports,items};
+  }
   const allReports=get(LS.reports,[]);
   const reports=allReports.filter(r=>(r.site||'現場名をあとで変更')===site);
   const items=[];
@@ -1096,7 +1223,7 @@ async function showSiteLedger(){
         const card=document.createElement('div');
         card.className='ledger-photo';
         const img=document.createElement('img');
-        img.src=URL.createObjectURL(p.blob);
+        img.src=p.dataUrl||(p.blob?URL.createObjectURL(p.blob):'');
         const meta=document.createElement('div');
         meta.className='ledger-meta';
         meta.textContent=`${p.date}${p.writer?`／${p.writer}`:''}${p.description?`｜${p.description}`:''}`;
@@ -1221,9 +1348,20 @@ async function printSiteLedger(){
 
 
 
-function renderRecords(){
+async function renderRecords(){
   populateLedgerSites();
-  const a=get(LS.reports,[]),b=$('#records');
+  const b=$('#records');
+  if(cloudProfile){
+    b.innerHTML='<div class="empty">クラウド日報を読み込み中…</div>';
+    try{
+      const a=await cloudFetchReports();
+      populateLedgerSites();
+      if(!a.length){b.innerHTML='<div class="empty">クラウドに保存された日報はありません。</div>';return;}
+      b.innerHTML=a.map(d=>`<div class="record"><div class="record-title">${cloudHtml(d.date)}　${cloudHtml(d.site)}</div><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}${d.photoCount?`／写真：${d.photoCount}枚`:''}</div><div>${(d.workTypes||[]).map(x=>`<span class="badge">${cloudHtml(x)}</span>`).join('')}</div>${cloudReportButtons(d)}</div>`).join('');
+    }catch(e){b.innerHTML=`<div class="cloud-bad">クラウド日報の読込エラー：${cloudHtml(e?.message||e)}</div>`;}
+    return;
+  }
+  const a=get(LS.reports,[]);
   b.innerHTML='';
   if(!a.length){b.innerHTML='<div class="empty">保存済み日報はありません。</div>';return}
   a.forEach((d,idx)=>{
@@ -1294,6 +1432,9 @@ function editSavedSite(id){
 
 function printSaved(id){
   const d=get(LS.reports,[]).find(x=>x.id===id);if(!d)return;
+  printReportObject(d);
+}
+function printReportObject(d){
   const w=window.open('','_blank');
   if(!w){alert('日報PDFを開けませんでした。Safariのポップアップ設定をご確認ください。');return;}
   const safe=lineText(d).replaceAll('&','&amp;').replaceAll('<','&lt;');
@@ -1308,8 +1449,18 @@ async function deleteSaved(id){
     renderRecords();
   }
 }
-function exportCSV(){const a=get(LS.reports,[]);if(!a.length)return alert('日報がありません。');const rows=[['日付','現場','記入者','天気','明建人数','朝日人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ']];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.weather,d.meikenCount||0,d.asahiCount||0,[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),d.memo]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_作業日報一覧.csv';x.click()}
-function renderHome(){const a=get(LS.reports,[]),td=today(),todayA=a.filter(x=>x.date===td);$('#todayReports').textContent=todayA.length;$('#activeSites').textContent=get(LS.sites,[]).filter(x=>x!=='未登録現場').length;$('#todayWorkers').textContent=todayA.reduce((s,d)=>s+(d.workers||[]).length+(d.meikenCount||0)+(d.asahiCount||0)+(d.otherWorker?1:0),0);$('#todayMachines').textContent=todayA.reduce((s,d)=>s+(d.machines||[]).length+(d.leaseMachines||[]).reduce((q,x)=>q+(x.count||1),0),0);const b=$('#todayList');b.innerHTML=todayA.length?todayA.map(d=>`<div class="record"><div class="record-title">${d.site}</div><div class="meta">${d.writer}／${d.start}〜${d.end}</div></div>`).join(''):'<div class="empty">本日の日報はまだありません。</div>'}
+async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const rows=[['日付','現場','記入者','クラウド登録者','天気','明建人数','朝日人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ']];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
+async function renderHome(){
+  let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);
+  if(cloudProfile&&!a.length){try{a=await cloudFetchReports()}catch(e){console.warn(e)}}
+  const td=today(),todayA=a.filter(x=>x.date===td);
+  $('#todayReports').textContent=todayA.length;
+  $('#activeSites').textContent=cloudProfile?cloudSitesCache.filter(x=>x.status!=='inactive').length:get(LS.sites,[]).filter(x=>x!=='未登録現場').length;
+  $('#todayWorkers').textContent=todayA.reduce((s,d)=>s+(d._hasFullData?((d.workers||[]).length+(d.meikenCount||0)+(d.asahiCount||0)+(d.otherWorker?1:0)):Number(d._workerTotal||0)),0);
+  $('#todayMachines').textContent=todayA.reduce((s,d)=>s+(d.machines||[]).length+(d.leaseMachines||[]).reduce((q,x)=>q+(Number(x.count)||1),0),0);
+  const b=$('#todayList');
+  b.innerHTML=todayA.length?todayA.map(d=>`<div class="record"><div class="record-title">${cloudHtml(d.site)}</div><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}${cloudProfile?`／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}`:''}／${cloudHtml(d.start)}〜${cloudHtml(d.end)}</div>${cloudProfile?cloudReportButtons(d):''}</div>`).join(''):'<div class="empty">本日の日報はまだありません。</div>';
+}
 function masterRows(arr,type){return arr.map((x,i)=>`<div class="row"><div class="grid2"><input value="${x}" onchange="updateMaster('${type}',${i},this.value)"><button class="btn danger" onclick="deleteMaster('${type}',${i})">削除</button></div></div>`).join('')}
 function renderMasters(){$('#siteMaster').innerHTML=masterRows(get(LS.sites,[]),'sites');$('#vehicleMaster').innerHTML=masterRows(get(LS.vehicles,[]),'vehicles');$('#machineMaster').innerHTML=masterRows(get(LS.machines,[]),'machines');renderAttachmentMaster()}
 function keyFor(t){return LS[t]}
