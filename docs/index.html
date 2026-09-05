@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.2.0 会社共有日報対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.3.0 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -163,11 +163,12 @@ textarea{min-height:105px;resize:vertical}
 </div>
 <div style="margin-top:12px"><div style="font-weight:900;margin-bottom:7px">日報提出状況</div><div id="dailySubmissionList"></div><div class="note" style="margin-top:7px">夕方に日報を入力すると「提出済み」に変わります。1日に複数現場の日報があっても、提出者は1人として数えます。</div></div>
 </div>
+<div class="card"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>燃料 L</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
 <div class="card"><h2>本日の現場</h2><div id="todayList"></div></div>
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.2.0｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
+<div class="tap-guide">v5.3.0｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div id="editBanner" class="edit-banner"><span id="editBannerText">日報を編集中</span><button type="button" class="btn light" onclick="cancelReportEdit()">編集をやめる</button></div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
@@ -215,6 +216,7 @@ textarea{min-height:105px;resize:vertical}
 </div>
 
 <div class="card"><h2>産業廃棄物（タップ入力）</h2><div class="muted-small">品目をタップすると「材料・処分・経費」に産廃行を追加します。数量と単位をタップで調整できます。</div><div class="waste-preset"><button type="button" class="preset-chip" onclick="addWasteItem('コンクリートがら','t')">コンクリートがら</button><button type="button" class="preset-chip" onclick="addWasteItem('アスファルトがら','t')">アスファルトがら</button><button type="button" class="preset-chip" onclick="addWasteItem('木くず','m³')">木くず</button><button type="button" class="preset-chip" onclick="addWasteItem('混合廃棄物','m³')">混合廃棄物</button><button type="button" class="preset-chip" onclick="addWasteItem('廃プラスチック類','m³')">廃プラスチック類</button><button type="button" class="preset-chip" onclick="addWasteItem('金属くず','t')">金属くず</button><button type="button" class="preset-chip" onclick="addWasteItem('ガラス・陶磁器くず','t')">ガラス・陶磁器くず</button><button type="button" class="preset-chip" onclick="addWasteItem('石膏ボード','m³')">石膏ボード</button></div></div>
+<div class="card"><h2>燃料費</h2><div class="note">給油した分だけ入力してください。車両・重機ごとに月間集計します。</div><div id="fuelRows"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addFuelRow()">＋ 給油を追加</button></div>
 <div class="card"><h2>材料・処分・経費</h2><div id="items"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addItem()">＋ 品目を追加</button></div>
 
 <div class="card" id="photoSection"><h2>現場写真</h2>
@@ -223,7 +225,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.2.0：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">クラウド版 v5.3.0：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -1129,13 +1131,42 @@ function closePhotoViewer(){
 }
 
 
+function addFuelRow(d={}){
+  const r=document.createElement('div');
+  r.className='row fuel-row';
+  const assets=['10tダンプ','4tダンプ','4tアームロール','3tダンプ','軽トラ','ハイエース','SK135（1号機）','SK135（2号機）','SK55','その他'];
+  const fuels=['軽油','ガソリン','AdBlue','その他'];
+  r.innerHTML=`<div class="rowhead"><b>給油</b><button class="btn danger" type="button" onclick="this.closest('.fuel-row').remove()">削除</button></div><div class="grid2"><div><label>車両・重機</label><select class="f-asset">${assets.map(x=>`<option ${x===(d.asset||'')?'selected':''}>${x}</option>`).join('')}</select></div><div><label>燃料</label><select class="f-type">${fuels.map(x=>`<option ${x===(d.type||'軽油')?'selected':''}>${x}</option>`).join('')}</select></div></div><div class="grid3"><div><label>給油量（L）</label><input class="f-liters" type="number" min="0" step="0.1" value="${d.liters||''}"></div><div><label>単価（円/L）</label><input class="f-unit" type="number" min="0" step="1" value="${d.unitPrice||''}"></div><div><label>金額（円）</label><input class="f-amount" type="number" min="0" step="1" value="${d.amount||''}"></div></div><label>給油所・メモ</label><input class="f-note" value="${d.note||''}" placeholder="例：ENEOS／現金など">`;
+  const liters=r.querySelector('.f-liters'),unit=r.querySelector('.f-unit'),amount=r.querySelector('.f-amount');
+  const calc=()=>{if(liters.value&&unit.value)amount.value=Math.round(Number(liters.value)*Number(unit.value))};
+  liters.addEventListener('input',calc);unit.addEventListener('input',calc);
+  $('#fuelRows').appendChild(r);enhanceNumericInputs(r);
+}
+function fuelAmount(x){const a=Number(x?.amount||0);if(a>0)return a;return Number(x?.liters||0)*Number(x?.unitPrice||0)}
+function renderFuelSummary(reports){
+  const month=today().slice(0,7),arr=(reports||[]).filter(d=>String(d.date||'').startsWith(month));
+  const fuels=arr.flatMap(d=>(d.fuels||[]));
+  const liters=fuels.reduce((s,x)=>s+Number(x.liters||0),0);
+  const fuelTotal=fuels.reduce((s,x)=>s+fuelAmount(x),0);
+  const other=arr.reduce((s,d)=>s+(d.items||[]).reduce((q,x)=>q+Number(x.price||0),0),0);
+  const yen=n=>'¥'+Math.round(Number(n||0)).toLocaleString();
+  if($('#monthFuelLiters'))$('#monthFuelLiters').textContent=liters.toLocaleString(undefined,{maximumFractionDigits:1});
+  if($('#monthFuelAmount'))$('#monthFuelAmount').textContent=yen(fuelTotal);
+  if($('#monthOtherExpense'))$('#monthOtherExpense').textContent=yen(other);
+  if($('#monthExpenseTotal'))$('#monthExpenseTotal').textContent=yen(fuelTotal+other);
+  const map={};fuels.forEach(x=>{const k=x.asset||'未設定';if(!map[k])map[k]={liters:0,amount:0};map[k].liters+=Number(x.liters||0);map[k].amount+=fuelAmount(x)});
+  const b=$('#fuelBreakdown');if(b)b.innerHTML=Object.keys(map).length?Object.entries(map).sort((a,b)=>b[1].amount-a[1].amount).map(([k,v])=>`<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(k)}</b><div class="meta" style="margin:3px 0 0">${v.liters.toLocaleString(undefined,{maximumFractionDigits:1})}L ／ ${yen(v.amount)}</div></div>`).join(''):'<div class="empty" style="padding:18px 8px">今月の燃料入力はまだありません。</div>';
+}
+
 function collect(){return {id:editingReport?.id??Date.now(),cloudCreatedById:editingReport?.cloudCreatedById||null,cloudCreatedByName:editingReport?.cloudCreatedByName||'',date:$('#date').value,weather:$('#weather').value,site:$('#site').value,writer:$('#writer').value,workers:checked('worker'),meikenCount:Number($('#meikenCount').value||0),asahiCount:Number($('#asahiCount').value||0),otherWorker:esc($('#otherWorker').value),start:$('#start').value,end:$('#end').value,overtime:$('#overtime').value,workTypes:checked('workType'),details:esc($('#details').value),vehicles:checked('vehicle'),leaseVehicles:$$('.lease-vehicle').map(r=>({name:esc(r.querySelector('.lv-name').value),company:esc(r.querySelector('.lv-company').value),count:Number(r.querySelector('.lv-count').value||1),hours:r.querySelector('.lv-hours').value})).filter(x=>x.name),machines:$$('#machineHours .mh').map(x=>({name:x.dataset.name,hours:x.querySelector('input[type=number]').value})),leaseMachines:$$('.lease-machine').map(r=>({name:esc(r.querySelector('.lm-name').value),company:esc(r.querySelector('.lm-company').value),count:Number(r.querySelector('.lm-count').value||1),hours:r.querySelector('.lm-hours').value})).filter(x=>x.name),
   attachments:checked('attachment'),
   leaseAttachments:$$('.lease-attachment').map(r=>({name:esc(r.querySelector('.la-name').value),model:esc(r.querySelector('.la-model').value),company:esc(r.querySelector('.la-company').value),machine:esc(r.querySelector('.la-machine').value),startDate:r.querySelector('.la-start').value,returnDate:r.querySelector('.la-return').value,price:r.querySelector('.la-price').value})).filter(x=>x.name),
+  fuels:$$('.fuel-row').map(r=>({asset:r.querySelector('.f-asset').value,type:r.querySelector('.f-type').value,liters:Number(r.querySelector('.f-liters').value||0),unitPrice:Number(r.querySelector('.f-unit').value||0),amount:Number(r.querySelector('.f-amount').value||0),note:esc(r.querySelector('.f-note').value)})).filter(x=>x.liters||x.amount),
   items:$$('.item').map(r=>({name:esc(r.querySelector('.i-name').value),unit:esc(r.querySelector('.i-unit').value),qty:r.querySelector('.i-qty').value,price:r.querySelector('.i-price').value,company:esc(r.querySelector('.i-company').value),isWaste:r.dataset.isWaste==='1',manifestType:r.querySelector('.i-manifest-type')?.value||'none',manifestNumber:esc(r.querySelector('.i-manifest-number')?.value||''),transporterName:esc(r.querySelector('.i-transporter')?.value||''),transporterLicenseNo:esc(r.querySelector('.i-transporter-license')?.value||''),disposerName:esc(r.querySelector('.i-disposer')?.value||''),disposerLicenseNo:esc(r.querySelector('.i-disposer-license')?.value||''),disposalSite:esc(r.querySelector('.i-disposal-site')?.value||'')})).filter(x=>x.name),memo:esc($('#memo').value),photoCategory:$('#photoCategory').value,photoCount:stagedPhotos.length,createdAt:new Date().toISOString()}}
 function validate(d){if(!d.site){alert('現場名を選択してください。');return false}if(!d.writer){alert('記入者を選択してください。');return false}return true}
 function lineText(d){let p=[...(d.workers||[])];if(d.meikenCount>0)p.push(`明建 ${d.meikenCount}名`);if(d.asahiCount>0)p.push(`朝日 ${d.asahiCount}名`);if(d.otherWorker)p.push(d.otherWorker);const vl=[...(d.vehicles||[]).map(x=>`・${x}（自社）`),...(d.leaseVehicles||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];const ml=[...(d.machines||[]).map(x=>`・${x.name}${x.hours?` ${x.hours}時間`:''}（自社）`),...(d.leaseMachines||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];let t=`【TOYA 作業日報】\n日付：${d.date.replaceAll('-','/')}\n現場名：${d.site}\n記入者：${d.writer}\n天気：${d.weather}\n\n■作業者\n${p.length?p.map(x=>'・'+x).join('\n'):'・なし'}\n作業時間：${d.start}〜${d.end}${Number(d.overtime)>0?`（残業 ${d.overtime}時間）`:''}\n\n■作業内容\n${d.workTypes.length?d.workTypes.map(x=>'・'+x).join('\n')+'\n':''}${d.details||'記載なし'}\n\n■使用車両\n${vl.length?vl.join('\n'):'・なし'}\n\n■使用重機\n${ml.length?ml.join('\n'):'・なし'}`;const al=[...(d.attachments||[]).map(x=>`・${x}（自社）`),...(d.leaseAttachments||[]).map(x=>`・${x.name}${x.model?` ${x.model}`:''}（リース${x.company?`／${x.company}`:''}${x.machine?`／${x.machine}装着`:''}）`)];
  t+=`\n\n■使用アタッチメント\n${al.length?al.join('\n'):'・なし'}`;
+ if((d.fuels||[]).length)t+=`\n\n■燃料費\n`+d.fuels.map(x=>`・${x.asset||'未設定'} ${x.type||''} ${Number(x.liters||0).toLocaleString()}L${x.unitPrice?` @￥${Number(x.unitPrice).toLocaleString()}`:''} ／ ￥${Math.round(fuelAmount(x)).toLocaleString()}${x.note?`（${x.note}）`:''}`).join('\n');
  if(d.items.length)t+=`\n\n■材料・処分・経費\n`+d.items.map(x=>`・${x.name} ${x.qty||''}${x.unit||''}${x.price?` ￥${Number(x.price).toLocaleString()}`:''}${x.company?`（${x.company}）`:''}${x.isWaste?`［マニフェスト：${x.manifestType==='paper'?'紙':x.manifestType==='electronic'?'電子':'なし'}］`:''}`).join('\n');if(d.memo)t+=`\n\n■メモ・明日の予定\n${d.memo}`;return t+`\n\n※現場写真分類：${d.photoCategory||'未分類'}（写真は別途添付）`}
 async function copyLine(){const d=collect();if(!validate(d))return;const txt=lineText(d);try{await navigator.clipboard.writeText(txt)}catch(e){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}showStatus('LINE報告用の文章をコピーしました。')}
 function saveDraft(){set(LS.draft,collect());showStatus('一時保存しました。')}
@@ -1463,14 +1494,14 @@ function cancelReportEdit(){if(confirm('編集をやめますか？入力中の�
 function ensureSiteOption(name){if(!name)return;const sel=$('#site');if([...sel.options].some(o=>o.value===name))return;const sites=get(LS.sites,[]);if(!sites.includes(name)){sites.push(name);set(LS.sites,sites)}renderSelectors()}
 function clearReportFormDynamic(){
   $$('input[name="worker"],input[name="workType"],input[name="vehicle"],input[name="machine"],input[name="attachment"]').forEach(x=>x.checked=false);
-  $('#leaseVehicles').innerHTML='';$('#leaseMachines').innerHTML='';$('#leaseAttachments').innerHTML='';$('#items').innerHTML='';$('#machineHours').innerHTML='';stagedPhotos=[];renderStagedPhotos();
+  $('#leaseVehicles').innerHTML='';$('#leaseMachines').innerHTML='';$('#leaseAttachments').innerHTML='';$('#fuelRows').innerHTML='';$('#items').innerHTML='';$('#machineHours').innerHTML='';stagedPhotos=[];renderStagedPhotos();
 }
 function fillReportForm(d,mode='edit'){
   clearReportFormDynamic();ensureSiteOption(d.site||'');
   $('#date').value=d.date||today();$('#weather').value=d.weather||'晴れ';$('#site').value=d.site||'';$('#writer').value=d.writer||'';$('#meikenCount').value=Number(d.meikenCount||0);$('#asahiCount').value=Number(d.asahiCount||0);$('#otherWorker').value=d.otherWorker||'';$('#start').value=d.start||'08:00';$('#end').value=d.end||'17:00';$('#overtime').value=d.overtime||0;$('#details').value=d.details||'';$('#memo').value=d.memo||'';
   const cv=(name,vals)=>$$(`input[name="${name}"]`).forEach(x=>x.checked=(vals||[]).includes(x.value));cv('worker',d.workers);cv('workType',d.workTypes);cv('vehicle',d.vehicles);cv('machine',(d.machines||[]).map(x=>x.name));cv('attachment',d.attachments);renderMachineHours();
   (d.machines||[]).forEach(x=>{const row=$$('#machineHours .mh').find(r=>r.dataset.name===x.name);if(row)row.querySelector('input[type=number]').value=x.hours||''});
-  (d.leaseVehicles||[]).forEach(addLeaseVehicle);(d.leaseMachines||[]).forEach(addLeaseMachine);(d.leaseAttachments||[]).forEach(addLeaseAttachment);(d.items||[]).forEach(addItem);
+  (d.leaseVehicles||[]).forEach(addLeaseVehicle);(d.leaseMachines||[]).forEach(addLeaseMachine);(d.leaseAttachments||[]).forEach(addLeaseAttachment);(d.fuels||[]).forEach(addFuelRow);(d.items||[]).forEach(addItem);
   if(mode==='edit'){editingReport={...d};$('#editBanner')?.classList.add('show');if($('#editBannerText'))$('#editBannerText').textContent=`編集中：${d.date||''} ${d.site||''}`;if($('#saveReportBtn'))$('#saveReportBtn').textContent='変更を保存'}
   else{clearReportEditState();if($('#editBannerText'))$('#editBannerText').textContent='別現場用に複製しました。現場名・時間を確認してください。';$('#editBanner')?.classList.add('show')}
   document.querySelector('[data-page="reportPage"]')?.click();window.scrollTo({top:0,behavior:'smooth'});
@@ -1595,6 +1626,7 @@ async function renderHome(){
       return `<div class="record" style="margin-bottom:7px;padding:10px;display:flex;align-items:center;justify-content:space-between;gap:10px"><div><b>${cloudHtml(name)}</b><div class="meta" style="margin:3px 0 0">${done?(sites.length?cloudHtml(sites.join('・')):`日報 ${reports.length}件`):'夕方の日報入力待ち'}</div></div><span class="badge" style="background:${done?'#111':'#ececec'};color:${done?'#b8ff00':'#777'}">${done?'提出済み':'未提出'}</span></div>`;
     }).join('');
   }
+  renderFuelSummary(a);
   const b=$('#todayList');
   b.innerHTML=todayA.length?todayA.map(d=>`<div class="record"><div class="record-title">${cloudHtml(d.site)}</div><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}${cloudProfile?`／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}`:''}／${cloudHtml(d.start)}〜${cloudHtml(d.end)}</div>${cloudProfile?cloudReportButtons(d):''}</div>`).join(''):'<div class="empty">本日の日報はまだありません。夕方の提出後にここへ表示されます。</div>';
 }
