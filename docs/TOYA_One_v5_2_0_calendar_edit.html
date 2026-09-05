@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.3.2 会社共有日報対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.4.0 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -163,12 +163,12 @@ textarea{min-height:105px;resize:vertical}
 </div>
 <div style="margin-top:12px"><div style="font-weight:900;margin-bottom:7px">日報提出状況</div><div id="dailySubmissionList"></div><div class="note" style="margin-top:7px">夕方に日報を入力すると「提出済み」に変わります。1日に複数現場の日報があっても、提出者は1人として数えます。</div></div>
 </div>
-<div class="card"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
+<div class="card" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">0</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">0</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">0</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">0</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
 <div class="card"><h2>本日の現場</h2><div id="todayList"></div></div>
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.3.2｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
+<div class="tap-guide">v5.4.0｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div id="editBanner" class="edit-banner"><span id="editBannerText">日報を編集中</span><button type="button" class="btn light" onclick="cancelReportEdit()">編集をやめる</button></div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
@@ -225,7 +225,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.3.2：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">クラウド版 v5.4.0：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -1193,6 +1193,44 @@ function setFuelOutlet(btn,outlet){
   applyFuelPrice(row);
 }
 function fuelAmount(x){const a=Number(x?.amount||0);if(a>0)return a;return Number(x?.liters||0)*Number(x?.unitPrice||0)}
+function renderWasteSummary(reports){
+  const month=today().slice(0,7);
+  const arr=(reports||[]).filter(d=>String(d.date||'').startsWith(month));
+  const rows=[];
+  arr.forEach(d=>(d.items||[]).forEach(x=>{
+    if(x && (x.isWaste || String(x.name||'').startsWith('産廃：'))){
+      rows.push({...x,_date:d.date||'',_site:d.site||'現場未設定',_writer:d.writer||''});
+    }
+  }));
+  const paper=rows.filter(x=>x.manifestType==='paper').length;
+  const electronic=rows.filter(x=>x.manifestType==='electronic').length;
+  const none=rows.filter(x=>!x.manifestType||x.manifestType==='none').length;
+  const sites=new Set(rows.map(x=>x._site).filter(Boolean));
+  if($('#wasteEntryCount'))$('#wasteEntryCount').textContent=rows.length;
+  if($('#wasteManifestOk'))$('#wasteManifestOk').textContent=paper+electronic;
+  if($('#wasteManifestNone'))$('#wasteManifestNone').textContent=none;
+  if($('#wasteSiteCount'))$('#wasteSiteCount').textContent=sites.size;
+  const byItem={};
+  rows.forEach(x=>{
+    const name=String(x.name||'産廃').replace(/^産廃：/,'')||'産廃';
+    const unit=x.unit||'数量';
+    const key=name+'__'+unit;
+    if(!byItem[key])byItem[key]={name,unit,qty:0,count:0};
+    byItem[key].qty+=Number(x.qty||0);byItem[key].count++;
+  });
+  const breakdown=$('#wasteBreakdown');
+  if(breakdown)breakdown.innerHTML=Object.keys(byItem).length?Object.values(byItem).sort((a,b)=>b.qty-a.qty).map(v=>`<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(v.name)}</b><div class="meta" style="margin:3px 0 0">${Number(v.qty||0).toLocaleString(undefined,{maximumFractionDigits:2})}${cloudHtml(v.unit)} ／ ${v.count}件</div></div>`).join(''):'<div class="empty" style="padding:18px 8px">今月の産廃入力はまだありません。</div>';
+  const recent=$('#wasteRecent');
+  const sorted=[...rows].sort((a,b)=>String(b._date).localeCompare(String(a._date))).slice(0,8);
+  if(recent)recent.innerHTML=sorted.length?sorted.map(x=>{
+    const type=x.manifestType==='paper'?'紙':x.manifestType==='electronic'?'電子':'なし';
+    const name=String(x.name||'産廃').replace(/^産廃：/,'');
+    const no=x.manifestNumber?` ／ No.${cloudHtml(x.manifestNumber)}`:'';
+    const dest=x.disposalSite?` ／ ${cloudHtml(x.disposalSite)}`:(x.disposerName?` ／ ${cloudHtml(x.disposerName)}`:'');
+    return `<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(x._date)}　${cloudHtml(x._site)}</b><div class="meta" style="margin:3px 0 0">${cloudHtml(name)} ${Number(x.qty||0).toLocaleString(undefined,{maximumFractionDigits:2})}${cloudHtml(x.unit||'')} ／ マニフェスト：${type}${no}${dest}</div></div>`;
+  }).join(''):'<div class="empty" style="padding:18px 8px">マニフェスト記録はまだありません。</div>';
+}
+
 function renderFuelSummary(reports){
   const month=today().slice(0,7),arr=(reports||[]).filter(d=>String(d.date||'').startsWith(month));
   const fuels=arr.flatMap(d=>(d.fuels||[]));
