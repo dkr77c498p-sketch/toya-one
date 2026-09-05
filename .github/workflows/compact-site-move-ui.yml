@@ -1,0 +1,38 @@
+name: Compact site move UI
+on:
+  push:
+    paths:
+      - '.github/workflows/compact-site-move-ui.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compact site move form
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('docs/midway.js')
+          s=p.read_text(encoding='utf-8')
+          old="""<div class=\"grid2\"><div><label>移動開始</label><input type=\"time\" class=\"sm-start\" value=\"${escHtml(d.start||'')}\"></div><div><label>移動作業終了</label><input type=\"time\" class=\"sm-end\" value=\"${escHtml(d.end||'')}\"></div></div>"""
+          new="""<label>時間</label><div style=\"display:grid;grid-template-columns:1fr 24px 1fr;gap:6px;align-items:center\"><div><div class=\"quick-row\" style=\"margin-bottom:5px\"><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'start','13:00')\">13時</button><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'start','14:00')\">14時</button><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'start','15:00')\">15時</button><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'start','16:00')\">16時</button></div><input type=\"time\" class=\"sm-start\" value=\"${escHtml(d.start||'')}\" style=\"min-height:48px;padding:8px 10px\"></div><div style=\"text-align:center;font-weight:900\">〜</div><div><div class=\"quick-row\" style=\"margin-bottom:5px\"><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'end','14:00')\">14時</button><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'end','15:00')\">15時</button><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'end','16:00')\">16時</button><button type=\"button\" class=\"quick-btn\" onclick=\"setMoveTime(this,'end','17:00')\">17時</button></div><input type=\"time\" class=\"sm-end\" value=\"${escHtml(d.end||'')}\" style=\"min-height:48px;padding:8px 10px\"></div></div>"""
+          if old not in s:
+            raise SystemExit('time block not found')
+          s=s.replace(old,new,1)
+          marker="window.setSiteMoveAction=function(btn,v){const r=btn.closest('.site-move-entry');if(r)r.querySelector('.sm-action').value=v};"
+          helper="window.setMoveTime=function(btn,kind,v){const r=btn.closest('.site-move-entry');if(!r)return;const el=r.querySelector(kind==='start'?'.sm-start':'.sm-end');if(el)el.value=v};\n  "
+          if helper.strip() not in s:
+            s=s.replace(marker,helper+marker,1)
+          s=s.replace("<label>作業内容</label><div class=\"quick-row\">","<label style=\"margin-top:8px\">作業内容</label><div class=\"quick-row\">",1)
+          s=s.replace("<label>処分場</label><input class=\"sm-disposal\"","<label style=\"margin-top:8px\">処分場</label><input class=\"sm-disposal\"",1)
+          s=s.replace("<label>使用車両</label><select class=\"sm-vehicle\">","<label style=\"margin-top:8px\">使用車両</label><select class=\"sm-vehicle\">",1)
+          p.write_text(s,encoding='utf-8')
+      - name: Commit
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/midway.js
+          git commit -m "Compact site move time input" || exit 0
+          git push
