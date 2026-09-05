@@ -18,101 +18,16 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-
-          files = [
-              Path('docs/TOYA_One_v5_1_0_cloud_shared.html'),
-              Path('docs/TOYA_One_v5_2_0_calendar_edit.html'),
-              Path('docs/index.html'),
-          ]
-
-          old = '''function applyMovedSite(selected){
-  closeSiteMovePicker();
-  const current=collect();
-  $('#site').value=selected;
-  $('#details').value='';$('#memo').value='';$('#start').value=current.end||'13:00';$('#end').value='17:00';$('#overtime').value=0;
-  $('#items').innerHTML='';addItem();if($('#fuelRows'))$('#fuelRows').innerHTML='';
-  editingCloudReportId=null;editingLocalReportId=null;editingOriginalCreatorId=null;editingOriginalCreatorName='';updateEditBanner();
-  window.scrollTo({top:0,behavior:'smooth'});
-  setTimeout(()=>alert('移動先「'+selected+'」の日報入力に切り替えました。必要なところだけ変更して保存してください。'),200);
-}
-
-function createMovedSiteReport(){
-  const current=collect();
-  const sites=get(LS.sites,[]).filter(Boolean);
-  const choices=sites.filter(x=>x!==current.site);
-  if(!choices.length){alert('別の現場がまだ登録されていません。先に現場を登録してください。');return;}
-  openSiteMovePicker(choices);
-}'''
-
-          new = '''async function saveCurrentReportBeforeMove(){
-  const d=collect();
-  if(!validate(d))return false;
-  try{
-    const addedPhotos=await savePhotosForReport(d.id);
-    d.photoCount=Number(editingReport?.photoCount||0)+Number(addedPhotos||0);
-    const a=get(LS.reports,[]);
-    const editIndex=editingReport?a.findIndex(x=>String(x.id)===String(editingReport.id)):-1;
-    if(editIndex>=0)a[editIndex]=d; else a.unshift(d);
-    set(LS.reports,a);
-    populateLedgerSites();
-    localStorage.removeItem(LS.draft);
-    stagedPhotos=[];
-    renderStagedPhotos();
-    if(cloudProfile){
-      try{
-        const cloudResult=await cloudSaveReport(d);
-        const photoResult=await cloudSyncPhotosForReport(d.id,cloudResult?.id);
-        const wasteResult=await cloudSyncWasteForReport(d,cloudResult?.id);
-        await cloudLogActivity('report_save',cloudResult?.id,{site:d.site,date:d.date,reason:'site_move'});
-        if(photoResult.ok)await cloudLogActivity('photo_save',cloudResult?.id,{count:photoResult.ok});
-        if(wasteResult.ok)await cloudLogActivity('waste_save',cloudResult?.id,{count:wasteResult.ok});
-        await cloudLoadReports();
-      }catch(cloudErr){
-        console.error(cloudErr);
-        cloudMsg('1現場目は端末に保存しましたが、クラウド同期に失敗：'+(cloudErr?.message||cloudErr),'warn');
-      }
-    }
-    clearReportEditState();
-    return true;
-  }catch(err){
-    console.error(err);
-    alert('1現場目を保存できなかったため、現場移動を中止しました。入力内容はそのまま残っています。');
-    return false;
-  }
-}
-
-async function applyMovedSite(selected){
-  const current=collect();
-  const saved=await saveCurrentReportBeforeMove();
-  if(!saved)return;
-  closeSiteMovePicker();
-  $('#site').value=selected;
-  $('#details').value='';$('#memo').value='';$('#start').value=current.end||'13:00';$('#end').value='17:00';$('#overtime').value=0;
-  $('#items').innerHTML='';addItem();if($('#fuelRows'))$('#fuelRows').innerHTML='';
-  editingCloudReportId=null;editingLocalReportId=null;editingOriginalCreatorId=null;editingOriginalCreatorName='';updateEditBanner();
-  window.scrollTo({top:0,behavior:'smooth'});
-  setTimeout(()=>alert('1現場目を保存しました。移動先「'+selected+'」の日報入力に切り替えました。'),200);
-}
-
-function createMovedSiteReport(){
-  const current=collect();
-  const localSites=get(LS.sites,[]);
-  const cloudSites=(cloudProfile?cloudSitesCache:[]).filter(x=>x&&x.status!=='inactive').map(x=>x.name);
-  const selectSites=$('#site')?[...$('#site').options].map(o=>o.value):[];
-  const sites=[...new Set([...cloudSites,...selectSites,...localSites].map(x=>String(x||'').trim()).filter(Boolean))];
-  const choices=sites.filter(x=>x!==current.site&&x!=='現場名をあとで変更'&&x!=='未登録現場');
-  if(!choices.length){alert('別の現場がまだ登録されていません。先に現場を登録してください。');return;}
-  openSiteMovePicker(choices);
-}'''
-
+          import base64
+          files=[Path('docs/TOYA_One_v5_1_0_cloud_shared.html'),Path('docs/TOYA_One_v5_2_0_calendar_edit.html'),Path('docs/index.html')]
+          old=base64.b64decode('ZnVuY3Rpb24gYXBwbHlNb3ZlZFNpdGUoc2VsZWN0ZWQpewogIGNsb3NlU2l0ZU1vdmVQaWNrZXIoKTsKICBjb25zdCBjdXJyZW50PWNvbGxlY3QoKTsKICAkKCcjc2l0ZScpLnZhbHVlPXNlbGVjdGVkOwogICQoJyNkZXRhaWxzJykudmFsdWU9Jyc7JCgnI21lbW8nKS52YWx1ZT0nJzskKCcjc3RhcnQnKS52YWx1ZT1jdXJyZW50LmVuZHx8JzEzOjAwJzskKCcjZW5kJykudmFsdWU9JzE3OjAwJzskKCcjb3ZlcnRpbWUnKS52YWx1ZT0wOwogICQoJyNpdGVtcycpLmlubmVySFRNTD0nJzthZGRJdGVtKCk7aWYoJCgnI2Z1ZWxSb3dzJykpJCgnI2Z1ZWxSb3dzJykuaW5uZXJIVE1MPScnOwogIGVkaXRpbmdDbG91ZFJlcG9ydElkPW51bGw7ZWRpdGluZ0xvY2FsUmVwb3J0SWQ9bnVsbDtlZGl0aW5nT3JpZ2luYWxDcmVhdG9ySWQ9bnVsbDtlZGl0aW5nT3JpZ2luYWxDcmVhdG9yTmFtZT0nJzt1cGRhdGVFZGl0QmFubmVyKCk7CiAgd2luZG93LnNjcm9sbFRvKHt0b3A6MCxiZWhhdmlvcjonc21vb3RoJ30pOwogIHNldFRpbWVvdXQoKCk9PmFsZXJ0KCfnp7vli5XlhYjjgIInK3NlbGVjdGVkK+KAnOOBruaXpeWgseWFpeWKm+OBq+WIh+OCiOabuOOBiOOBvuOBl+OBn+OAguW/heimgeOBquOBqOOBkOOCjeOBoOOBkOWkluabtOOBiOOBpuS/nOWtmOBlrOOBpuOBj+OBoOOBleOBhOOAggonKSwyMDApOwp9CgpmdW5jdGlvbiBjcmVhdGVNb3ZlZFNpdGVSZXBvcnQoKXsKICBjb25zdCBjdXJyZW50PWNvbGxlY3QoKTsKICBjb25zdCBzaXRlcz1nZXQoTFMuc2l0ZXMsW10pLmZpbHRlcihCb29sZWFuKTsKICBjb25zdCBjaG9pY2VzPXNpdGVzLmZpbHRlcih4PT54IT09Y3VycmVudC5zaXRlKTsKICBpZighY2hvaWNlcy5sZW5ndGgpe2FsZXJ0KCflrojjga7nj77loLTjgYzjgb7jgaDkuobpjLLjgZXjgozjgabjgYTjgb7jgZvjgpPjgILlhYjjgavnj77loLTjgpLnmbrpjLLjgZfjgabjgY/jgaDjgZXjgYTjgIIpO3JldHVybjt9CiAgb3BlblNpdGVNb3ZlUGlja2VyKGNob2ljZXMpOwp9').decode()
+          new=base64.b64decode('YXN5bmMgZnVuY3Rpb24gc2F2ZUN1cnJlbnRSZXBvcnRCZWZvcmVNb3ZlKCl7CiAgY29uc3QgZD1jb2xsZWN0KCk7CiAgaWYoIXZhbGlkYXRlKGQpKXJldHVybiBmYWxzZTsKICB0cnl7CiAgICBjb25zdCBhZGRlZFBob3Rvcz1hd2FpdCBzYXZlUGhvdG9zRm9yUmVwb3J0KGQuaWQpOwogICAgZC5waG90b0NvdW50PU51bWJlcihlZGl0aW5nUmVwb3J0Py5waG90b0NvdW50fHwwKStOdW1iZXIoYWRkZWRQaG90b3N8fDApOwogICAgY29uc3QgYT1nZXQoTFMucmVwb3J0cyxbXSk7CiAgICBjb25zdCBlZGl0SW5kZXg9ZWRpdGluZ1JlcG9ydD9hLmZpbmRJbmRleCh4PT5TdHJpbmcoeC5pZCk9PT1TdHJpbmcoZWRpdGluZ1JlcG9ydC5pZCkpOi0xOwogICAgaWYoZWRpdEluZGV4Pj0wKWFbZWRpdEluZGV4XT1kOyBlbHNlIGEudW5zaGlmdChkKTsKICAgIHNldChMUy5yZXBvcnRzLGEpOwogICAgcG9wdWxhdGVMZWRnZXJTaXRlcygpOwogICAgbG9jYWxTdG9yYWdlLnJlbW92ZUl0ZW0oTFMuZHJhZnQpOwogICAgc3RhZ2VkUGhvdG9zPVtdOwogICAgcmVuZGVyU3RhZ2VkUGhvdG9zKCk7CiAgICBpZihjbG91ZFByb2ZpbGUpewogICAgICB0cnl7CiAgICAgICAgY29uc3QgY2xvdWRSZXN1bHQ9YXdhaXQgY2xvdWRTYXZlUmVwb3J0KGQpOwogICAgICAgIGNvbnN0IHBob3RvUmVzdWx0PWF3YWl0IGNsb3VkU3luY1Bob3Rvc0ZvclJlcG9ydChkLmlkLGNsb3VkUmVzdWx0Py5pZCk7CiAgICAgICAgY29uc3Qgd2FzdGVSZXN1bHQ9YXdhaXQgY2xvdWRTeW5jV2FzdGVGb3JSZXBvcnQoZCxjbG91ZFJlc3VsdD8uaWQpOwogICAgICAgIGF3YWl0IGNsb3VkTG9nQWN0aXZpdHkoJ3JlcG9ydF9zYXZlJyxjbG91ZFJlc3VsdD8uaWQse3NpdGU6ZC5zaXRlLGRhdGU6ZC5kYXRlLHJlYXNvbjonc2l0ZV9tb3ZlJ30pOwogICAgICAgIGlmKHBob3RvUmVzdWx0Lm9rKWF3YWl0IGNsb3VkTG9nQWN0aXZpdHkoJ3Bob3RvX3NhdmUnLGNsb3VkUmVzdWx0Py5pZCx7Y291bnQ6cGhvdG9SZXN1bHQub2t9KTsKICAgICAgICBpZih3YXN0ZVJlc3VsdC5vaylhd2FpdCBjbG91ZExvZ0FjdGl2aXR5KCd3YXN0ZV9zYXZlJyxjbG91ZFJlc3VsdD8uaWQse2NvdW50Ondhc3RlUmVzdWx0Lm9rfSk7CiAgICAgICAgYXdhaXQgY2xvdWRMb2FkUmVwb3J0cygpOwogICAgICB9Y2F0Y2goY2xvdWRFcnIpewogICAgICAgIGNvbnNvbGUuZXJyb3IoY2xvdWRFcnIpOwogICAgICAgIGNsb3VkTXNnKCcx54++5aC057uu44Gv56uv5pyr44Gr5L+d5a2Y44GX44G+44GX44Gf44GM44CB44Kv44Op44Km44OJ5ZCM5pyf44Gr5aSx5pWX77yaJysoY2xvdWRFcnI/Lm1lc3NhZ2V8fGNsb3VkRXJyKSwnd2FybicpOwogICAgICB9CiAgICB9CiAgICBjbGVhclJlcG9ydEVkaXRTdGF0ZSgpOwogICAgcmV0dXJuIHRydWU7CiAgfWNhdGNoKGVycil7CiAgICBjb25zb2xlLmVycm9yKGVycik7CiAgICBhbGVydCgnMeePvuWgtOebrjLjgpLkv53lrZjjgafjgY3jgarjgYvjgaPjgZ/jgZ/jgoHjgIHnj77loLTnp7vli5XjgpLkuK3mraLjgZfjgb7jgZfjgZ/jgILlhaXlipvlhoXlrrnjga/jgZ3jga7jgb7jgb7mroPjgaPjgabjgYTjgb7jgZnjgIIpOwogICAgcmV0dXJuIGZhbHNlOwogIH0KfQoKYXN5bmMgZnVuY3Rpb24gYXBwbHlNb3ZlZFNpdGUoc2VsZWN0ZWQpewogIGNvbnN0IGN1cnJlbnQ9Y29sbGVjdCgpOwogIGNvbnN0IHNhdmVkPWF3YWl0IHNhdmVDdXJyZW50UmVwb3J0QmVmb3JlTW92ZSgpOwogIGlmKCFzYXZlZClyZXR1cm47CiAgY2xvc2VTaXRlTW92ZVBpY2tlcigpOwogICQoJyNzaXRlJykudmFsdWU9c2VsZWN0ZWQ7CiAgJCgnI2RldGFpbHMnKS52YWx1ZT0nJzskKCcjbWVtbycpLnZhbHVlPScnOyQoJyNzdGFydCcpLnZhbHVlPWN1cnJlbnQuZW5kfHwnMTM6MDAnOyQoJyNlbmQnKS52YWx1ZT0nMTc6MDAnOyQoJyNvdmVydGltZScpLnZhbHVlPTA7CiAgJCgnI2l0ZW1zJykuaW5uZXJIVE1MPScnO2FkZEl0ZW0oKTtpZigkKCcjZnVlbFJvd3MnKSkkKCcjZnVlbFJvd3MnKS5pbm5lckhUTUw9Jyc7CiAgZWRpdGluZ0Nsb3VkUmVwb3J0SWQ9bnVsbDtlZGl0aW5nTG9jYWxSZXBvcnRJZD1udWxsO2VkaXRpbmdPcmlnaW5hbENyZWF0b3JJZD1udWxsO2VkaXRpbmdPcmlnaW5hbENyZWF0b3JOYW1lPScnO3VwZGF0ZUVkaXRCYW5uZXIoKTsKICB3aW5kb3cuc2Nyb2xsVG8oe3RvcDowLGJlaGF2aW9yOidzbW9vdGgnfSk7CiAgc2V0VGltZW91dCgoKT0+YWxlcnQoJzHnj77loLTnm67jgpLkv53lrZjjgZfjgb7jgZfjgZ/jgILnp7vli5XlhYjjgIInK3NlbGVjdGVkK+KAnOOBruaXpeWgseWFpeWKm+OBq+WIh+OCiOabuOOBiOOBvuOBl+OBn+OAguOAgicpLDIwMCk7Cn0KCmZ1bmN0aW9uIGNyZWF0ZU1vdmVkU2l0ZVJlcG9ydCgpewogIGNvbnN0IGN1cnJlbnQ9Y29sbGVjdCgpOwogIGNvbnN0IGxvY2FsU2l0ZXM9Z2V0KExTLnNpdGVzLFtdKTsKICBjb25zdCBjbG91ZFNpdGVzPShjbG91ZFByb2ZpbGU/Y2xvdWRTaXRlc0NhY2hlOltdKS5maWx0ZXIoeD0+eCYmeC5zdGF0dXMhPT0naW5hY3RpdmUnKS5tYXAoeD0+eC5uYW1lKTsKICBjb25zdCBzZWxlY3RTaXRlcz0kKCcjc2l0ZScpP1suLi4kKCcjc2l0ZScpLm9wdGlvbnNdLm1hcChvPT5vLnZhbHVlKTpbXTsKICBjb25zdCBzaXRlcz1bLi4ubmV3IFNldChbLi4uY2xvdWRTaXRlcywuLi5zZWxlY3RTaXRlcywuLi5sb2NhbFNpdGVzXS5tYXAoeD0+U3RyaW5nKHh8fCcnKS50cmltKCkuZmlsdGVyKEJvb2xlYW4pKV07CiAgY29uc3QgY2hvaWNlcz1zaXRlcy5maWx0ZXIoeD0+eCE9PWN1cnJlbnQuc2l0ZSYmeCE9PeOAjuePvuWgtOWQjeOCkuOBguOBqOOBp+WkieabtOOAjeYmeCE9PeOAjuaKleeZu+mMh+ePvuWgtOOAjSk7CiAgaWYoIWNob2ljZXMubGVuZ3RoKXthbGVydCgn5Yil44Gu54++5aC044GM44G+44Gg55m76Yyy44GV44KM44Gm44GE44G+44Gb44KT44CC5YWI44Gr54++5aC044KS55m76Yyy44GX44Gm44GP44Gg44GV44GE44CCJyk7cmV0dXJuO30KICBvcGVuU2l0ZU1vdmVQaWNrZXIoY2hvaWNlcyk7Cn0=').decode()
           for path in files:
-              text = path.read_text(encoding='utf-8')
+              text=path.read_text(encoding='utf-8')
               if old not in text:
                   raise SystemExit(f'expected site move block not found: {path}')
-              text = text.replace(old, new, 1)
-              text = text.replace('v5.6.2', 'v5.6.3')
-              path.write_text(text, encoding='utf-8')
-
+              text=text.replace(old,new,1).replace('v5.6.2','v5.6.3')
+              path.write_text(text,encoding='utf-8')
       - name: Commit changes
         run: |
           git config user.name "TOYA One updater"
