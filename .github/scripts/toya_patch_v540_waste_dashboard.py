@@ -1,5 +1,4 @@
 from pathlib import Path
-import re
 
 paths=[Path('docs/index.html'),Path('docs/TOYA_One_v5_2_0_calendar_edit.html'),Path('docs/TOYA_One_v5_1_0_cloud_shared.html')]
 
@@ -22,7 +21,6 @@ func=r'''function renderWasteSummary(reports){
   if($('#wasteManifestOk'))$('#wasteManifestOk').textContent=paper+electronic;
   if($('#wasteManifestNone'))$('#wasteManifestNone').textContent=none;
   if($('#wasteSiteCount'))$('#wasteSiteCount').textContent=sites.size;
-
   const byItem={};
   rows.forEach(x=>{
     const name=String(x.name||'産廃').replace(/^産廃：/,'')||'産廃';
@@ -33,7 +31,6 @@ func=r'''function renderWasteSummary(reports){
   });
   const breakdown=$('#wasteBreakdown');
   if(breakdown)breakdown.innerHTML=Object.keys(byItem).length?Object.values(byItem).sort((a,b)=>b.qty-a.qty).map(v=>`<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(v.name)}</b><div class="meta" style="margin:3px 0 0">${Number(v.qty||0).toLocaleString(undefined,{maximumFractionDigits:2})}${cloudHtml(v.unit)} ／ ${v.count}件</div></div>`).join(''):'<div class="empty" style="padding:18px 8px">今月の産廃入力はまだありません。</div>';
-
   const recent=$('#wasteRecent');
   const sorted=[...rows].sort((a,b)=>String(b._date).localeCompare(String(a._date))).slice(0,8);
   if(recent)recent.innerHTML=sorted.length?sorted.map(x=>{
@@ -59,7 +56,11 @@ for p in paths:
     if 'function renderWasteSummary(reports)' not in s:
         pos=s.index('function renderFuelSummary(reports){')
         s=s[:pos]+func+'\n'+s[pos:]
-    # Ensure every fuel summary render also refreshes waste summary with same report list.
-    s=re.sub(r'(?<!renderWasteSummary\()renderFuelSummary\(([^;]+)\);',r'renderWasteSummary(\1);renderFuelSummary(\1);',s)
+    # Add waste refresh only to actual function calls, never the function declaration.
+    for arg in ['reports','data','all','cloudReportsCache','combined']:
+        old=f'renderFuelSummary({arg});'
+        new=f'renderWasteSummary({arg});renderFuelSummary({arg});'
+        if old in s and new not in s:
+            s=s.replace(old,new)
     p.write_text(s,encoding='utf-8')
 print('TOYA One v5.4.0 waste dashboard applied')
