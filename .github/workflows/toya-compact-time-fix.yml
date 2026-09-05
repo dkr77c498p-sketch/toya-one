@@ -1,0 +1,31 @@
+name: TOYA compact time fix
+on:
+  push:
+    paths: ['.github/workflows/toya-compact-time-fix.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: python
+        run: |
+          from pathlib import Path
+          p=Path('docs/midway.js')
+          s=p.read_text()
+          marker="window.setSiteMoveAction=function"
+          code="""window.compactSiteMoveTimes=function(r){if(!r||r.dataset.compactTime)return;r.dataset.compactTime='1';[['start',['13:00','14:00','15:00','16:00']],['end',['14:00','15:00','16:00','17:00']]].forEach(([k,times])=>{const input=r.querySelector('.sm-'+k);if(!input)return;input.style.height='48px';input.style.minHeight='48px';input.style.padding='6px 10px';input.style.fontSize='17px';const q=document.createElement('div');q.className='quick-row';q.style.margin='5px 0 8px';times.forEach(t=>{const b=document.createElement('button');b.type='button';b.className='quick-btn';b.textContent=t;b.style.padding='8px 10px';b.onclick=()=>input.value=t;q.appendChild(b)});input.after(q)})};
+"""
+          if code not in s:s=s.replace(marker,code+marker,1)
+          old="if(d.unit)r.querySelector('.sm-unit').value=d.unit};"
+          new="if(d.unit)r.querySelector('.sm-unit').value=d.unit;compactSiteMoveTimes(r)};"
+          if old not in s: raise SystemExit('target not found')
+          s=s.replace(old,new,1)
+          p.write_text(s)
+      - run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/midway.js
+          git commit -m "Compact site move time inputs" || exit 0
+          git push
