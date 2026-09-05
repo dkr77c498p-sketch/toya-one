@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.4.1 会社共有日報対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.4.2 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -168,7 +168,7 @@ textarea{min-height:105px;resize:vertical}
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.4.1｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
+<div class="tap-guide">v5.4.2｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div id="editBanner" class="edit-banner"><span id="editBannerText">日報を編集中</span><button type="button" class="btn light" onclick="cancelReportEdit()">編集をやめる</button></div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
@@ -225,7 +225,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.4.1：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">クラウド版 v5.4.2：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -806,6 +806,7 @@ async function cloudLoadReports(){
     if(!data.length){box.innerHTML='<div class="empty">クラウド日報はまだありません。</div>';renderHome();return;}
     box.innerHTML=data.slice(0,50).map(d=>`<div class="cloud-item"><b>${cloudHtml(d.date)}　${cloudHtml(d.site)}</b><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}／${cloudHtml(d.start)}〜${cloudHtml(d.end)}／作業者 ${d._workerTotal}名${d.photoCount?`／写真 ${d.photoCount}枚`:''}</div>${cloudReportButtons(d)}</div>`).join('');
     await renderHome();
+    await renderWasteSummaryFromCloudTable();
     if($('#recordsPage')?.classList.contains('active'))await renderRecords();
   }catch(e){box.innerHTML=`<div class="cloud-bad">読込エラー：${cloudHtml(e?.message||e)}</div>`;}
 }
@@ -1193,6 +1194,30 @@ function setFuelOutlet(btn,outlet){
   applyFuelPrice(row);
 }
 function fuelAmount(x){const a=Number(x?.amount||0);if(a>0)return a;return Number(x?.liters||0)*Number(x?.unitPrice||0)}
+async function renderWasteSummaryFromCloudTable(){
+  if(!cloudProfile)return;
+  try{
+    const month=today().slice(0,7),start=month+'-01';
+    const nextDate=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),1);
+    const z=n=>String(n).padStart(2,'0');
+    const next=`${nextDate.getFullYear()}-${z(nextDate.getMonth()+1)}-01`;
+    const {data,error}=await cloudClient.from('waste_entries')
+      .select('id,report_id,site_id,report_date,waste_type,quantity,unit,manifest_type,manifest_number,disposer_name,disposal_site,notes,created_at')
+      .eq('company_id',cloudProfile.company_id).gte('report_date',start).lt('report_date',next).order('report_date',{ascending:false}).order('created_at',{ascending:false});
+    if(error)throw error;
+    const rows=data||[];
+    const paper=rows.filter(x=>x.manifest_type==='paper').length,electronic=rows.filter(x=>x.manifest_type==='electronic').length,none=rows.filter(x=>!x.manifest_type||x.manifest_type==='none').length;
+    const sites=new Set(rows.map(x=>x.site_id).filter(Boolean));
+    if($('#wasteEntryCount'))$('#wasteEntryCount').textContent=rows.length;
+    if($('#wasteManifestOk'))$('#wasteManifestOk').textContent=paper+electronic;
+    if($('#wasteManifestNone'))$('#wasteManifestNone').textContent=none;
+    if($('#wasteSiteCount'))$('#wasteSiteCount').textContent=sites.size;
+    const by={};rows.forEach(x=>{const key=(x.waste_type||'産廃')+'__'+(x.unit||'');if(!by[key])by[key]={name:x.waste_type||'産廃',unit:x.unit||'',qty:0,count:0};by[key].qty+=Number(x.quantity||0);by[key].count++});
+    const b=$('#wasteBreakdown');if(b)b.innerHTML=Object.keys(by).length?Object.values(by).sort((a,b)=>b.qty-a.qty).map(v=>`<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(v.name)}</b><div class="meta" style="margin:3px 0 0">${v.qty.toLocaleString(undefined,{maximumFractionDigits:2})}${cloudHtml(v.unit)} ／ ${v.count}件</div></div>`).join(''):'<div class="empty" style="padding:18px 8px">今月の産廃入力はまだありません。</div>';
+    const recent=$('#wasteRecent');if(recent)recent.innerHTML=rows.length?rows.slice(0,8).map(x=>{const type=x.manifest_type==='paper'?'紙':x.manifest_type==='electronic'?'電子':'なし';const no=x.manifest_number?` ／ No.${cloudHtml(x.manifest_number)}`:'';const dest=x.disposal_site?` ／ ${cloudHtml(x.disposal_site)}`:(x.disposer_name?` ／ ${cloudHtml(x.disposer_name)}`:'');return `<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(x.report_date)}　${cloudHtml(x.waste_type||'産廃')}</b><div class="meta" style="margin:3px 0 0">${Number(x.quantity||0).toLocaleString(undefined,{maximumFractionDigits:2})}${cloudHtml(x.unit||'')} ／ マニフェスト：${type}${no}${dest}</div></div>`}).join(''):'<div class="empty" style="padding:18px 8px">マニフェスト記録はまだありません。</div>';
+  }catch(e){console.error('waste dashboard load',e)}
+}
+
 function renderWasteSummary(reports){
   const month=today().slice(0,7);
   const arr=(reports||[]).filter(d=>String(d.date||'').startsWith(month));
