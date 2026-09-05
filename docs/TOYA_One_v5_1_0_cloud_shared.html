@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.4.2 会社共有日報対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.4.3 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -163,12 +163,12 @@ textarea{min-height:105px;resize:vertical}
 </div>
 <div style="margin-top:12px"><div style="font-weight:900;margin-bottom:7px">日報提出状況</div><div id="dailySubmissionList"></div><div class="note" style="margin-top:7px">夕方に日報を入力すると「提出済み」に変わります。1日に複数現場の日報があっても、提出者は1人として数えます。</div></div>
 </div>
-<div class="card" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">0</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">0</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">0</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">0</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
+<div class="card admin-home-only" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">0</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">0</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">0</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">0</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card admin-home-only"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
 <div class="card"><h2>本日の現場</h2><div id="todayList"></div></div>
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.4.2｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
+<div class="tap-guide">v5.4.3｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div id="editBanner" class="edit-banner"><span id="editBannerText">日報を編集中</span><button type="button" class="btn light" onclick="cancelReportEdit()">編集をやめる</button></div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
@@ -225,7 +225,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.4.2：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">クラウド版 v5.4.3：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -805,8 +805,9 @@ async function cloudLoadReports(){
     const data=await cloudFetchReports();
     if(!data.length){box.innerHTML='<div class="empty">クラウド日報はまだありません。</div>';renderHome();return;}
     box.innerHTML=data.slice(0,50).map(d=>`<div class="cloud-item"><b>${cloudHtml(d.date)}　${cloudHtml(d.site)}</b><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}／${cloudHtml(d.start)}〜${cloudHtml(d.end)}／作業者 ${d._workerTotal}名${d.photoCount?`／写真 ${d.photoCount}枚`:''}</div>${cloudReportButtons(d)}</div>`).join('');
+    applyHomeRoleVisibility();
     await renderHome();
-    await renderWasteSummaryFromCloudTable();
+    if(cloudProfile?.role==='admin')await renderWasteSummaryFromCloudTable();
     if($('#recordsPage')?.classList.contains('active'))await renderRecords();
   }catch(e){box.innerHTML=`<div class="cloud-bad">読込エラー：${cloudHtml(e?.message||e)}</div>`;}
 }
@@ -1194,6 +1195,11 @@ function setFuelOutlet(btn,outlet){
   applyFuelPrice(row);
 }
 function fuelAmount(x){const a=Number(x?.amount||0);if(a>0)return a;return Number(x?.liters||0)*Number(x?.unitPrice||0)}
+function applyHomeRoleVisibility(){
+  const isAdmin=Boolean(cloudProfile&&cloudProfile.role==='admin');
+  $$('.admin-home-only').forEach(el=>el.style.display=isAdmin?'':'none');
+}
+
 async function renderWasteSummaryFromCloudTable(){
   if(!cloudProfile)return;
   try{
