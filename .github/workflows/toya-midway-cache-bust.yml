@@ -1,0 +1,25 @@
+name: TOYA midway cache bust
+on:
+  push:
+    paths: ['.github/workflows/toya-midway-cache-bust.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: python
+        run: |
+          from pathlib import Path
+          files=[Path('docs/index.html'),Path('docs/TOYA_One_v5_1_0_cloud_shared.html'),Path('docs/TOYA_One_v5_2_0_calendar_edit.html')]
+          for p in files:
+            s=p.read_text(encoding='utf-8')
+            s=s.replace('<script src="midway.js"></script>','<script src="midway.js?v=20260905-1825"></script>')
+            p.write_text(s,encoding='utf-8')
+      - run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html docs/TOYA_One_v5_1_0_cloud_shared.html docs/TOYA_One_v5_2_0_calendar_edit.html
+          git commit -m "Force reload updated site move UI" || exit 0
+          git push
