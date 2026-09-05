@@ -1,24 +1,26 @@
-name: TOYA One v5.2 upgrade
+name: TOYA One v5.2 validate
 
 on:
   push:
     paths:
       - '.github/workflows/toya-v5-2-upgrade.yml'
 
-permissions:
-  contents: write
-
 jobs:
-  upgrade:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Apply TOYA One v5.2 patch
-        run: python .github/scripts/toya_patch_v52.py
-      - name: Commit upgrade
+      - name: Extract inline JavaScript
         run: |
-          git config user.name "TOYA One updater"
-          git config user.email "actions@users.noreply.github.com"
-          git add docs/index.html docs/TOYA_One_v5_1_0_cloud_shared.html docs/TOYA_One_v5_2_0_calendar_edit.html
-          git commit -m "Upgrade TOYA One to v5.2 calendar edit delete" || exit 0
-          git push
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('docs/index.html').read_text(encoding='utf-8')
+          start=s.index('<script>')+len('<script>')
+          end=s.rindex('</script>')
+          Path('/tmp/toya.js').write_text(s[start:end],encoding='utf-8')
+          for needle in ['deleteCloudReport','editCloudReport','renderRecordCalendar','duplicateCloudReport','setReportDateOffset']:
+              assert needle in s, needle
+          print('feature markers ok')
+          PY
+      - name: JavaScript syntax check
+        run: node --check /tmp/toya.js
