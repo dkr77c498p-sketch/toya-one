@@ -15,6 +15,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Apply fuel source patch
         run: python .github/scripts/toya_patch_v531_fuel_source.py
+      - name: Repair nullish expressions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          for p in [Path('docs/index.html'),Path('docs/TOYA_One_v5_2_0_calendar_edit.html'),Path('docs/TOYA_One_v5_1_0_cloud_shared.html')]:
+              if not p.exists():
+                  continue
+              s=p.read_text(encoding='utf-8')
+              s=s.replace('Number(x.qty??x.liters||0)','Number((x.qty??x.liters)||0)')
+              p.write_text(s,encoding='utf-8')
+          PY
       - name: Validate JavaScript
         run: |
           python - <<'PY'
