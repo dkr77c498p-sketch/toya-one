@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.5.0 会社共有日報対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.6.0 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -163,12 +163,12 @@ textarea{min-height:105px;resize:vertical}
 </div>
 <div style="margin-top:12px"><div style="font-weight:900;margin-bottom:7px">日報提出状況</div><div id="dailySubmissionList"></div><div class="note" style="margin-top:7px">夕方に日報を入力すると「提出済み」に変わります。1日に複数現場の日報があっても、提出者は1人として数えます。</div></div>
 </div>
-<div class="card admin-home-only" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">0</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">0</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">0</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">0</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card admin-home-only"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
+<div class="card admin-home-only" id="siteSummaryCard"><h2>現場別集計</h2><label>現場を選択</label><select id="siteSummarySelect" onchange="renderSiteSummary()"></select><div id="siteSummaryBody" style="margin-top:12px"></div></div><div class="card admin-home-only" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">0</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">0</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">0</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">0</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card admin-home-only"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
 <div class="card"><h2>本日の現場</h2><div id="todayList"></div></div>
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.5.0｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
+<div class="tap-guide">v5.6.0｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div id="editBanner" class="edit-banner"><span id="editBannerText">日報を編集中</span><button type="button" class="btn light" onclick="cancelReportEdit()">編集をやめる</button></div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
@@ -225,7 +225,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.5.0：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">クラウド版 v5.6.0：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -801,6 +801,7 @@ async function cloudLoadReports(){
     box.innerHTML=data.slice(0,50).map(d=>`<div class="cloud-item"><b>${cloudHtml(d.date)}　${cloudHtml(d.site)}</b><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}／${cloudHtml(d.start)}〜${cloudHtml(d.end)}／作業者 ${d._workerTotal}名${d.photoCount?`／写真 ${d.photoCount}枚`:''}</div>${cloudReportButtons(d)}</div>`).join('');
     applyHomeRoleVisibility();
     await renderHome();
+    if(cloudProfile?.role==='admin')renderSiteSummary();
     if(cloudProfile?.role==='admin')await renderWasteSummaryFromCloudTable();
     if($('#recordsPage')?.classList.contains('active'))await renderRecords();
   }catch(e){box.innerHTML=`<div class="cloud-bad">読込エラー：${cloudHtml(e?.message||e)}</div>`;}
@@ -1212,6 +1213,32 @@ function setFuelOutlet(btn,outlet){
   applyFuelPrice(row);
 }
 function fuelAmount(x){const a=Number(x?.amount||0);if(a>0)return a;return Number(x?.liters||0)*Number(x?.unitPrice||0)}
+function populateSiteSummarySelect(){
+  const sel=$('#siteSummarySelect');if(!sel)return;
+  const current=sel.value;
+  const names=[...new Set((cloudReportsCache||[]).map(d=>d.site).filter(Boolean))].sort();
+  sel.innerHTML=names.length?names.map(n=>`<option>${cloudHtml(n)}</option>`).join(''):'<option value="">現場なし</option>';
+  if(current&&names.includes(current))sel.value=current;
+}
+function timeHours(a,b){if(!a||!b)return 0;const [ah,am]=a.split(':').map(Number),[bh,bm]=b.split(':').map(Number);let v=(bh*60+bm-ah*60-am)/60;return v>0?v:0}
+function renderSiteSummary(){
+  if(!cloudProfile||cloudProfile.role!=='admin')return;
+  populateSiteSummarySelect();const site=$('#siteSummarySelect')?.value,box=$('#siteSummaryBody');if(!box||!site)return;
+  const arr=(cloudReportsCache||[]).filter(d=>d.site===site);
+  let personHours=0,machineHours=0,fuel=0,adblue=0,grease=0,fuelCost=0,other=0;
+  const machines={},vehicles={};
+  arr.forEach(d=>{
+    const hrs=timeHours(d.start,d.end)+Number(d.overtime||0),people=(d.workers||[]).length+Number(d.meikenCount||0)+Number(d.asahiCount||0)+(d.otherWorker?1:0);personHours+=hrs*people;
+    (d.machines||[]).forEach(m=>{const h=Number((d.machineHours||{})[m]||hrs||0);machines[m]=(machines[m]||0)+h;machineHours+=h});
+    (d.vehicles||[]).forEach(v=>vehicles[v]=(vehicles[v]||0)+1);
+    (d.fuels||[]).forEach(x=>{const q=Number(x.qty??x.liters??0),a=fuelAmount(x);if(x.type==='軽油'||x.type==='ガソリン')fuel+=q;else if(x.type==='AdBlue')adblue+=q;else if(x.type==='グリース')grease+=q;fuelCost+=a});
+    (d.items||[]).forEach(x=>other+=Number(x.price||0));
+  });
+  const yen=n=>'¥'+Math.round(n||0).toLocaleString();
+  const list=(obj,unit)=>Object.keys(obj).length?Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="record" style="padding:8px;margin-bottom:5px"><b>${cloudHtml(k)}</b><div class="meta" style="margin:2px 0 0">${Number(v).toLocaleString(undefined,{maximumFractionDigits:1})}${unit}</div></div>`).join(''):'<div class="meta">まだありません。</div>';
+  box.innerHTML=`<div class="statgrid"><div class="stat"><b>${arr.length}</b><span>日報 件</span></div><div class="stat"><b>${personHours.toLocaleString(undefined,{maximumFractionDigits:1})}</b><span>延べ人時</span></div><div class="stat"><b>${machineHours.toLocaleString(undefined,{maximumFractionDigits:1})}</b><span>重機稼働 h</span></div><div class="stat"><b>${yen(fuelCost+other)}</b><span>記録済み経費</span></div></div><div class="record" style="margin-top:10px"><b>燃料・油脂</b><div class="meta">燃料 ${fuel.toLocaleString()}L ／ AdBlue ${adblue.toLocaleString()}L ／ グリース ${grease.toLocaleString()}本 ／ ${yen(fuelCost)}</div></div><div style="margin-top:10px"><b>重機別 稼働時間</b>${list(machines,'h')}</div><div style="margin-top:10px"><b>車両 使用日報数</b>${list(vehicles,'回')}</div><div class="note" style="margin-top:10px">産廃は専用クラウド表から管理しています。今後、現場別の産廃・処分費・売上・粗利もこの集計へ統合できます。</div>`;
+}
+
 function applyHomeRoleVisibility(){
   const isAdmin=Boolean(cloudProfile&&cloudProfile.role==='admin');
   $$('.admin-home-only').forEach(el=>el.style.display=isAdmin?'':'none');
