@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.3.1 会社共有日報対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.3.2 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -163,12 +163,12 @@ textarea{min-height:105px;resize:vertical}
 </div>
 <div style="margin-top:12px"><div style="font-weight:900;margin-bottom:7px">日報提出状況</div><div id="dailySubmissionList"></div><div class="note" style="margin-top:7px">夕方に日報を入力すると「提出済み」に変わります。1日に複数現場の日報があっても、提出者は1人として数えます。</div></div>
 </div>
-<div class="card"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>燃料 L</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
+<div class="card"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
 <div class="card"><h2>本日の現場</h2><div id="todayList"></div></div>
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.3.1｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
+<div class="tap-guide">v5.3.2｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div id="editBanner" class="edit-banner"><span id="editBannerText">日報を編集中</span><button type="button" class="btn light" onclick="cancelReportEdit()">編集をやめる</button></div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
@@ -225,7 +225,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.3.1：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">クラウド版 v5.3.2：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -1196,16 +1196,21 @@ function fuelAmount(x){const a=Number(x?.amount||0);if(a>0)return a;return Numbe
 function renderFuelSummary(reports){
   const month=today().slice(0,7),arr=(reports||[]).filter(d=>String(d.date||'').startsWith(month));
   const fuels=arr.flatMap(d=>(d.fuels||[]));
-  const liters=fuels.reduce((s,x)=>s+((x.unit||'L')==='L'?Number((x.qty??x.liters)||0):0),0);
+  const qty=x=>Number((x.qty??x.liters)||0);
+  const fuelLiters=fuels.filter(x=>x.type==='軽油'||x.type==='ガソリン').reduce((s,x)=>s+qty(x),0);
+  const adblueLiters=fuels.filter(x=>x.type==='AdBlue').reduce((s,x)=>s+qty(x),0);
+  const greaseCount=fuels.filter(x=>x.type==='グリース').reduce((s,x)=>s+qty(x),0);
   const fuelTotal=fuels.reduce((s,x)=>s+fuelAmount(x),0);
   const other=arr.reduce((s,d)=>s+(d.items||[]).reduce((q,x)=>q+Number(x.price||0),0),0);
   const yen=n=>'¥'+Math.round(Number(n||0)).toLocaleString();
-  if($('#monthFuelLiters'))$('#monthFuelLiters').textContent=liters.toLocaleString(undefined,{maximumFractionDigits:1});
+  if($('#monthFuelLiters'))$('#monthFuelLiters').textContent=fuelLiters.toLocaleString(undefined,{maximumFractionDigits:1});
+  if($('#monthAdBlueLiters'))$('#monthAdBlueLiters').textContent=adblueLiters.toLocaleString(undefined,{maximumFractionDigits:1});
+  if($('#monthGreaseCount'))$('#monthGreaseCount').textContent=greaseCount.toLocaleString(undefined,{maximumFractionDigits:1});
   if($('#monthFuelAmount'))$('#monthFuelAmount').textContent=yen(fuelTotal);
   if($('#monthOtherExpense'))$('#monthOtherExpense').textContent=yen(other);
   if($('#monthExpenseTotal'))$('#monthExpenseTotal').textContent=yen(fuelTotal+other);
-  const map={};fuels.forEach(x=>{const k=x.asset||'未設定';if(!map[k])map[k]={liters:0,amount:0};if((x.unit||'L')==='L')map[k].liters+=Number((x.qty??x.liters)||0);map[k].amount+=fuelAmount(x)});
-  const b=$('#fuelBreakdown');if(b)b.innerHTML=Object.keys(map).length?Object.entries(map).sort((a,b)=>b[1].amount-a[1].amount).map(([k,v])=>`<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(k)}</b><div class="meta" style="margin:3px 0 0">${v.liters.toLocaleString(undefined,{maximumFractionDigits:1})}L ／ ${yen(v.amount)}</div></div>`).join(''):'<div class="empty" style="padding:18px 8px">今月の燃料入力はまだありません。</div>';
+  const map={};fuels.forEach(x=>{const k=x.asset||'未設定';if(!map[k])map[k]={fuel:0,adblue:0,grease:0,amount:0};if(x.type==='軽油'||x.type==='ガソリン')map[k].fuel+=qty(x);else if(x.type==='AdBlue')map[k].adblue+=qty(x);else if(x.type==='グリース')map[k].grease+=qty(x);map[k].amount+=fuelAmount(x)});
+  const b=$('#fuelBreakdown');if(b)b.innerHTML=Object.keys(map).length?Object.entries(map).sort((a,b)=>b[1].amount-a[1].amount).map(([k,v])=>{const parts=[];if(v.fuel)parts.push(`燃料 ${v.fuel.toLocaleString()}L`);if(v.adblue)parts.push(`AdBlue ${v.adblue.toLocaleString()}L`);if(v.grease)parts.push(`グリース ${v.grease.toLocaleString()}本`);return `<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(k)}</b><div class="meta" style="margin:3px 0 0">${parts.join(' ／ ')} ／ ${yen(v.amount)}</div></div>`}).join(''):'<div class="empty" style="padding:18px 8px">今月の燃料・油脂入力はまだありません。</div>';
 }
 
 function collect(){return {id:editingReport?.id??Date.now(),cloudCreatedById:editingReport?.cloudCreatedById||null,cloudCreatedByName:editingReport?.cloudCreatedByName||'',date:$('#date').value,weather:$('#weather').value,site:$('#site').value,writer:$('#writer').value,workers:checked('worker'),meikenCount:Number($('#meikenCount').value||0),asahiCount:Number($('#asahiCount').value||0),otherWorker:esc($('#otherWorker').value),start:$('#start').value,end:$('#end').value,overtime:$('#overtime').value,workTypes:checked('workType'),details:esc($('#details').value),vehicles:checked('vehicle'),leaseVehicles:$$('.lease-vehicle').map(r=>({name:esc(r.querySelector('.lv-name').value),company:esc(r.querySelector('.lv-company').value),count:Number(r.querySelector('.lv-count').value||1),hours:r.querySelector('.lv-hours').value})).filter(x=>x.name),machines:$$('#machineHours .mh').map(x=>({name:x.dataset.name,hours:x.querySelector('input[type=number]').value})),leaseMachines:$$('.lease-machine').map(r=>({name:esc(r.querySelector('.lm-name').value),company:esc(r.querySelector('.lm-company').value),count:Number(r.querySelector('.lm-count').value||1),hours:r.querySelector('.lm-hours').value})).filter(x=>x.name),
