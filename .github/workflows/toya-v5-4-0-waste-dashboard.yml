@@ -29,3 +29,4 @@ jobs:
           git add docs/index.html docs/TOYA_One_v5_2_0_calendar_edit.html docs/TOYA_One_v5_1_0_cloud_shared.html
           git commit -m "Add monthly waste and manifest dashboard" || exit 0
           git push
+# retry after call-site fix
