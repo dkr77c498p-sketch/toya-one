@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.4.4 会社共有日報対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.5.0 会社共有日報対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -168,7 +168,7 @@ textarea{min-height:105px;resize:vertical}
 </section>
 
 <section id="reportPage" class="page">
-<div class="tap-guide">v5.4.4｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
+<div class="tap-guide">v5.5.0｜<span>会社全員で共有</span>、日報・写真・利用状況をクラウド表示。</div>
 <div id="editBanner" class="edit-banner"><span id="editBannerText">日報を編集中</span><button type="button" class="btn light" onclick="cancelReportEdit()">編集をやめる</button></div>
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
@@ -176,7 +176,7 @@ textarea{min-height:105px;resize:vertical}
 <label>記入者</label><select id="writer"><option value="">選択してください</option><option>宮下 直也</option><option>上村 凌太</option><option>宮下 哲也</option></select>
 </div>
 
-<div class="card"><h2>現場作業者</h2>
+<div class="card no-print" id="siteMoveCard"><h2>現場移動</h2><div class="note">午前と午後など、同じ日に別の現場へ移動したときに使います。現在の入力を引き継いで2現場目・3現場目の日報を作れます。</div><button type="button" class="btn dark" style="width:100%;margin-top:10px;font-size:16px" onclick="createMovedSiteReport()">＋ 現場移動・次の現場を追加</button></div><div class="card"><h2>現場作業者</h2>
 <div class="choice-grid">
 <label class="choice"><input type="checkbox" name="worker" value="宮下 直也">宮下 直也</label>
 <label class="choice"><input type="checkbox" name="worker" value="上村 凌太">上村 凌太</label>
@@ -225,7 +225,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.4.4：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">クラウド版 v5.5.0：保存した日報と写真を会社全員の端末で共有できます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -838,6 +838,29 @@ $('#date').value=today();
 Object.entries({sites:LS.sites,vehicles:LS.vehicles,machines:LS.machines,attachments:LS.attachments}).forEach(([n,k])=>{if(!localStorage.getItem(k))set(k,defaults[n])});
 
 $$('nav button').forEach(b=>b.onclick=()=>{ $$('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$$('.page').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.page).classList.add('active');$('#actions').style.display=b.dataset.page==='reportPage'?'grid':'none';if(b.dataset.page==='homePage')renderHome();if(b.dataset.page==='recordsPage')renderRecords();if(b.dataset.page==='attachmentPage')renderAttachments();if(b.dataset.page==='masterPage')renderMasters()});
+
+function createMovedSiteReport(){
+  const current=collect();
+  const sites=get(LS.sites,[]).filter(Boolean);
+  const choices=sites.filter(x=>x!==current.site);
+  if(!choices.length){alert('別の現場がまだ登録されていません。先に現場を登録してください。');return;}
+  const selected=prompt('移動先の現場名を入力してください。\n登録済み：'+choices.join(' ／ '),choices[0]||'');
+  if(!selected)return;
+  if(!sites.includes(selected)){alert('登録済みの現場名から選んでください。');return;}
+  $('#site').value=selected;
+  // Keep date/writer/workers/equipment as a convenient starting point, but clear site-specific values.
+  $('#details').value='';
+  $('#memo').value='';
+  $('#start').value=current.end||'13:00';
+  $('#end').value='17:00';
+  $('#overtime').value=0;
+  $('#items').innerHTML='';addItem();
+  if($('#fuelRows'))$('#fuelRows').innerHTML='';
+  editingCloudReportId=null;editingLocalReportId=null;editingOriginalCreatorId=null;editingOriginalCreatorName='';
+  updateEditBanner();
+  window.scrollTo({top:0,behavior:'smooth'});
+  setTimeout(()=>alert('移動先「'+selected+'」の日報入力に切り替えました。必要なところだけ変更して保存してください。'),250);
+}
 
 function setTimeQuick(id,v){const el=$('#'+id);if(el)el.value=v}
 function decimalPlaces(n){const t=String(n);return t.includes('.')?t.split('.')[1].length:0}
