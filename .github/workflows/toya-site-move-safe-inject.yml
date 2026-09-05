@@ -1,0 +1,33 @@
+name: TOYA One safe site move inject
+on:
+  push:
+    paths:
+      - '.github/workflows/toya-site-move-safe-inject.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Safely inject helper before final body close
+        shell: python
+        run: |
+          from pathlib import Path
+          files=[Path('docs/TOYA_One_v5_1_0_cloud_shared.html'),Path('docs/TOYA_One_v5_2_0_calendar_edit.html'),Path('docs/index.html')]
+          tag='<script src="midway.js"></script>'
+          for p in files:
+            s=p.read_text(encoding='utf-8')
+            if tag not in s:
+              i=s.rfind('</body>')
+              if i<0: raise SystemExit('final body close not found '+str(p))
+              s=s[:i]+tag+'\n'+s[i:]
+            p.write_text(s,encoding='utf-8')
+      - name: Commit
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/TOYA_One_v5_1_0_cloud_shared.html docs/TOYA_One_v5_2_0_calendar_edit.html docs/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Safely add one-page site move input"
+          git push
