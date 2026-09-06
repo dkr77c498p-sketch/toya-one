@@ -1,0 +1,27 @@
+name: TOYA midway cache bust 3
+on:
+  push:
+    paths: ['.github/workflows/toya-midway-cache-bust-3.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: python
+        run: |
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          import re
+          s2=re.sub(r'<script src="midway\.js\?v=[^"]+"></script>', '<script src="midway.js?v=20260906-1636"></script>', s, count=1)
+          if s2==s:
+              raise SystemExit('midway tag not found')
+          p.write_text(s2)
+      - run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "Refresh midway cache after filter fix" || exit 0
+          git push
