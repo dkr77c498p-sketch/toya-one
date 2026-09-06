@@ -1,0 +1,30 @@
+name: TOYA moved site filter fix
+on:
+  push:
+    paths: ['.github/workflows/toya-site-move-filter-fix.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: python
+        run: |
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          old='<script src="midway.js?v=202609050948"></script>'
+          if old not in s:
+              old='<script src="midway.js"></script>'
+          new='<script src="midway.js?v=202609050948"></script>\n<script src="site-move-filter-fix.js?v=202609061630"></script>'
+          if 'site-move-filter-fix.js' not in s:
+              if old not in s: raise SystemExit('midway script tag not found')
+              s=s.replace(old,new,1)
+          p.write_text(s)
+      - run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "Load moved site filter fix" || exit 0
+          git push
