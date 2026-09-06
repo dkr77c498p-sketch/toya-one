@@ -14,10 +14,8 @@ jobs:
           from pathlib import Path
           p=Path('docs/index.html')
           s=p.read_text()
-          old='<script src="midway.js?v=202609050948"></script>'
-          if old not in s:
-              old='<script src="midway.js"></script>'
-          new='<script src="midway.js?v=202609050948"></script>\n<script src="site-move-filter-fix.js?v=202609061630"></script>'
+          old='<script src="midway.js?v=20260905-1846"></script>'
+          new=old+'\n<script src="site-move-filter-fix.js?v=20260906-1635"></script>'
           if 'site-move-filter-fix.js' not in s:
               if old not in s: raise SystemExit('midway script tag not found')
               s=s.replace(old,new,1)
