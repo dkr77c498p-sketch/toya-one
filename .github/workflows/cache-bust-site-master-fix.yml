@@ -1,0 +1,28 @@
+name: Cache bust site master fix
+on:
+  push:
+    paths:
+      - '.github/workflows/cache-bust-site-master-fix.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update script version
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          s=s.replace('site-move-filter-fix.js?v=20260906-1635','site-move-filter-fix.js?v=20260907-1106')
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "Refresh site master filter script" || exit 0
+          git push
