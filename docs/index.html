@@ -1634,7 +1634,7 @@ function setRecordView(mode){
   if(lb)lb.className='btn '+(mode==='list'?'active':'light');
   rerenderRecordBrowser();
 }
-function rerenderRecordBrowser(){renderRecordBrowser(currentRecordsData)}
+function rerenderRecordBrowser(){const a=(currentRecordsData&&currentRecordsData.length)?currentRecordsData:((cloudReportsCache&&cloudReportsCache.length)?cloudReportsCache:currentRecordsData);renderRecordBrowser(a)}
 function recordFilters(a){
   const q=($('#recordSearch')?.value||'').trim().toLowerCase();
   const site=$('#recordSiteFilter')?.value||'';
@@ -1664,7 +1664,7 @@ function recordCard(d,isCloud){
 function shiftRecordMonth(delta){
   const base=recordCalendarMonth||today().slice(0,7),parts=base.split('-').map(Number);const d=new Date(parts[0],parts[1]-1+delta,1);recordCalendarMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;recordSelectedDate='';rerenderRecordBrowser();
 }
-function selectRecordDate(date){recordSelectedDate=recordSelectedDate===date?'':date;rerenderRecordBrowser()}
+function selectRecordDate(date){const next=recordSelectedDate===date?'':date;recordSelectedDate=next;const f=document.querySelector('#recordDateFrom'),t=document.querySelector('#recordDateTo');if(f)f.value=next;if(t)t.value=next;rerenderRecordBrowser()}
 function renderRecordCalendar(a){
   const box=$('#recordsCalendar');if(!box)return;
   if(!recordCalendarMonth)recordCalendarMonth=today().slice(0,7);
