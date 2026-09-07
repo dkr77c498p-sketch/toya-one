@@ -1,0 +1,31 @@
+name: Fix Asahi dispatch normalization
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-asahi-normalize.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix Asahi fallback
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          old="asahiCount:Number(full.asahiCount||r.dispatch_count||0),"
+          new="asahiCount:Number(full.asahiCount??0),"
+          if old not in s:
+              raise SystemExit('target not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Commit
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "Fix Asahi count normalization" || exit 0
+          git push
