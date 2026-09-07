@@ -4,61 +4,15 @@
   function localReports(){try{return (typeof LS!=='undefined'&&typeof get==='function')?(get(LS.reports,[])||[]):[]}catch(e){return []}}
   function localSites(){try{return (typeof LS!=='undefined'&&typeof get==='function')?(get(LS.sites,[])||[]):[]}catch(e){return []}}
   function cloudReports(){try{return (typeof cloudReportsCache!=='undefined'&&Array.isArray(cloudReportsCache))?cloudReportsCache:[]}catch(e){return []}}
-  function cloudSites(){try{return (typeof cloudSitesCache!=='undefined'&&Array.isArray(cloudSitesCache))?cloudSitesCache:[]}catch(e){return []}}
   function currentReports(){try{return (typeof currentRecordsData!=='undefined'&&Array.isArray(currentRecordsData))?currentRecordsData:[]}catch(e){return []}}
-  function allKnownSites(data){
-    const a=[];
-    const sources=[...(data||[]),...cloudReports(),...currentReports(),...localReports()];
-    sources.forEach(d=>{if(d&&d.site)a.push(d.site);(d&&Array.isArray(d.siteMoves)?d.siteMoves:[]).forEach(m=>{if(m&&m.site)a.push(m.site)})});
-    cloudSites().forEach(s=>a.push(s&&s.name));
-    localSites().forEach(s=>a.push(typeof s==='string'?s:(s&&s.name)));
-    return [...new Set(a.filter(x=>!invalidSite(x)))].sort();
-  }
-  function moveMatches(d,site){return !!(d&&((d.site===site)||(Array.isArray(d.siteMoves)&&d.siteMoves.some(m=>m&&m.site===site))))}
-
-  if(typeof updateRecordFilterOptions==='function'&&!window.__moveFilterOptionsFixed2){
-    const old=updateRecordFilterOptions;
-    window.updateRecordFilterOptions=function(a){
-      old(a);
-      const site=document.querySelector('#recordSiteFilter'); if(!site)return;
-      const current=site.value,names=allKnownSites(a||[]);
-      site.innerHTML='<option value="">全現場</option>'+names.map(n=>`<option>${esc(n)}</option>`).join('');
-      if(current&&names.includes(current))site.value=current;
-    };
-    window.__moveFilterOptionsFixed2=true;
-  }
-
-  if(typeof recordFilters==='function'&&!window.__moveRecordFiltersFixed2){
-    window.recordFilters=function(a){
-      const q=(document.querySelector('#recordSearch')?.value||'').trim().toLowerCase();
-      const site=document.querySelector('#recordSiteFilter')?.value||'';
-      const writer=document.querySelector('#recordWriterFilter')?.value||'';
-      const from=document.querySelector('#recordDateFrom')?.value||'';
-      const to=document.querySelector('#recordDateTo')?.value||'';
-      return (a||[]).filter(d=>{
-        const moveText=(Array.isArray(d.siteMoves)?d.siteMoves:[]).flatMap(m=>[m?.site,m?.action,m?.waste,m?.disposal,m?.vehicle]).filter(Boolean);
-        const hay=[d.site,d.writer,d.details,d.memo,...(d.workTypes||[]),...moveText].join(' ').toLowerCase();
-        return (!q||hay.includes(q))&&(!site||moveMatches(d,site))&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to);
-      });
-    };
-    window.__moveRecordFiltersFixed2=true;
-  }
-
-  if(typeof populateLedgerSites==='function'&&!window.__moveLedgerSitesFixed2){
-    window.populateLedgerSites=function(){
-      const sel=document.querySelector('#ledgerSite'); if(!sel)return;
-      const current=sel.value,names=allKnownSites([]);
-      sel.innerHTML=names.map(n=>`<option>${esc(n)}</option>`).join('');
-      if(current&&names.includes(current))sel.value=current;
-    };
-    window.__moveLedgerSitesFixed2=true;
-  }
-
-  function refresh(){
-    try{updateRecordFilterOptions(currentReports().length?currentReports():cloudReports())}catch(e){console.warn('現場絞り込み更新失敗',e)}
-    try{populateLedgerSites()}catch(e){console.warn('写真台帳現場更新失敗',e)}
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(refresh,500));else setTimeout(refresh,500);
-  document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>setTimeout(refresh,300)));
-  setTimeout(refresh,1500);
+  let masterSites=[];
+  function allKnownSites(data){const a=[...masterSites];const sources=[...(data||[]),...cloudReports(),...currentReports(),...localReports()];sources.forEach(d=>{if(d?.site)a.push(d.site);(d?.siteMoves||[]).forEach(m=>{if(m?.site)a.push(m.site)})});localSites().forEach(s=>a.push(typeof s==='string'?s:s?.name));return [...new Set(a.filter(x=>!invalidSite(x)))].sort()}
+  async function loadMasterSites(){try{if(typeof sb==='undefined'||!sb)return;let q=sb.from('sites').select('name,status').eq('status','active');if(typeof cloudProfile!=='undefined'&&cloudProfile?.company_id)q=q.eq('company_id',cloudProfile.company_id);const {data,error}=await q;if(error)throw error;masterSites=(data||[]).map(x=>x.name).filter(x=>!invalidSite(x))}catch(e){console.warn('現場マスター取得失敗',e)}}
+  function fillSelect(sel,names,all){if(!sel)return;const cur=sel.value;sel.innerHTML=(all?'<option value="">全現場</option>':'')+names.map(n=>`<option>${esc(n)}</option>`).join('');if(cur&&names.includes(cur))sel.value=cur}
+  function refresh(){const names=allKnownSites(currentReports().length?currentReports():cloudReports());fillSelect(document.querySelector('#recordSiteFilter'),names,true);fillSelect(document.querySelector('#ledgerSite'),names,false)}
+  async function refreshAll(){await loadMasterSites();refresh()}
+  if(typeof recordFilters==='function'&&!window.__moveRecordFiltersFixed3){window.recordFilters=function(a){const q=(document.querySelector('#recordSearch')?.value||'').trim().toLowerCase(),site=document.querySelector('#recordSiteFilter')?.value||'',writer=document.querySelector('#recordWriterFilter')?.value||'',from=document.querySelector('#recordDateFrom')?.value||'',to=document.querySelector('#recordDateTo')?.value||'';return (a||[]).filter(d=>{const moves=d.siteMoves||[],hay=[d.site,d.writer,d.details,d.memo,...(d.workTypes||[]),...moves.flatMap(m=>[m?.site,m?.action,m?.waste,m?.disposal,m?.vehicle])].filter(Boolean).join(' ').toLowerCase();return(!q||hay.includes(q))&&(!site||d.site===site||moves.some(m=>m?.site===site))&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to)});};window.__moveRecordFiltersFixed3=true}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,600));else setTimeout(refreshAll,600);
+  document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>setTimeout(refreshAll,250)));
+  setTimeout(refreshAll,1800);
 })();
