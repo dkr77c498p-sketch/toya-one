@@ -742,7 +742,7 @@ function cloudNormalizeReport(r){
     details:full.details||r.work_content||'',
     workers:Array.isArray(full.workers)?full.workers:[],
     meikenCount:Number(full.meikenCount||0),
-    asahiCount:Number(full.asahiCount||r.dispatch_count||0),
+    asahiCount:Number(full.asahiCount??0),
     start:full.start||r.start_time||'',
     end:full.end||r.end_time||'',
     overtime:Number(full.overtime||r.overtime_hours||0),
