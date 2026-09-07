@@ -1,0 +1,37 @@
+name: Fix calendar sync safely
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-calendar-sync-20260907.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch calendar behavior only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          old="function rerenderRecordBrowser(){renderRecordBrowser(currentRecordsData)}"
+          new="function rerenderRecordBrowser(){const a=(currentRecordsData&&currentRecordsData.length)?currentRecordsData:((cloudReportsCache&&cloudReportsCache.length)?cloudReportsCache:currentRecordsData);renderRecordBrowser(a)}"
+          if old not in s:
+              raise SystemExit('rerender target not found')
+          s=s.replace(old,new,1)
+          old2="function selectRecordDate(date){recordSelectedDate=recordSelectedDate===date?'':date;rerenderRecordBrowser()}"
+          new2="function selectRecordDate(date){const next=recordSelectedDate===date?'':date;recordSelectedDate=next;const f=document.querySelector('#recordDateFrom'),t=document.querySelector('#recordDateTo');if(f)f.value=next;if(t)t.value=next;rerenderRecordBrowser()}"
+          if old2 not in s:
+              raise SystemExit('selectRecordDate target not found')
+          s=s.replace(old2,new2,1)
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "Fix calendar date sync without loader changes" || exit 0
+          git push
