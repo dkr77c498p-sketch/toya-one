@@ -7,12 +7,19 @@
   function currentReports(){try{return (typeof currentRecordsData!=='undefined'&&Array.isArray(currentRecordsData))?currentRecordsData:[]}catch(e){return []}}
   let masterSites=[];
   function allKnownSites(data){const a=[...masterSites];const sources=[...(data||[]),...cloudReports(),...currentReports(),...localReports()];sources.forEach(d=>{if(d?.site)a.push(d.site);(d?.siteMoves||[]).forEach(m=>{if(m?.site)a.push(m.site)})});localSites().forEach(s=>a.push(typeof s==='string'?s:s?.name));return [...new Set(a.filter(x=>!invalidSite(x)))].sort()}
-  async function loadMasterSites(){try{if(typeof sb==='undefined'||!sb)return;let q=sb.from('sites').select('name,status').eq('status','active');if(typeof cloudProfile!=='undefined'&&cloudProfile?.company_id)q=q.eq('company_id',cloudProfile.company_id);const {data,error}=await q;if(error)throw error;masterSites=(data||[]).map(x=>x.name).filter(x=>!invalidSite(x))}catch(e){console.warn('現場マスター取得失敗',e)}}
+  async function loadMasterSites(){
+    try{
+      if(typeof cloudClient==='undefined'||!cloudClient||typeof cloudProfile==='undefined'||!cloudProfile?.company_id)return;
+      const {data,error}=await cloudClient.from('sites').select('name,status').eq('company_id',cloudProfile.company_id).eq('status','active').order('name');
+      if(error)throw error;
+      masterSites=(data||[]).map(x=>x.name).filter(x=>!invalidSite(x));
+    }catch(e){console.warn('現場マスター取得失敗',e)}
+  }
   function fillSelect(sel,names,all){if(!sel)return;const cur=sel.value;sel.innerHTML=(all?'<option value="">全現場</option>':'')+names.map(n=>`<option>${esc(n)}</option>`).join('');if(cur&&names.includes(cur))sel.value=cur}
   function refresh(){const names=allKnownSites(currentReports().length?currentReports():cloudReports());fillSelect(document.querySelector('#recordSiteFilter'),names,true);fillSelect(document.querySelector('#ledgerSite'),names,false)}
   async function refreshAll(){await loadMasterSites();refresh()}
-  if(typeof recordFilters==='function'&&!window.__moveRecordFiltersFixed3){window.recordFilters=function(a){const q=(document.querySelector('#recordSearch')?.value||'').trim().toLowerCase(),site=document.querySelector('#recordSiteFilter')?.value||'',writer=document.querySelector('#recordWriterFilter')?.value||'',from=document.querySelector('#recordDateFrom')?.value||'',to=document.querySelector('#recordDateTo')?.value||'';return (a||[]).filter(d=>{const moves=d.siteMoves||[],hay=[d.site,d.writer,d.details,d.memo,...(d.workTypes||[]),...moves.flatMap(m=>[m?.site,m?.action,m?.waste,m?.disposal,m?.vehicle])].filter(Boolean).join(' ').toLowerCase();return(!q||hay.includes(q))&&(!site||d.site===site||moves.some(m=>m?.site===site))&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to)});};window.__moveRecordFiltersFixed3=true}
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,600));else setTimeout(refreshAll,600);
-  document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>setTimeout(refreshAll,250)));
-  setTimeout(refreshAll,1800);
+  if(typeof recordFilters==='function'&&!window.__moveRecordFiltersFixed4){window.recordFilters=function(a){const q=(document.querySelector('#recordSearch')?.value||'').trim().toLowerCase(),site=document.querySelector('#recordSiteFilter')?.value||'',writer=document.querySelector('#recordWriterFilter')?.value||'',from=document.querySelector('#recordDateFrom')?.value||'',to=document.querySelector('#recordDateTo')?.value||'';return (a||[]).filter(d=>{const moves=d.siteMoves||[],hay=[d.site,d.writer,d.details,d.memo,...(d.workTypes||[]),...moves.flatMap(m=>[m?.site,m?.action,m?.waste,m?.disposal,m?.vehicle])].filter(Boolean).join(' ').toLowerCase();return(!q||hay.includes(q))&&(!site||d.site===site||moves.some(m=>m?.site===site))&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to)});};window.__moveRecordFiltersFixed4=true}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,800));else setTimeout(refreshAll,800);
+  document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>setTimeout(refreshAll,350)));
+  setTimeout(refreshAll,2200);
 })();
