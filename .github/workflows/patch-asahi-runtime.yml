@@ -1,0 +1,30 @@
+name: Patch Asahi runtime safely
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-asahi-runtime.yml'
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Append runtime fix without touching app shell
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/site-move-filter-fix.js')
+          s=p.read_text()
+          marker='TOYA_ASAHI_RUNTIME_FIX_V2'
+          if marker not in s:
+              s += r'''\n\n/* TOYA_ASAHI_RUNTIME_FIX_V2 */\n(function(){\n  function installAsahiFix(){\n    if(typeof window.cloudNormalizeReport!=='function'||window.__toyaAsahiRuntimeFixV2)return false;\n    const old=window.cloudNormalizeReport;\n    window.cloudNormalizeReport=function(r){\n      const d=old(r);\n      try{\n        const full=(r&&r.report_data&&typeof r.report_data==='object')?r.report_data:{};\n        if(Object.prototype.hasOwnProperty.call(full,'asahiCount')){\n          d.asahiCount=Number(full.asahiCount??0);\n        }else{\n          d.asahiCount=Math.max(0,Number(r?.dispatch_count||0)-Number(full.meikenCount||0));\n        }\n      }catch(e){d.asahiCount=Number(d.asahiCount||0)}\n      return d;\n    };\n    window.__toyaAsahiRuntimeFixV2=true;\n    setTimeout(()=>{try{if(window.cloudProfile&&typeof window.cloudLoadReports==='function')window.cloudLoadReports()}catch(e){}},250);\n    return true;\n  }\n  if(!installAsahiFix()){\n    let n=0;const t=setInterval(()=>{n++;if(installAsahiFix()||n>40)clearInterval(t)},100);\n  }\n})();\n'''
+              p.write_text(s)
+          PY
+      - name: Commit runtime fix
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/site-move-filter-fix.js
+          git commit -m "Fix Asahi display in cached app runtime" || exit 0
+          git push
