@@ -1,0 +1,47 @@
+name: Enable isolated vehicle cost administration
+on:
+  push:
+    paths:
+      - '.github/workflows/enable-vehicle-cost-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-enable-vehicle-cost-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check module and add only its loader
+        run: |
+          node --check docs/vehicle-cost-admin.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import subprocess
+          p=Path('docs/index.html')
+          before=p.read_text()
+          tag='<script src="vehicle-cost-admin.js?v=20260908-vehicle-v1"></script>'
+          if tag in before:
+              print('Already enabled')
+          else:
+              blob=lambda file: subprocess.check_output(['git','hash-object',file],text=True).strip()
+              assert blob('docs/index.html')=='c2b39272cb4a07b7c0ce206da64f046c64fae7ec', 'Main app changed; stop without editing'
+              assert blob('docs/vehicle-cost-admin.js')=='0804e662af11d8595e7fb4316ed2ac932f38fb73', 'Module differs from verified file; stop'
+              end='\n</body>\n</html>'
+              assert before.count(end)==1, 'Document end not unique; stop'
+              after=before.replace(end,'\n'+tag+end)
+              assert after.replace(tag+'\n','')==before
+              p.write_text(after)
+          PY
+      - name: Commit loader only
+        run: |
+          if git diff --quiet -- docs/index.html; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html
+          git commit -m 'Load isolated vehicle fuel-deduction module; preserve login and daily reports'
+          git push
