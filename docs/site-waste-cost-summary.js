@@ -1,4 +1,4 @@
-/* TOYA One 現場別 廃材・処分費集計 v1.0 */
+/* TOYA One 現場別 廃材・処分費集計 v1.1 */
 (() => {
   'use strict';
 
@@ -6,6 +6,28 @@
   const html = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const isWaste = x => !!(x && (x.isWaste || String(x.name || '').startsWith('産廃：')));
   const cleanName = x => String(x?.name || '産廃').replace(/^産廃：/, '') || '産廃';
+
+  function ensureSiteOptions(){
+    const sel = document.getElementById('siteSummarySelect');
+    if(!sel) return false;
+    const activeSites = Array.isArray(window.cloudSitesCache)
+      ? window.cloudSitesCache.filter(s => s && s.status !== 'inactive' && s.name).map(s => s.name)
+      : [];
+    const reportSites = Array.isArray(window.cloudReportsCache)
+      ? window.cloudReportsCache.map(r => r?.site).filter(Boolean)
+      : [];
+    const names = [...new Set([...activeSites, ...reportSites])];
+    if(!names.length) return false;
+    const current = sel.value;
+    const currentOptions = [...sel.options].map(o => o.value).filter(Boolean);
+    const same = currentOptions.length === names.length && names.every(n => currentOptions.includes(n));
+    if(!same){
+      sel.innerHTML = names.map(n => `<option value="${html(n)}">${html(n)}</option>`).join('');
+      if(current && names.includes(current)) sel.value = current;
+    }
+    if(!sel.value && names.length) sel.value = names[0];
+    return true;
+  }
 
   function buildRows(site){
     const reports = Array.isArray(window.cloudReportsCache) ? window.cloudReportsCache : [];
@@ -28,6 +50,7 @@
   }
 
   function renderWasteCostSummary(){
+    ensureSiteOptions();
     const body = document.getElementById('siteSummaryBody');
     const sel = document.getElementById('siteSummarySelect');
     if(!body || !sel || !sel.value) return;
@@ -37,7 +60,6 @@
 
     const rows = buildRows(sel.value);
     const total = rows.reduce((s,x) => s + Number(x.amount || 0), 0);
-    const costRows = rows.filter(x => Number(x.amount || 0) > 0).length;
 
     const byItem = {};
     rows.forEach(x => {
@@ -90,11 +112,19 @@
     window.__toyaWasteCostSummaryInstalled = true;
     const original = window.renderSiteSummary;
     window.renderSiteSummary = function(...args){
+      ensureSiteOptions();
       const out = original.apply(this, args);
-      try { renderWasteCostSummary(); } catch(e) { console.error('現場別処分費集計', e); }
+      try { ensureSiteOptions(); renderWasteCostSummary(); } catch(e) { console.error('現場別処分費集計', e); }
       return out;
     };
-    try { renderWasteCostSummary(); } catch(e) {}
+    const refresh = () => {
+      if(ensureSiteOptions()){
+        try { original(); renderWasteCostSummary(); } catch(e) {}
+      }
+    };
+    setTimeout(refresh, 500);
+    setTimeout(refresh, 1500);
+    setTimeout(refresh, 3500);
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
