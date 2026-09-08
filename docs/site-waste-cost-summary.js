@@ -7,30 +7,20 @@
   const isWaste = x => !!(x && (x.isWaste || String(x.name || '').startsWith('産廃：')));
   const cleanName = x => String(x?.name || '産廃').replace(/^産廃：/, '') || '産廃';
 
-  function ensureSiteOptions(){
-    const sel = document.getElementById('siteSummarySelect');
-    if(!sel) return false;
-    const activeSites = Array.isArray(window.cloudSitesCache)
-      ? window.cloudSitesCache.filter(s => s && s.status !== 'inactive' && s.name).map(s => s.name)
-      : [];
-    const reportSites = Array.isArray(window.cloudReportsCache)
-      ? window.cloudReportsCache.map(r => r?.site).filter(Boolean)
-      : [];
-    const names = [...new Set([...activeSites, ...reportSites])];
-    if(!names.length) return false;
-    const current = sel.value;
-    const currentOptions = [...sel.options].map(o => o.value).filter(Boolean);
-    const same = currentOptions.length === names.length && names.every(n => currentOptions.includes(n));
-    if(!same){
-      sel.innerHTML = names.map(n => `<option value="${html(n)}">${html(n)}</option>`).join('');
-      if(current && names.includes(current)) sel.value = current;
-    }
-    if(!sel.value && names.length) sel.value = names[0];
-    return true;
+  function getCloudReports(){
+    try{
+      return (typeof cloudReportsCache !== 'undefined' && Array.isArray(cloudReportsCache)) ? cloudReportsCache : [];
+    }catch(e){ return []; }
+  }
+
+  function getCloudSites(){
+    try{
+      return (typeof cloudSitesCache !== 'undefined' && Array.isArray(cloudSitesCache)) ? cloudSitesCache : [];
+    }catch(e){ return []; }
   }
 
   function buildRows(site){
-    const reports = Array.isArray(window.cloudReportsCache) ? window.cloudReportsCache : [];
+    const reports = getCloudReports();
     const mine = reports.filter(d => String(d.site || '') === String(site || ''));
     const rows = [];
     mine.forEach(d => {
@@ -49,8 +39,40 @@
     return rows;
   }
 
+  async function ensureSiteOptions(){
+    const sel = document.getElementById('siteSummarySelect');
+    if(!sel) return false;
+
+    let sites = getCloudSites().filter(x => x && x.status !== 'inactive' && x.name);
+
+    if(!sites.length){
+      try{
+        if(typeof cloudClient !== 'undefined' && cloudClient && typeof cloudProfile !== 'undefined' && cloudProfile?.company_id){
+          const {data,error} = await cloudClient.from('sites')
+            .select('id,name,status')
+            .eq('company_id', cloudProfile.company_id)
+            .neq('status','inactive')
+            .order('name');
+          if(!error && Array.isArray(data)) sites = data.filter(x => x?.name);
+        }
+      }catch(e){ console.warn('現場別集計の現場取得に失敗', e); }
+    }
+
+    const names = [...new Set(sites.map(x => String(x.name || '').trim()).filter(Boolean))];
+    if(!names.length) return false;
+
+    const current = sel.value;
+    const existing = [...sel.options].map(o => o.value).filter(Boolean);
+    const same = existing.length === names.length && names.every(n => existing.includes(n));
+    if(!same){
+      sel.innerHTML = '<option value="">現場を選択</option>' + names.map(n => `<option value="${html(n)}">${html(n)}</option>`).join('');
+    }
+    if(current && names.includes(current)) sel.value = current;
+    else if(!sel.value && names.length === 1) sel.value = names[0];
+    return true;
+  }
+
   function renderWasteCostSummary(){
-    ensureSiteOptions();
     const body = document.getElementById('siteSummaryBody');
     const sel = document.getElementById('siteSummarySelect');
     if(!body || !sel || !sel.value) return;
@@ -106,25 +128,33 @@
     body.appendChild(wrap);
   }
 
+  async function refreshAll(){
+    const ok = await ensureSiteOptions();
+    if(ok){
+      const sel = document.getElementById('siteSummarySelect');
+      if(sel?.value && typeof renderSiteSummary === 'function'){
+        try { renderSiteSummary(); } catch(e) {}
+      }
+      try { renderWasteCostSummary(); } catch(e) {}
+    }
+  }
+
   function install(){
     if(window.__toyaWasteCostSummaryInstalled) return;
-    if(typeof window.renderSiteSummary !== 'function') { setTimeout(install, 700); return; }
+    if(typeof renderSiteSummary !== 'function') { setTimeout(install, 700); return; }
     window.__toyaWasteCostSummaryInstalled = true;
-    const original = window.renderSiteSummary;
+    const original = renderSiteSummary;
     window.renderSiteSummary = function(...args){
-      ensureSiteOptions();
       const out = original.apply(this, args);
-      try { ensureSiteOptions(); renderWasteCostSummary(); } catch(e) { console.error('現場別処分費集計', e); }
+      Promise.resolve().then(async()=>{
+        try { await ensureSiteOptions(); renderWasteCostSummary(); } catch(e) { console.error('現場別処分費集計', e); }
+      });
       return out;
     };
-    const refresh = () => {
-      if(ensureSiteOptions()){
-        try { original(); renderWasteCostSummary(); } catch(e) {}
-      }
-    };
-    setTimeout(refresh, 500);
-    setTimeout(refresh, 1500);
-    setTimeout(refresh, 3500);
+    refreshAll();
+    setTimeout(refreshAll, 1200);
+    setTimeout(refreshAll, 3000);
+    setTimeout(refreshAll, 6000);
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
