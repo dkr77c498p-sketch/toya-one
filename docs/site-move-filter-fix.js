@@ -50,18 +50,29 @@
   }
 })();
 
-/* TOYA_CALENDAR_SELECTION_FIX_V1 */
+/* TOYA_CALENDAR_SELECTION_FIX_V2 */
 (function(){
+  function selectedDateFromFilters(){
+    const f=document.querySelector('#recordDateFrom')?.value||'';
+    const t=document.querySelector('#recordDateTo')?.value||'';
+    return f&&f===t?f:'';
+  }
   function installCalendarSelectionFix(){
-    if(typeof window.selectRecordDate!=='function'||window.__toyaCalendarSelectionFixV1)return false;
+    if(typeof window.selectRecordDate!=='function'||typeof window.rerenderRecordBrowser!=='function'||window.__toyaCalendarSelectionFixV2)return false;
     window.selectRecordDate=function(date){
       recordSelectedDate=date;
       const f=document.querySelector('#recordDateFrom'),t=document.querySelector('#recordDateTo');
       if(f)f.value=date;
       if(t)t.value=date;
-      if(typeof rerenderRecordBrowser==='function')rerenderRecordBrowser();
+      window.rerenderRecordBrowser();
     };
-    window.__toyaCalendarSelectionFixV1=true;
+    const oldRerender=window.rerenderRecordBrowser;
+    window.rerenderRecordBrowser=function(){
+      const d=selectedDateFromFilters();
+      if(d)recordSelectedDate=d;
+      return oldRerender.apply(this,arguments);
+    };
+    window.__toyaCalendarSelectionFixV2=true;
     return true;
   }
   if(!installCalendarSelectionFix()){
