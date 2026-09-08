@@ -32,8 +32,9 @@ jobs:
               assert actual=='59cf0e005cb551ad684af48cfe70eb04b212b3bd', 'App changed since verification; stop for review'
               module=subprocess.check_output(['git','hash-object','docs/labor-cost-admin.js'],text=True).strip()
               assert module=='59a48082592de75d4346c3f220001e238f31bb35', 'Module differs from tested content'
-              assert before.count('</body>')==1
-              after=before.replace('</body>',tag+'\n</body>')
+              end='\n</body>\n</html>'
+              assert before.count(end)==1, 'Document end not unique; stop for review'
+              after=before.replace(end,'\n'+tag+end)
               assert after.replace(tag+'\n','')==before
               p.write_text(after)
           PY
