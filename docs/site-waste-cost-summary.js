@@ -1,4 +1,4 @@
-/* TOYA One 現場別 廃材・処分費集計 v1.1 */
+/* TOYA One 現場別 廃材・処分費集計 v1.2 */
 (() => {
   'use strict';
 
@@ -128,7 +128,29 @@
     body.appendChild(wrap);
   }
 
+  function normalizeMachineSummaryData(){
+    const reports = getCloudReports();
+    reports.forEach(d => {
+      if(!Array.isArray(d.machines)) return;
+      const machineHours = {...(d.machineHours || {})};
+      const normalized = [];
+      d.machines.forEach(m => {
+        if(typeof m === 'string'){
+          normalized.push(m);
+          return;
+        }
+        const name = String(m?.name || '').trim();
+        if(!name) return;
+        normalized.push(name);
+        if(m?.hours !== undefined && m?.hours !== null && m?.hours !== '') machineHours[name] = Number(m.hours || 0);
+      });
+      d.machines = normalized;
+      d.machineHours = machineHours;
+    });
+  }
+
   async function refreshAll(){
+    normalizeMachineSummaryData();
     const ok = await ensureSiteOptions();
     if(ok){
       const sel = document.getElementById('siteSummarySelect');
@@ -143,8 +165,10 @@
     if(window.__toyaWasteCostSummaryInstalled) return;
     if(typeof renderSiteSummary !== 'function') { setTimeout(install, 700); return; }
     window.__toyaWasteCostSummaryInstalled = true;
+    normalizeMachineSummaryData();
     const original = renderSiteSummary;
     window.renderSiteSummary = function(...args){
+      normalizeMachineSummaryData();
       const out = original.apply(this, args);
       Promise.resolve().then(async()=>{
         try { await ensureSiteOptions(); renderWasteCostSummary(); } catch(e) { console.error('現場別処分費集計', e); }
