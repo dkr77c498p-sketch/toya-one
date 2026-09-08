@@ -16,33 +16,34 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Verify tested files and add only script reference
+      - name: Verify tested module and change only its version tag
         run: |
           node --check docs/labor-cost-admin.js
           python3 - <<'PY'
           from pathlib import Path
           import subprocess
           p=Path('docs/index.html')
-          before=p.read_text()
-          tag='<script src="labor-cost-admin.js?v=20260908-labor-v1"></script>'
-          if tag in before:
-              print('Already enabled; no change')
+          before=p.read_bytes()
+          old=b'<script src="labor-cost-admin.js?v=20260908-labor-v1"></script>'
+          new=b'<script src="labor-cost-admin.js?v=20260908-labor-simple-v2"></script>'
+          module=subprocess.check_output(['git','hash-object','docs/labor-cost-admin.js'],text=True).strip()
+          assert module=='d77ac865d88a3bd1314197401c65eca6c78ebfe0', 'Module differs from verified content; stop'
+          if new in before:
+              assert before.count(new)==1 and old not in before
+              print('Already published; no change')
           else:
               actual=subprocess.check_output(['git','hash-object','docs/index.html'],text=True).strip()
-              assert actual=='59cf0e005cb551ad684af48cfe70eb04b212b3bd', 'App changed since verification; stop for review'
-              module=subprocess.check_output(['git','hash-object','docs/labor-cost-admin.js'],text=True).strip()
-              assert module=='59a48082592de75d4346c3f220001e238f31bb35', 'Module differs from tested content'
-              end='\n</body>\n</html>'
-              assert before.count(end)==1, 'Document end not unique; stop for review'
-              after=before.replace(end,'\n'+tag+end)
-              assert after.replace(tag+'\n','')==before
-              p.write_text(after)
+              assert actual=='9638d698382e1f33d464b50b4532fe619005a24a', 'App changed; stop for review'
+              assert before.count(old)==1, 'Loader is not unique; stop'
+              after=before.replace(old,new)
+              assert after.replace(new,old)==before, 'Unexpected change outside version tag'
+              p.write_bytes(after)
           PY
-      - name: Commit the isolated loader
+      - name: Commit version-only loader change
         run: |
           if git diff --quiet -- docs/index.html; then exit 0; fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add docs/index.html
-          git commit -m 'Load isolated admin labor cost module; preserve existing auth and report saves'
+          git commit -m 'Load tested simple labor UI; leave auth and report logic unchanged'
           git push
