@@ -1,0 +1,59 @@
+name: Move attachment add buttons to admin
+on:
+  push:
+    paths:
+      - '.github/workflows/move-attachment-add-buttons-admin.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Move quick add buttons to registration management
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          p=Path('docs/site-move-filter-fix.js')
+          s=p.read_text()
+          pat=r"  function ensureButtons\(\)\{.*?\n  \}\n\n  function updateLocalState"
+          repl="""  function ensureButtons(){
+    document.querySelector('#addMachineAttachmentQuick')?.remove();
+    document.querySelector('#addSmallToolQuick')?.remove();
+    const master=document.querySelector('#attachmentMaster');
+    if(!master)return;
+    const card=master.closest('.card');
+    if(!card)return;
+    const generic=[...card.querySelectorAll('button')].find(b=>b.getAttribute('onclick')==='addAttachment()');
+    if(generic)generic.style.display='none';
+    if(!document.querySelector('#adminAttachmentAddButtons')){
+      const wrap=document.createElement('div');
+      wrap.id='adminAttachmentAddButtons';
+      wrap.className='grid2';
+      wrap.style.marginTop='10px';
+      const machine=document.createElement('button');
+      machine.type='button';machine.className='btn dark';machine.textContent='＋ 重機アタッチメントを追加';
+      machine.onclick=()=>addMasterAttachment('machine');
+      const small=document.createElement('button');
+      small.type='button';small.className='btn light';small.textContent='＋ 小型機械・工具を追加';
+      small.onclick=()=>addMasterAttachment('small');
+      wrap.append(machine,small);
+      master.insertAdjacentElement('afterend',wrap);
+    }
+  }
+
+  function updateLocalState"""
+          ns,n=re.subn(pat,repl,s,count=1,flags=re.S)
+          if n!=1:
+              raise SystemExit(f'ensureButtons target not found: {n}')
+          p.write_text(ns)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/site-move-filter-fix.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Move attachment add buttons to registration management'
+          git push
