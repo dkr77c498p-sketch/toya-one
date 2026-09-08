@@ -22,4 +22,49 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,800));else setTimeout(refreshAll,800);
   document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>setTimeout(refreshAll,350)));
   setTimeout(refreshAll,2200);
-})();\n\n/* TOYA_ASAHI_RUNTIME_FIX_V2 */\n(function(){\n  function installAsahiFix(){\n    if(typeof window.cloudNormalizeReport!=='function'||window.__toyaAsahiRuntimeFixV2)return false;\n    const old=window.cloudNormalizeReport;\n    window.cloudNormalizeReport=function(r){\n      const d=old(r);\n      try{\n        const full=(r&&r.report_data&&typeof r.report_data==='object')?r.report_data:{};\n        if(Object.prototype.hasOwnProperty.call(full,'asahiCount')){\n          d.asahiCount=Number(full.asahiCount??0);\n        }else{\n          d.asahiCount=Math.max(0,Number(r?.dispatch_count||0)-Number(full.meikenCount||0));\n        }\n      }catch(e){d.asahiCount=Number(d.asahiCount||0)}\n      return d;\n    };\n    window.__toyaAsahiRuntimeFixV2=true;\n    setTimeout(()=>{try{if(window.cloudProfile&&typeof window.cloudLoadReports==='function')window.cloudLoadReports()}catch(e){}},250);\n    return true;\n  }\n  if(!installAsahiFix()){\n    let n=0;const t=setInterval(()=>{n++;if(installAsahiFix()||n>40)clearInterval(t)},100);\n  }\n})();\n
+})();
+
+/* TOYA_ASAHI_RUNTIME_FIX_V2 */
+(function(){
+  function installAsahiFix(){
+    if(typeof window.cloudNormalizeReport!=='function'||window.__toyaAsahiRuntimeFixV2)return false;
+    const old=window.cloudNormalizeReport;
+    window.cloudNormalizeReport=function(r){
+      const d=old(r);
+      try{
+        const full=(r&&r.report_data&&typeof r.report_data==='object')?r.report_data:{};
+        if(Object.prototype.hasOwnProperty.call(full,'asahiCount')){
+          d.asahiCount=Number(full.asahiCount??0);
+        }else{
+          d.asahiCount=Math.max(0,Number(r?.dispatch_count||0)-Number(full.meikenCount||0));
+        }
+      }catch(e){d.asahiCount=Number(d.asahiCount||0)}
+      return d;
+    };
+    window.__toyaAsahiRuntimeFixV2=true;
+    setTimeout(()=>{try{if(window.cloudProfile&&typeof window.cloudLoadReports==='function')window.cloudLoadReports()}catch(e){}},250);
+    return true;
+  }
+  if(!installAsahiFix()){
+    let n=0;const t=setInterval(()=>{n++;if(installAsahiFix()||n>40)clearInterval(t)},100);
+  }
+})();
+
+/* TOYA_CALENDAR_SELECTION_FIX_V1 */
+(function(){
+  function installCalendarSelectionFix(){
+    if(typeof window.selectRecordDate!=='function'||window.__toyaCalendarSelectionFixV1)return false;
+    window.selectRecordDate=function(date){
+      recordSelectedDate=date;
+      const f=document.querySelector('#recordDateFrom'),t=document.querySelector('#recordDateTo');
+      if(f)f.value=date;
+      if(t)t.value=date;
+      if(typeof rerenderRecordBrowser==='function')rerenderRecordBrowser();
+    };
+    window.__toyaCalendarSelectionFixV1=true;
+    return true;
+  }
+  if(!installCalendarSelectionFix()){
+    let n=0;const t=setInterval(()=>{n++;if(installCalendarSelectionFix()||n>40)clearInterval(t)},100);
+  }
+})();
