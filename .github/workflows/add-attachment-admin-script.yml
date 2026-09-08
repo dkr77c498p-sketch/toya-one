@@ -1,0 +1,34 @@
+name: Add attachment admin script
+on:
+  push:
+    paths:
+      - '.github/workflows/add-attachment-admin-script.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add script tag
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          tag='<script src="attachment-admin-buttons.js?v=20260908-1602"></script>'
+          if tag not in s:
+              marker='<script src="site-move-filter-fix.js?v=20260908-1501"></script>'
+              if marker not in s:
+                  raise SystemExit('site fix script marker not found')
+              s=s.replace(marker, marker+'\n'+tag, 1)
+              p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Load registration-only attachment controls'
+          git push
