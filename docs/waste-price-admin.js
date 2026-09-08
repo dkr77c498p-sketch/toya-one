@@ -1,4 +1,4 @@
-/* TOYA One 廃材単価 登録管理 v1.0 */
+/* TOYA One 廃材単価 登録管理 v1.1 枚単価対応 */
 (() => {
   'use strict';
 
@@ -25,8 +25,8 @@
       <div class="row" style="margin-top:10px">
         <div class="rowhead"><b>新しい単価を追加</b></div>
         <div class="grid2"><div><label>処分場</label><input id="wpaNewFacility" placeholder="例：田上リサイクル"></div><div><label>品目</label><input id="wpaNewWaste" placeholder="例：コンクリート無筋"></div></div>
-        <div class="grid3"><div><label>単価区分</label><select id="wpaNewBasis"><option value="kg">kg</option><option value="m3">m³</option><option value="vehicle">車両1台</option></select></div><div><label>税別単価</label><input id="wpaNewPrice" type="number" min="0" step="0.01"></div><div><label>車両</label><input id="wpaNewVehicle" placeholder="例：10tダンプ"></div></div>
-        <label>表示単位</label><input id="wpaNewDisplay" placeholder="例：1kg / 1m³ / 10tダンプ 1台">
+        <div class="grid3"><div><label>単価区分</label><select id="wpaNewBasis"><option value="kg">kg</option><option value="m3">m³</option><option value="vehicle">車両1台</option><option value="piece">枚</option></select></div><div><label>税別単価</label><input id="wpaNewPrice" type="number" min="0" step="0.01"></div><div><label>車両</label><input id="wpaNewVehicle" placeholder="例：10tダンプ"></div></div>
+        <label>表示単位</label><input id="wpaNewDisplay" placeholder="例：1kg / 1m³ / 1枚 / 10tダンプ 1台">
         <button id="wpaAdd" type="button" class="btn dark" style="width:100%;margin-top:10px">＋ 単価を追加</button>
       </div>
       <div style="margin-top:14px"><div class="rowhead"><b>登録済み単価</b><button id="wpaReload" type="button" class="btn light">再読み込み</button></div><div id="wpaList" style="margin-top:8px"><div class="empty">読み込み中…</div></div></div>
@@ -67,7 +67,7 @@
       <div class="row" data-wpa-id="${esc(r.id)}">
         <div class="rowhead"><b>${esc(r.facility)}｜${esc(r.waste_type)}</b><button type="button" class="btn danger" data-wpa-delete="${i}">削除</button></div>
         <div class="grid2"><div><label>処分場</label><input data-k="facility" value="${esc(r.facility)}"></div><div><label>品目</label><input data-k="waste_type" value="${esc(r.waste_type)}"></div></div>
-        <div class="grid3"><div><label>単価区分</label><select data-k="rate_basis"><option value="kg" ${r.rate_basis==='kg'?'selected':''}>kg</option><option value="m3" ${r.rate_basis==='m3'?'selected':''}>m³</option><option value="vehicle" ${r.rate_basis==='vehicle'?'selected':''}>車両1台</option></select></div><div><label>税別単価</label><input data-k="unit_price" type="number" min="0" step="0.01" value="${Number(r.unit_price||0)}"></div><div><label>車両</label><input data-k="vehicle_class" value="${esc(r.vehicle_class||'')}"></div></div>
+        <div class="grid3"><div><label>単価区分</label><select data-k="rate_basis"><option value="kg" ${r.rate_basis==='kg'?'selected':''}>kg</option><option value="m3" ${r.rate_basis==='m3'?'selected':''}>m³</option><option value="vehicle" ${r.rate_basis==='vehicle'?'selected':''}>車両1台</option><option value="piece" ${r.rate_basis==='piece'?'selected':''}>枚</option></select></div><div><label>税別単価</label><input data-k="unit_price" type="number" min="0" step="0.01" value="${Number(r.unit_price||0)}"></div><div><label>車両</label><input data-k="vehicle_class" value="${esc(r.vehicle_class||'')}"></div></div>
         <div class="grid2"><div><label>表示単位</label><input data-k="display_unit" value="${esc(r.display_unit||'')}"></div><div><label>表示</label><select data-k="active"><option value="true" ${r.active!==false?'selected':''}>有効</option><option value="false" ${r.active===false?'selected':''}>停止</option></select></div></div>
         <button type="button" class="btn dark" style="width:100%;margin-top:9px" data-wpa-save="${i}">変更を保存</button>
       </div>`).join('');
@@ -85,7 +85,7 @@
     let display = $('#wpaNewDisplay').value.trim();
     if(!facility || !waste) return alert('処分場と品目を入力してください。');
     if(!(price >= 0)) return alert('単価を入力してください。');
-    if(!display) display = basis==='kg' ? '1kg' : basis==='m3' ? '1m³' : (vehicle ? `${vehicle} 1台` : '1台');
+    if(!display) display = basis==='kg' ? '1kg' : basis==='m3' ? '1m³' : basis==='piece' ? '1枚' : (vehicle ? `${vehicle} 1台` : '1台');
     const row = {company_id:cloudProfile.company_id,facility,waste_type:waste,rate_basis:basis,unit_price:price,vehicle_class:vehicle||null,display_unit:display,active:true,sort_order:999,notes:'税別'};
     const {error} = await cloudClient.from('waste_price_master').insert(row);
     if(error) return alert('追加できませんでした：'+error.message);

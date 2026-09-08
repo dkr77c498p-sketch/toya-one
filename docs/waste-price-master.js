@@ -1,4 +1,4 @@
-/* TOYA One 廃材処分単価マスター（税別） v1.1 */
+/* TOYA One 廃材処分単価マスター（税別） v1.2 kg小数単価・枚対応 */
 (() => {
   'use strict';
 
@@ -8,6 +8,8 @@
 
   const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const yen = (n) => '¥' + Math.round(Number(n || 0)).toLocaleString();
+  // Unit prices retain decimals; final yen amounts keep the existing rounding.
+  const unitYen = (n) => '¥' + Number(n || 0).toLocaleString('ja-JP', {maximumFractionDigits: 6});
 
   function wpmFindWasteCard(){
     const cards = [...document.querySelectorAll('#reportPage .card')];
@@ -36,7 +38,7 @@
       </div>
       <div class="grid2" style="margin-top:8px">
         <div><label>数量</label><input id="wpmQty" type="number" min="0" step="0.1" value="1"></div>
-        <div><label>入力単位</label><select id="wpmQtyUnit"><option value="kg">kg</option><option value="t">t</option><option value="m3">m³</option><option value="vehicle">台</option></select></div>
+        <div><label>入力単位</label><select id="wpmQtyUnit"><option value="kg">kg</option><option value="t">t</option><option value="m3">m³</option><option value="vehicle">台</option><option value="piece">枚</option></select></div>
       </div>
       <div id="wpmCalc" class="row" style="margin-top:10px"><b>単価を選択してください。</b></div>
       <button id="wpmAdd" type="button" class="btn dark" style="width:100%;margin-top:10px" disabled>＋ この廃材を日報へ追加</button>
@@ -57,7 +59,7 @@
 
   function wpmRateLabel(r){
     const vehicle = r.vehicle_class ? ` ${r.vehicle_class}` : '';
-    return `${r.waste_type}${vehicle}｜${yen(r.unit_price)} / ${r.display_unit}`;
+    return `${r.waste_type}${vehicle}｜${unitYen(r.unit_price)} / ${r.display_unit}`;
   }
 
   function wpmRenderFacilities(){
@@ -88,18 +90,21 @@
 
   function wpmSetAllowedUnit(r){
     const unit = document.getElementById('wpmQtyUnit');
+    const qty = document.getElementById('wpmQty');
     if(!unit || !r) return;
-    if(r.rate_basis === 'kg'){
-      unit.innerHTML = '<option value="kg">kg</option><option value="t">t</option>';
-      if(unit.value !== 'kg' && unit.value !== 't') unit.value = 't';
-      else if(!unit.dataset.userChosen) unit.value = 't';
-    }else if(r.rate_basis === 'm3'){
-      unit.innerHTML = '<option value="m3">m³</option>';
-      unit.value = 'm3';
-    }else{
-      unit.innerHTML = '<option value="vehicle">台</option>';
-      unit.value = 'vehicle';
+    const allowed = r.rate_basis === 'kg' ? [['kg','kg'],['t','t']]
+      : r.rate_basis === 'm3' ? [['m3','m³']]
+      : r.rate_basis === 'piece' ? [['piece','枚']]
+      : r.rate_basis === 'vehicle' ? [['vehicle','台']] : [];
+    // Preserve kg/t when changing quantity or a unit; do not reset the selection.
+    const previous = unit.value;
+    const html = allowed.map(([value,label]) => `<option value="${value}">${label}</option>`).join('');
+    if(unit.dataset.rateBasis !== r.rate_basis){
+      unit.innerHTML = html;
+      unit.dataset.rateBasis = r.rate_basis;
     }
+    unit.value = allowed.some(([value]) => value === previous) ? previous : (allowed[0]?.[0] || '');
+    if(qty) qty.step = r.rate_basis === 'piece' ? '1' : '0.1';
   }
 
   function wpmCalcAmount(r, qty, inputUnit){
@@ -126,9 +131,11 @@
     wpmSetAllowedUnit(r);
     const qty = Number(qtyEl.value || 0);
     const amount = wpmCalcAmount(r, qty, unitEl.value);
-    const basisText = r.rate_basis === 'kg' ? 'kg' : r.rate_basis === 'm3' ? 'm³' : (r.vehicle_class ? `${r.vehicle_class} 1台` : '1台');
-    box.innerHTML = `<div><b>${escHtml(r.facility)}｜${escHtml(r.waste_type)}</b></div><div class="meta" style="margin-top:5px">単価：${yen(r.unit_price)} / ${escHtml(basisText)}（税別）</div><div style="font-size:20px;font-weight:900;margin-top:7px">処分費：${yen(amount)} <span style="font-size:12px;font-weight:700">税別</span></div>`;
-    add.disabled = !(qty > 0);
+    const basisText = r.rate_basis === 'kg' ? 'kg' : r.rate_basis === 'm3' ? 'm³' : r.rate_basis === 'piece' ? '1枚' : (r.vehicle_class ? `${r.vehicle_class} 1台` : '1台');
+    box.innerHTML = `<div><b>${escHtml(r.facility)}｜${escHtml(r.waste_type)}</b></div><div class="meta" style="margin-top:5px">単価：${unitYen(r.unit_price)} / ${escHtml(basisText)}（税別）</div><div style="font-size:20px;font-weight:900;margin-top:7px">処分費：${yen(amount)} <span style="font-size:12px;font-weight:700">税別</span></div>`;
+    const valid = Number.isFinite(qty) && qty > 0 && !!unitEl.value && (r.rate_basis !== 'piece' || Number.isInteger(qty));
+    add.disabled = !valid;
+    if(r.rate_basis === 'piece' && qty > 0 && !Number.isInteger(qty)) box.innerHTML += '<div class="cloud-bad">枚数は1枚単位で入力してください。</div>';
   }
 
   function wpmAddToReport(){
@@ -137,9 +144,10 @@
     const unitEl = document.getElementById('wpmQtyUnit');
     if(!r || !qtyEl || !unitEl) return;
     const qty = Number(qtyEl.value || 0);
-    if(!(qty > 0)) return alert('数量を入力してください。');
+    if(!Number.isFinite(qty) || !(qty > 0) || !unitEl.value) return alert('数量を入力してください。');
+    if(r.rate_basis === 'piece' && !Number.isInteger(qty)) return alert('枚数は1枚単位で入力してください。');
     const amount = wpmCalcAmount(r, qty, unitEl.value);
-    const reportUnit = unitEl.value === 'm3' ? 'm³' : unitEl.value === 'vehicle' ? '台' : unitEl.value;
+    const reportUnit = unitEl.value === 'm3' ? 'm³' : unitEl.value === 'vehicle' ? '台' : unitEl.value === 'piece' ? '枚' : unitEl.value;
     const name = r.vehicle_class ? `${r.waste_type}（${r.vehicle_class}）` : r.waste_type;
     if(typeof addItem !== 'function') return alert('日報入力を初期化できませんでした。');
     addItem({
@@ -157,7 +165,7 @@
       const tag = document.createElement('div');
       tag.className = 'note';
       tag.style.marginTop = '7px';
-      tag.textContent = `処分単価：${r.facility} ${yen(r.unit_price)}/${r.display_unit}（税別）`;
+      tag.textContent = `処分単価：${r.facility} ${unitYen(r.unit_price)}/${r.display_unit}（税別）`;
       last.appendChild(tag);
       last.scrollIntoView({behavior:'smooth', block:'center'});
     }
