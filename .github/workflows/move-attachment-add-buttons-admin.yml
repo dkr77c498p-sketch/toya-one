@@ -57,3 +57,4 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m 'Move attachment add buttons to registration management'
           git push
+# retrigger 2026-09-08 15:35 JST
