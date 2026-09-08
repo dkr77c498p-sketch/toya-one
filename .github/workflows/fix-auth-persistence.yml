@@ -10,16 +10,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Make Supabase session persistence explicit
+      - name: Restore default Supabase auth client
         run: |
           python - <<'PY'
           from pathlib import Path
           p=Path('docs/index.html')
           s=p.read_text()
-          old="""const cloudClient=(window.supabase&&window.supabase.createClient)\n  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY)\n  : null;"""
-          new="""const cloudClient=(window.supabase&&window.supabase.createClient)\n  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{\n      auth:{\n        persistSession:true,\n        autoRefreshToken:true,\n        detectSessionInUrl:false,\n        storage:window.localStorage\n      }\n    })\n  : null;"""
+          old="""const cloudClient=(window.supabase&&window.supabase.createClient)\n  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{\n      auth:{\n        persistSession:true,\n        autoRefreshToken:true,\n        detectSessionInUrl:false,\n        storage:window.localStorage\n      }\n    })\n  : null;"""
+          new="""const cloudClient=(window.supabase&&window.supabase.createClient)\n  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY)\n  : null;"""
           if old not in s:
-              raise SystemExit('Supabase client target not found')
+              raise SystemExit('custom auth client target not found')
           p.write_text(s.replace(old,new,1))
           PY
       - name: Commit
@@ -28,5 +28,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add docs/index.html
           git diff --cached --quiet && exit 0
-          git commit -m 'Keep Supabase login session persistent on iPhone'
+          git commit -m 'Restore default Supabase login behavior'
           git push
