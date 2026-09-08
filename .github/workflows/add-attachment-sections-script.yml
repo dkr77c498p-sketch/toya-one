@@ -1,0 +1,31 @@
+name: Add attachment sections script
+on:
+  push:
+    paths:
+      - '.github/workflows/add-attachment-sections-script.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add script include
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          tag='<script src="attachment-sections.js?v=20260908-1618"></script>'
+          if tag not in s:
+              s=s.replace('</body>',tag+'\n</body>',1)
+              p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Load separated attachment sections'
+          git push
