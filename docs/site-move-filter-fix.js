@@ -16,7 +16,7 @@
   async function refreshNonRecordSiteSelectors(){
     const names=await loadActiveSites();
     if(!names.length)return;
-    const fill=(sel,all)=>{if(!sel)return;const cur=sel.value;sel.innerHTML=(all?'<option value="">現場を選択</option>':'')+names.map(n=>`<option>${String(n).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}</option>`).join('');if(cur&&names.includes(cur))sel.value=cur};
+    const fill=(sel,all)=>{if(!sel)return;const cur=sel.value;sel.innerHTML=(all?'<option value="">現場を選択</option>':'')+names.map(n=>`<option>${String(n).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</option>`).join('');if(cur&&names.includes(cur))sel.value=cur};
     fill(document.querySelector('#ledgerSite'),false);
     fill(document.querySelector('#siteSummarySelect'),true);
   }
@@ -108,7 +108,7 @@
   document.addEventListener('click',e=>{if(e.target?.closest?.('nav button'))setTimeout(refreshNonRecordSiteSelectors,400)});
 })();
 
-/* TOYA_SMALL_TOOLS_MASTER_V2 */
+/* TOYA_SMALL_TOOLS_MASTER_V1 */
 (function(){
   const extra=[
     {name:'散水機',category:'小型機械'},
@@ -127,63 +127,89 @@
       if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function'||!LS.attachments)return false;
       const a=get(LS.attachments,[])||[];
       let changed=false;
-      a.forEach(x=>{if(x&&x.name==='ホース20M'){x.name='エアーホース20M';changed=true}});
+      a.forEach(x=>{if(x&&x.name==='ホース20M'){x.name='エアーホース20M';changed=true;}});
       const names=new Set(a.map(x=>typeof x==='string'?x:x?.name).filter(Boolean));
       extra.forEach(x=>{if(!names.has(x.name)){a.push({name:x.name,category:x.category,location:'',mountedOn:'',memo:''});names.add(x.name);changed=true;}});
-      if(changed)set(LS.attachments,a);
-      if(changed){try{if(typeof renderSelectors==='function')renderSelectors();if(typeof renderMasters==='function'&&document.querySelector('#masterPage')?.classList.contains('active'))renderMasters();}catch(e){}}
-      window.__toyaSmallToolsMasterV2=true;
+      if(changed){set(LS.attachments,a);try{if(typeof renderSelectors==='function')renderSelectors();if(typeof renderMasters==='function'&&document.querySelector('#masterPage')?.classList.contains('active'))renderMasters();}catch(e){}}
+      window.__toyaSmallToolsMasterV1=true;
       return true;
     }catch(e){console.warn('小型工具マスター追加失敗',e);return false;}
   }
   if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>30)clearInterval(t)},200);}
 })();
 
-/* TOYA_SMALL_TOOL_QUANTITY_V1 */
+/* TOYA_SMALL_TOOL_QUANTITY_RUNTIME_V1 */
 (function(){
   const spec={
     '2kW発電機':{max:2,unit:'台'},
     'インバーター発電機':{max:2,unit:'台'},
     'エアーホース20M':{max:4,unit:'本'}
   };
+
   function decorate(){
     const box=document.querySelector('#smallToolChoices');
     if(!box)return false;
     box.querySelectorAll('input[name="attachment"]').forEach(input=>{
-      const q=spec[input.value];if(!q)return;
-      const host=input.closest('.choice');if(!host||host.querySelector('.att-qty'))return;
+      const cfg=spec[input.value];
+      if(!cfg)return;
+      const parent=input.closest('.choice');
+      if(!parent||parent.querySelector('.att-qty'))return;
       const sel=document.createElement('select');
-      sel.className='att-qty';sel.dataset.attName=input.value;sel.dataset.unit=q.unit;
-      sel.style.width='auto';sel.style.minHeight='38px';sel.style.padding='5px 8px';sel.style.marginLeft='auto';
-      for(let i=1;i<=q.max;i++){const o=document.createElement('option');o.value=String(i);o.textContent=i+q.unit;sel.appendChild(o)}
-      sel.addEventListener('click',e=>e.stopPropagation());
-      host.appendChild(sel);
+      sel.className='att-qty';
+      sel.dataset.attName=input.value;
+      sel.dataset.unit=cfg.unit;
+      sel.style.width='auto';
+      sel.style.minHeight='38px';
+      sel.style.marginLeft='auto';
+      sel.style.padding='5px 8px';
+      for(let i=1;i<=cfg.max;i++){
+        const o=document.createElement('option');o.value=String(i);o.textContent=`${i}${cfg.unit}`;sel.appendChild(o);
+      }
+      parent.appendChild(sel);
     });
     return true;
   }
-  function parseStored(vals){
-    return (vals||[]).map(v=>{const m=String(v).match(/^(.*?)\s*×\s*(\d+)(台|本)$/);return m?{name:m[1].trim(),qty:m[2]}:{name:String(v),qty:'1'}});
-  }
-  function applyStored(vals){
-    decorate();const p=parseStored(vals);
-    document.querySelectorAll('input[name="attachment"]').forEach(input=>{
-      const hit=p.find(x=>x.name===input.value);if(!hit)return;
-      input.checked=true;
-      const sel=document.querySelector(`.att-qty[data-att-name="${CSS.escape(input.value)}"]`);if(sel)sel.value=hit.qty;
-    });
-  }
+
   function install(){
-    if(typeof window.renderSelectors!=='function'||typeof window.collect!=='function'||typeof window.fillReportForm!=='function'||window.__toyaSmallToolQtyV1)return false;
+    if(window.__toyaSmallToolQuantityRuntimeV1)return true;
+    if(typeof window.renderSelectors!=='function'||typeof window.collect!=='function')return false;
+
     const oldRender=window.renderSelectors;
-    window.renderSelectors=function(){const r=oldRender.apply(this,arguments);decorate();return r};
+    window.renderSelectors=function(){const out=oldRender.apply(this,arguments);setTimeout(decorate,0);return out;};
+
     const oldCollect=window.collect;
-    window.collect=function(){const d=oldCollect.apply(this,arguments);d.attachments=[...document.querySelectorAll('input[name="attachment"]:checked')].map(input=>{const sel=document.querySelector(`.att-qty[data-att-name="${CSS.escape(input.value)}"]`);return sel?`${input.value} × ${sel.value}${sel.dataset.unit||''}`:input.value});return d};
-    const oldFill=window.fillReportForm;
-    window.fillReportForm=function(d){const r=oldFill.apply(this,arguments);applyStored(d?.attachments||[]);return r};
-    window.__toyaSmallToolQtyV1=true;
-    decorate();
+    window.collect=function(){
+      const d=oldCollect.apply(this,arguments);
+      d.attachments=(d.attachments||[]).map(v=>{
+        if(!spec[v])return v;
+        const q=document.querySelector(`.att-qty[data-att-name="${CSS.escape(v)}"]`);
+        return q?`${v} × ${q.value}${q.dataset.unit||''}`:v;
+      });
+      return d;
+    };
+
+    if(typeof window.fillReportForm==='function'){
+      const oldFill=window.fillReportForm;
+      window.fillReportForm=function(d,mode){
+        const clean={...d,attachments:(d.attachments||[]).map(v=>String(v).replace(/\s*×\s*\d+(台|本)$/,''))};
+        const out=oldFill.call(this,clean,mode);
+        setTimeout(()=>{
+          decorate();
+          (d.attachments||[]).forEach(v=>{
+            const m=String(v).match(/^(.*?)\s*×\s*(\d+)(台|本)$/);
+            if(!m)return;
+            const q=[...document.querySelectorAll('.att-qty')].find(x=>x.dataset.attName===m[1].trim());
+            if(q)q.value=m[2];
+          });
+        },0);
+        return out;
+      };
+    }
+
+    window.__toyaSmallToolQuantityRuntimeV1=true;
+    setTimeout(()=>{try{oldRender();decorate();}catch(e){}},50);
     return true;
   }
-  if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>40)clearInterval(t)},150);}
-  document.addEventListener('click',e=>{if(e.target?.closest?.('[data-page="reportPage"]'))setTimeout(decorate,100)});
+
+  if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>40)clearInterval(t)},100);}
 })();
