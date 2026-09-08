@@ -1,0 +1,51 @@
+name: Safely link waste price master
+
+on:
+  push:
+    paths:
+      - '.github/workflows/safe-waste-price-link.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add external waste price script only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/index.html')
+          s = p.read_text(encoding='utf-8')
+          old = '<script src="midway.js?v=20260906-1636"></script>\n<script src="site-move-filter-fix.js?v=20260906-1902"></script>\n</body>'
+          new = '<script src="midway.js?v=20260906-1636"></script>\n<script src="site-move-filter-fix.js?v=20260906-1902"></script>\n<script src="waste-price-master.js?v=20260908-1200"></script>\n</body>'
+          if '/* TOYA One 廃材処分単価マスター（税別） v1.0 */' in s:
+              raise SystemExit('Refusing to patch: inline waste-price code detected')
+          if 'waste-price-master.js' not in s:
+              if old not in s:
+                  raise SystemExit('Expected stable script footer not found; refusing to modify')
+              s = s.replace(old, new, 1)
+          s = s.replace('クラウド版 v5.6.3 会社共有日報対応版', 'クラウド版 v5.6.4 廃材単価対応版', 1)
+          if s.count('waste-price-master.js') != 1:
+              raise SystemExit('Unexpected waste-price script count')
+          if s.count('<script src="midway.js?v=20260906-1636"></script>') != 1:
+              raise SystemExit('midway.js reference changed unexpectedly')
+          if s.count('<script src="site-move-filter-fix.js?v=20260906-1902"></script>') != 1:
+              raise SystemExit('site move script reference changed unexpectedly')
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Show minimal diff
+        run: git diff -- docs/index.html
+      - name: Commit
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "Safely link waste price master"
+          git push
