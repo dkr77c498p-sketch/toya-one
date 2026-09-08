@@ -1,0 +1,108 @@
+name: Fix attachment admin buttons
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-attachment-admin-buttons.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch admin attachment controls
+        run: |
+          cat >> docs/waste-price-admin.js <<'JS'
+
+          /* TOYA_ATTACHMENT_ADMIN_CONTROLS_V1 */
+          (()=>{
+            const smallCats=new Set(['小型機械','発電機','エア工具']);
+            const clean=v=>String(v||'').replace(/\s*×\s*\d+(?:台|本)$/,'').trim();
+            const reports=()=>((typeof cloudReportsCache!=='undefined'&&Array.isArray(cloudReportsCache)&&cloudReportsCache.length)?cloudReportsCache:((typeof LS!=='undefined'&&typeof get==='function')?get(LS.reports,[]):[]));
+            const machineNames=d=>(d?.machines||[]).map(x=>typeof x==='string'?x:x?.name).filter(Boolean);
+
+            function removeReportButtons(){
+              document.querySelector('#addMachineAttachmentQuick')?.remove();
+              document.querySelector('#addSmallToolQuick')?.remove();
+            }
+
+            function addMaster(kind){
+              if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function')return;
+              let category='',name='';
+              if(kind==='machine'){
+                category=(prompt('種類を入力してください（例：大割機・カッター・フォーク）')||'').trim();
+                if(!category)return;
+                name=(prompt('名称・型式を入力してください')||'').trim();
+              }else{
+                category=(prompt('種類を入力してください（小型機械・発電機・エア工具）','小型機械')||'').trim()||'小型機械';
+                name=(prompt('名称を入力してください')||'').trim();
+              }
+              if(!name)return;
+              const a=get(LS.attachments,[])||[];
+              if(a.some(x=>clean(typeof x==='string'?x:x?.name)===name))return alert('同じ名称がすでに登録されています。');
+              a.push({name,category,location:'',mountedOn:'',memo:''});
+              set(LS.attachments,a);
+              if(typeof renderMasters==='function')renderMasters();
+              if(typeof renderSelectors==='function')renderSelectors();
+              ensureAdminButtons();
+            }
+
+            function ensureAdminButtons(){
+              removeReportButtons();
+              const master=document.querySelector('#attachmentMaster');
+              if(!master)return;
+              const card=master.closest('.card');
+              const generic=card?[...card.querySelectorAll('button')].find(b=>b.getAttribute('onclick')==='addAttachment()'):null;
+              if(generic)generic.style.display='none';
+              let wrap=document.querySelector('#adminAttachmentAddButtons');
+              if(!wrap){
+                wrap=document.createElement('div');
+                wrap.id='adminAttachmentAddButtons';
+                wrap.className='grid2';
+                wrap.style.marginTop='10px';
+                wrap.innerHTML='<button type="button" class="btn dark" id="adminAddMachineAtt">＋ 重機アタッチメントを追加</button><button type="button" class="btn light" id="adminAddSmallTool">＋ 小型機械・工具を追加</button>';
+                master.insertAdjacentElement('afterend',wrap);
+                wrap.querySelector('#adminAddMachineAtt').onclick=()=>addMaster('machine');
+                wrap.querySelector('#adminAddSmallTool').onclick=()=>addMaster('small');
+              }
+            }
+
+            function syncLatestUsage(){
+              if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function')return;
+              const a=get(LS.attachments,[])||[];
+              const rs=reports();
+              let changed=false;
+              a.forEach(x=>{
+                if(!x||!x.name)return;
+                const n=clean(x.name);
+                const d=[...rs].filter(r=>(r.attachments||[]).some(v=>clean(v)===n)).sort((p,q)=>String(q.date||'').localeCompare(String(p.date||''))||String(q.createdAt||'').localeCompare(String(p.createdAt||'')))[0];
+                if(!d)return;
+                const ms=machineNames(d);
+                const loc=d.site||x.location||'';
+                const mounted=smallCats.has(x.category)?'':(ms.length===1?ms[0]:(ms.length>1?'複数重機':'未装着'));
+                if(x.location!==loc){x.location=loc;changed=true;}
+                if(x.mountedOn!==mounted){x.mountedOn=mounted;changed=true;}
+              });
+              if(changed){set(LS.attachments,a);if(typeof renderMasters==='function'&&document.querySelector('#masterPage')?.classList.contains('active'))renderMasters();}
+            }
+
+            function install(){
+              removeReportButtons();
+              ensureAdminButtons();
+              syncLatestUsage();
+              if(typeof window.renderSelectors==='function'&&!window.__toyaAdminBtnSelectorWrap){const old=window.renderSelectors;window.renderSelectors=function(){const out=old.apply(this,arguments);setTimeout(removeReportButtons,0);return out};window.__toyaAdminBtnSelectorWrap=true;}
+              if(typeof window.renderMasters==='function'&&!window.__toyaAdminBtnMasterWrap){const old=window.renderMasters;window.renderMasters=function(){const out=old.apply(this,arguments);setTimeout(()=>{ensureAdminButtons();syncLatestUsage();},0);return out};window.__toyaAdminBtnMasterWrap=true;}
+              document.addEventListener('click',e=>{if(e.target?.closest?.('[data-page="masterPage"]'))setTimeout(()=>{ensureAdminButtons();syncLatestUsage();},100);if(e.target?.closest?.('[data-page="reportPage"]'))setTimeout(removeReportButtons,50);});
+            }
+            if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(install,300));else setTimeout(install,300);
+            let n=0;const t=setInterval(()=>{n++;install();if(n>20)clearInterval(t)},300);
+          })();
+          JS
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/waste-price-admin.js
+          git diff --cached --quiet && exit 0
+          git commit -m 'Move attachment add controls to admin and sync usage'
+          git push
