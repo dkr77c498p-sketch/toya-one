@@ -104,3 +104,28 @@
     let n=0;const t=setInterval(()=>{n++;if(installCalendarMarkersFix()||n>40)clearInterval(t)},100);
   }
 })();
+
+/* TOYA_CALENDAR_RERENDER_FIX_V3 */
+(function(){
+  function installCalendarRerenderFix(){
+    if(typeof window.rerenderRecordBrowser!=='function'||typeof window.renderRecordCalendar!=='function'||window.__toyaCalendarRerenderFixV3)return false;
+    const old=window.rerenderRecordBrowser;
+    window.rerenderRecordBrowser=function(){
+      const out=old.apply(this,arguments);
+      try{
+        if(typeof recordViewMode!=='undefined'&&recordViewMode==='calendar'){
+          const all=(typeof cloudReportsCache!=='undefined'&&Array.isArray(cloudReportsCache)&&cloudReportsCache.length)
+            ? cloudReportsCache
+            : ((typeof currentRecordsData!=='undefined'&&Array.isArray(currentRecordsData))?currentRecordsData:[]);
+          window.renderRecordCalendar(all);
+        }
+      }catch(e){console.warn('カレンダー再描画補正',e)}
+      return out;
+    };
+    window.__toyaCalendarRerenderFixV3=true;
+    return true;
+  }
+  if(!installCalendarRerenderFix()){
+    let n=0;const t=setInterval(()=>{n++;if(installCalendarRerenderFix()||n>40)clearInterval(t)},100);
+  }
+})();
