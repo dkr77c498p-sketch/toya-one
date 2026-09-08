@@ -1,5 +1,5 @@
 (function(){
-  function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
+  function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
   function invalidSite(x){return !x||['新しい現場','現場名をあとで変更','未登録現場'].includes(x)}
   function localReports(){try{return (typeof LS!=='undefined'&&typeof get==='function')?(get(LS.reports,[])||[]):[]}catch(e){return []}}
   function localSites(){try{return (typeof LS!=='undefined'&&typeof get==='function')?(get(LS.sites,[])||[]):[]}catch(e){return []}}
