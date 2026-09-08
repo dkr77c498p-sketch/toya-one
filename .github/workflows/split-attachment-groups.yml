@@ -1,0 +1,38 @@
+name: Split attachment groups
+on:
+  push:
+    paths:
+      - '.github/workflows/split-attachment-groups.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Split attachment groups in daily report
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          old_html='''<div class="card"><h2>使用アタッチメント</h2>\n<div id="attachmentChoices" class="choice-grid"></div>\n<div class="row">'''
+          new_html='''<div class="card"><h2>使用アタッチメント</h2>\n<div style="font-weight:900;margin:4px 0 8px">重機アタッチメント</div>\n<div id="machineAttachmentChoices" class="choice-grid"></div>\n<div style="font-weight:900;margin:16px 0 8px">小型機械・工具</div>\n<div id="smallToolChoices" class="choice-grid"></div>\n<div class="row">'''
+          if old_html not in s:
+              raise SystemExit('attachment section target not found')
+          s=s.replace(old_html,new_html,1)
+          old_js=" $('#attachmentChoices').innerHTML=ats.map(x=>`<label class=\"choice\"><input type=\"checkbox\" name=\"attachment\" value=\"${x.name}\">${x.name}</label>`).join('');"
+          new_js=" const smallCats=new Set(['小型機械','発電機','エア工具']); const machineAts=ats.filter(x=>!smallCats.has(x.category)); const smallAts=ats.filter(x=>smallCats.has(x.category)); $('#machineAttachmentChoices').innerHTML=machineAts.map(x=>`<label class=\"choice\"><input type=\"checkbox\" name=\"attachment\" value=\"${x.name}\">${x.name}</label>`).join(''); $('#smallToolChoices').innerHTML=smallAts.map(x=>`<label class=\"choice\"><input type=\"checkbox\" name=\"attachment\" value=\"${x.name}\">${x.name}</label>`).join('');"
+          if old_js not in s:
+              raise SystemExit('renderSelectors target not found')
+          s=s.replace(old_js,new_js,1)
+          p.write_text(s)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Split attachments into machine and small-tool groups'
+          git push
