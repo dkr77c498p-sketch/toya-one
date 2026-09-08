@@ -213,3 +213,21 @@
 
   if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>40)clearInterval(t)},100);}
 })();
+
+/* TOYA_SKELTON_BUCKET_2_V1 */
+(function(){
+  function install(){
+    try{
+      if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function'||!LS.attachments)return false;
+      const a=get(LS.attachments,[])||[];
+      const name='スケルトンバケット2号機用｜KGSP';
+      if(!a.some(x=>(typeof x==='string'?x:x?.name)===name)){
+        a.push({name,category:'',location:'',mountedOn:'',memo:''});
+        set(LS.attachments,a);
+        try{if(typeof renderSelectors==='function')renderSelectors();if(typeof renderMasters==='function'&&document.querySelector('#masterPage')?.classList.contains('active'))renderMasters();}catch(e){}
+      }
+      return true;
+    }catch(e){console.warn('2号機用スケルトンバケット追加失敗',e);return false;}
+  }
+  if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>30)clearInterval(t)},200);}
+})();
