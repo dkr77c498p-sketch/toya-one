@@ -108,7 +108,7 @@
       q('[data-vc-calc]',el).textContent=r.used?`${yen(c.gross)} − 燃料 ${yen(c.fuel)} ＝ ${yen(c.net)}${!r.fuelCount&&optional(r.manualFuel)===null?'（燃料欄の記録なし・暫定0円）':''}`:'使用なし。手入力した調整値は保持しています。';
       if(c.net<0)extra.push(r.label+'：燃料代が日額を超えています。まとめ給油・配分額を確認してください。マイナスを勝手に0円にはしません。');
     });
-    const t=totals();q('#vcTotals').innerHTML=`<div>差引前の車両代：${yen(t.gross)}</div><div>差し引く燃料代：${yen(t.fuel)}</div><div class="vc-total">車両費（燃料差引後）：${yen(t.net)}</div><p class="note">人工・高速代・重機費は含みません。燃料費を別途合算する際は「差引後の車両費＋燃料費」にします。日額に燃料代を重ねて足しません。ホームの総原価への統合はまだありません。消費税は自動加算しません。</p>`;
+    const t=totals();q('#vcTotals').innerHTML=`<div>差引前の車両代：${yen(t.gross)}</div><div>差し引く燃料代：${yen(t.fuel)}</div><div class="vc-total">車両費（燃料差引後）：${yen(t.net)}</div><p class="note">人工・高速代・重機費は含みません。燃料費を別途合算する際は「差引後の車両費＋燃料費」にします。日額に燃料代を重ねて足しません。保存分はホームの現場原価に反映します。未確定の費用は別表示です。消費税は自動加算しません。</p>`;
     const list=[...new Set([...warnings,...extra])],box=q('#vcWarnings');
     const was=q('#vcReviewed')?.checked||false;box.hidden=!list.length;
     box.innerHTML=list.map(w=>`<p>${esc(w)}</p>`).join('')+(list.length?`<label class="choice"><input type="checkbox" id="vcReviewed" ${was?'checked':''}>記録と金額の配分を確認した</label>`:'');

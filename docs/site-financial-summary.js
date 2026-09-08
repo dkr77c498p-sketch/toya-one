@@ -208,7 +208,7 @@
   }
   function line(label, value, note) {return '<div class="sf-line"><div class="sf-line-head"><span>' + escape(label) + '</span><span>' + escape(value) + '</span></div><div class="sf-note">' + escape(note) + '</div></div>';}
   function render(result, site, label) {
-    if (!result.hasData) {q('#sfResult').innerHTML = '<div class="sf-alert">この期間の日報・保存済み費用はありません。実際に費用が0円だったという意味ではありません。</div>'; return;}
+    if (!result.hasData) {status(site.name + ' ／ ' + label + ' ／ 記録なし'); q('#sfResult').innerHTML = '<div class="sf-alert">この期間の日報・保存済み費用はありません。実際に費用が0円だったという意味ではありません。</div>'; return;}
     let html = '<div class="sf-total"><div>' + (result.partial ? '確認できる分の原価小計' : '保存・記録済み原価小計') + '</div><strong>' + yen(result.subtotal) + '</strong><small>' + (result.partial ? '未確定・要確認の項目があります。全費用の確定額ではありません。' : '選んだ期間の保存済み費用と日報の入力額です。未記入の費用は含みません。') + '</small></div>';
     Object.entries(result.categories).forEach(([kind, c]) => {
       const value = !c.savedDays && c.missingDates.length ? '未確定' : !c.savedDays ? '使用・費用記録なし' : yen(c.value);
