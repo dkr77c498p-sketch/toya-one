@@ -1,0 +1,29 @@
+name: Enable isolated equipment cost administration
+on:
+  push:
+    paths:
+      - 'scripts/build-equipment-costs-v1.py'
+      - '.github/workflows/enable-equipment-costs-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-enable-equipment-costs-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify and generate the tested equipment module
+        run: python3 scripts/build-equipment-costs-v1.py
+      - name: Publish only the isolated module and loader
+        run: |
+          if git diff --quiet -- docs/index.html && git ls-files --error-unmatch docs/equipment-cost-admin.js >/dev/null 2>&1 && git diff --quiet -- docs/equipment-cost-admin.js; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/equipment-cost-admin.js docs/index.html
+          git commit -m 'Load tested equipment daily rates and fuel deduction; preserve login and existing records'
+          git push
