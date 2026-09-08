@@ -1,0 +1,36 @@
+'use strict';
+// Synthetic data only. No customer records, account IDs or unit-price master values.
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const E = require(process.env.TOYA_SUMMARY_MODULE || path.resolve(__dirname, '../docs/site-financial-summary.js'));
+const site = {id:'site-a',name:'テスト現場A'};
+function fixture() {
+  const report={id:'r1',site_id:site.id,report_date:'2026-09-08',updated_at:'2026-09-08T10:00:00.000+00:00',recorder_name:'テスト作業者',report_data:{site:site.name,workers:['作業者A'],vehicles:['試験車両'],machines:[{name:'試験重機',hours:8}],fuels:[{asset:'試験車両',type:'軽油',qty:16,unitPrice:139,amount:2224}],items:[]}};
+  const source=[{id:report.id,updated_at:report.updated_at}];
+  return {reports:[report],vehicleRates:[{label:'試験車両'}],equipmentRates:[{label:'試験重機'}],laborSheets:[],vehicleSheets:[{id:'v1',site_id:site.id,work_date:'2026-09-08',gross_total:15000,fuel_deduction_total:2224,net_total:12776,entries:[{label:'試験車両',used:true}],source_reports:source,review_warnings:[]}],equipmentSheets:[{id:'e1',site_id:site.id,work_date:'2026-09-08',gross_total:20000,fuel_deduction_total:0,net_total:20000,entries:[{label:'試験重機',used:true}],source_reports:source,review_warnings:[]}]};
+}
+let n=0;
+function test(name,fn){fn();n++;console.log('PASS',name);}
+test('net fees plus fuel exactly once; missing labor is pending',()=>{const x=E.analyze(fixture(),site);assert.equal(x.subtotal,35000);assert.deepEqual(x.categories.labor.missingDates,['2026-09-08']);assert.equal(x.partial,true);assert.equal(x.categories.vehicle.value,12776);});
+test('saved labor includes transport, outgoing revenue never adds to cost',()=>{const d=fixture();d.laborSheets=[{id:'l1',site_id:site.id,work_date:'2026-09-08',cost_total:63000,revenue_total:18000,source_reports:d.vehicleSheets[0].source_reports}];const x=E.analyze(d,site);assert.equal(x.subtotal,98000);assert.equal(x.categories.labor.revenue,18000);assert.equal(x.partial,false);});
+test('unknown item amount not silently confirmed as zero',()=>{const d=fixture();d.reports[0].report_data.items=[{isWaste:true,qty:1,unit:'台',price:''}];assert.equal(E.analyze(d,site).expenses.waste.missing,1);});
+test('explicit item zero is a recorded zero',()=>{const d=fixture();d.reports[0].report_data.items=[{isWaste:true,qty:1,unit:'台',price:0}];assert.equal(E.analyze(d,site).expenses.waste.missing,0);});
+test('expense price is a line total, never qty multiplied again',()=>{const d=fixture();d.reports[0].report_data.items=[{isWaste:true,qty:100,unit:'kg',price:4950},{name:'材料',price:900}];const x=E.analyze(d,site);assert.equal(x.expenses.waste.value,4950);assert.equal(x.expenses.other.value,900);assert.equal(x.subtotal,40850);});
+test('missing fuel with no quantity/rate is pending',()=>{const d=fixture();d.reports[0].report_data.fuels=[{asset:'試験車両',type:'軽油',qty:16}];assert.equal(E.analyze(d,site).expenses.fuel.missing,1);});
+test('fuel fallback and explicit zero',()=>{assert.equal(E.fuelAmount({qty:16,unitPrice:139}),2224);assert.equal(E.fuelAmount({amount:0,qty:16,unitPrice:139}),0);assert.equal(E.fuelAmount({amount:'bad',qty:16,unitPrice:139}),null);});
+test('negative equipment balance kept: full tank not clamped to zero',()=>{const d=fixture();d.vehicleSheets=[];d.reports[0].report_data.vehicles=[];d.reports[0].report_data.fuels=[{asset:'試験重機',type:'軽油',amount:23364}];Object.assign(d.equipmentSheets[0],{fuel_deduction_total:23364,net_total:-3364});assert.equal(E.analyze(d,site).subtotal,20000);});
+test('same report id deduplicated without mutating input',()=>{const d=fixture();d.reports.push(structuredClone(d.reports[0]));const before=JSON.stringify(d);assert.equal(E.analyze(d,site).subtotal,35000);assert.equal(JSON.stringify(d),before);});
+test('racing report snapshot aborts rather than duplicate money',()=>{const d=fixture();d.reports.push({...d.reports[0],updated_at:'2026-09-08T10:01:00Z'});assert.throws(()=>E.analyze(d,site),/読込中/);});
+test('same-writer distinct reports warn; do not delete field-move records',()=>{const d=fixture();d.reports.push({...structuredClone(d.reports[0]),id:'r2'});const x=E.analyze(d,site);assert.equal(x.reportCount,2);assert.ok(x.warnings.some(t=>t.includes('同じ記入者')));assert.ok(x.warnings.some(t=>t.includes('同じ給油')));});
+test('stale saved costs preserve amount and request review',()=>{const d=fixture();d.reports[0].updated_at='2026-09-08T11:00:00Z';const x=E.analyze(d,site);assert.equal(x.categories.vehicle.value,12776);assert.equal(x.categories.vehicle.staleDates.length,1);});
+test('timestamp timezone normalization',()=>{assert.equal(E.signature([{id:'a',updated_at:'2026-09-08T10:00:00.123456+00:00'}]),E.signature([{id:'a',updated_at:'2026-09-08T19:00:00.123456+09:00'}]));assert.notEqual(E.signature([{id:'a',updated_at:'2026-09-08T10:00:00.123456Z'}]),E.signature([{id:'a',updated_at:'2026-09-08T10:00:00.123457Z'}]));});
+test('saved zero distinct from missing sheet',()=>{const d=fixture();d.laborSheets=[{site_id:site.id,work_date:'2026-09-08',cost_total:0,revenue_total:0,source_reports:d.vehicleSheets[0].source_reports}];const x=E.analyze(d,site);assert.equal(x.categories.labor.savedDays,1);assert.equal(x.categories.labor.missingDates.length,0);});
+test('same-date cost sheet duplication aborts',()=>{const d=fixture();d.vehicleSheets.push({...d.vehicleSheets[0],id:'v2'});assert.throws(()=>E.analyze(d,site),/複数/);});
+test('saved net invariant checked',()=>{const d=fixture();d.vehicleSheets[0].net_total=1;assert.throws(()=>E.analyze(d,site),/一致しません/);});
+test('other-site costs excluded',()=>{const d=fixture();d.vehicleSheets.push({...d.vehicleSheets[0],site_id:'site-b',id:'v2'});assert.equal(E.analyze(d,site).subtotal,35000);});
+test('incoming field move produces missing labor and vehicle; no copying fuel',()=>{const d=fixture();d.reports[0].site_id='site-b';d.reports[0].report_data.siteMoves=[{site:site.name,vehicle:'試験車両'}];d.vehicleSheets=[];d.equipmentSheets=[];const x=E.analyze(d,site);assert.equal(x.expenses.fuel.count,0);assert.equal(x.categories.vehicle.missingDates.length,1);assert.equal(x.categories.labor.missingDates.length,1);assert.ok(x.warnings.length);});
+test('manual fuel mismatch is visible, never silently offset',()=>{const d=fixture();d.vehicleSheets[0].fuel_deduction_total=1000;d.vehicleSheets[0].net_total=14000;const x=E.analyze(d,site);assert.equal(x.subtotal,36224);assert.ok(x.warnings.some(t=>t.includes('差引額と日報')));});
+test('no data is not certified zero',()=>{const x=E.analyze({reports:[]},site);assert.equal(x.hasData,false);});
+test('lease and memo expense limits visible',()=>{const d=fixture();d.reports[0].report_data.leaseMachines=[{name:'リース重機',price:3000}];d.reports[0].report_data.memo='軽油35リッター';const x=E.analyze(d,site);assert.equal(x.subtotal,35000);assert.ok(x.warnings.some(t=>t.includes('リース')));assert.ok(x.warnings.some(t=>t.includes('メモ')));});
+test('month and year boundaries; leap day',()=>{assert.deepEqual(E.periodBounds('month','2026-12'),{start:'2026-12-01',end:'2027-01-01'});assert.equal(E.periodBounds('day','2028-02-29').end,'2028-03-01');assert.throws(()=>E.periodBounds('day','2026-02-30'));assert.throws(()=>E.periodBounds('month','2026-13'));assert.deepEqual(E.periodBounds('all',''),{start:'',end:''});});
+console.log(`${n} calculation/regression tests passed`);
