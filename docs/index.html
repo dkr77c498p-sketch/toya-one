@@ -338,14 +338,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const SUPABASE_URL='https://hmxntxrxelswjmzghoxf.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_7wfw7ZTDsDRH0QVUuWK0mg_AVJPnffC';
 const cloudClient=(window.supabase&&window.supabase.createClient)
-  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
-      auth:{
-        persistSession:true,
-        autoRefreshToken:true,
-        detectSessionInUrl:false,
-        storage:window.localStorage
-      }
-    })
+  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY)
   : null;
 let cloudProfile=null;
 let activityOpenedLogged=false;
