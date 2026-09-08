@@ -1,0 +1,75 @@
+name: Enable read-only site cost summary
+on:
+  push:
+    paths:
+      - '.github/workflows/enable-site-cost-summary-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-site-cost-summary-enable-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify baseline and apply only tested summary loader and explanatory text
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          def sha(data):
+              return hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+          checks = {
+            'docs/index.html': ('75a5bf7232c9f437b482287402a09a99e03bc415','904062f29744ab6fc26a3f1aacc0bccb3904868d'),
+            'docs/site-financial-summary.js': ('b6658fe63d9e9af0aace60c77ff7d026bcb62a13','4d792d1e298846ce49ddbae8438e879db0cbc5ba'),
+            'docs/vehicle-cost-admin.js': ('0804e662af11d8595e7fb4316ed2ac932f38fb73','b2fda089439adc24ce7e4cc6dfe124d294ec4f86'),
+            'docs/equipment-cost-admin.js': ('cc0fdee20b1efb34fec7ce67049ed8292a480050','5caa2488141478255ee8e51822adf31bfca4bb72')
+          }
+          changes = {}
+          old_note = 'ホームの総原価への統合はまだありません。'
+          new_note = '保存分はホームの現場原価に反映します。未確定の費用は別表示です。'
+          for name,(old_hash,new_hash) in checks.items():
+              p=Path(name); raw=p.read_bytes(); actual=sha(raw)
+              if actual==new_hash:
+                  continue
+              assert actual==old_hash, f'{name} changed since verification; stop for review'
+              before=raw.decode('utf-8'); after=before
+              if name.endswith('site-financial-summary.js'):
+                  needle="if (!result.hasData) {q('#sfResult').innerHTML ="
+                  replacement="if (!result.hasData) {status(site.name + ' ／ ' + label + ' ／ 記録なし'); q('#sfResult').innerHTML ="
+                  assert after.count(needle)==1
+                  after=after.replace(needle,replacement)
+              elif name.endswith('index.html'):
+                  for a,b in [('vehicle-cost-admin.js?v=20260908-vehicle-v1','vehicle-cost-admin.js?v=20260909-summary-v1'),('equipment-cost-admin.js?v=20260909-equipment-v1','equipment-cost-admin.js?v=20260909-summary-v1')]:
+                      assert after.count(a)==1
+                      after=after.replace(a,b)
+                  end='\n</body>\n</html>'
+                  assert after.count(end)==1
+                  after=after.replace(end,'\n<script src="site-financial-summary.js?v=20260909-summary-v1"></script>'+end)
+              else:
+                  assert after.count(old_note)==1
+                  after=after.replace(old_note,new_note)
+                  assert after.replace(new_note,old_note)==before
+              assert sha(after.encode('utf-8'))==new_hash, f'{name} does not match tested output'
+              changes[p]=after
+          assert sha(Path('tests/site-financial-summary.test.cjs').read_bytes())=='d4ec86e8c23536581fb06e3eb91ef53820f63acd'
+          for p,text in changes.items():
+              p.write_text(text,encoding='utf-8')
+          print('Verified changes:', ', '.join(str(p) for p in changes))
+          PY
+          node --check docs/site-financial-summary.js
+          node --check docs/vehicle-cost-admin.js
+          node --check docs/equipment-cost-admin.js
+          node tests/site-financial-summary.test.cjs
+      - name: Publish tested summary only
+        run: |
+          if git diff --quiet -- docs/index.html docs/site-financial-summary.js docs/vehicle-cost-admin.js docs/equipment-cost-admin.js; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/site-financial-summary.js docs/vehicle-cost-admin.js docs/equipment-cost-admin.js
+          git commit -m 'Load read-only site cost summary; keep auth, daily reports and saved amounts unchanged'
+          git push
