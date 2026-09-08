@@ -16,8 +16,8 @@ jobs:
           from pathlib import Path
           p=Path('docs/index.html')
           s=p.read_text()
-          old='site-move-filter-fix.js?v=20260908-1427'
-          new='site-move-filter-fix.js?v=20260908-1455'
+          old='site-move-filter-fix.js?v=20260908-1455'
+          new='site-move-filter-fix.js?v=20260908-1501'
           if old not in s:
               raise SystemExit('target script version not found')
           p.write_text(s.replace(old,new,1))
@@ -28,5 +28,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add docs/index.html
           git diff --cached --quiet && exit 0
-          git commit -m 'Bust cached site fix script for tool quantities'
+          git commit -m 'Bust cached site fix script for tool quantities v1501'
           git push
