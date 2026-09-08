@@ -19,16 +19,18 @@ jobs:
           from pathlib import Path
           p = Path('docs/index.html')
           s = p.read_text(encoding='utf-8')
-          anchor = '<script src="waste-price-master.js?v=20260908-1200"></script>\n</body>'
-          insert = '<script src="waste-price-master.js?v=20260908-1200"></script>\n<script src="site-waste-cost-summary.js?v=20260908-1220"></script>\n</body>'
+          anchor = '<script src="waste-price-master.js?v=20260908-1200"></script>\n<script src="waste-price-admin.js?v=20260908-1155"></script>\n</body>'
+          insert = '<script src="waste-price-master.js?v=20260908-1200"></script>\n<script src="waste-price-admin.js?v=20260908-1155"></script>\n<script src="site-waste-cost-summary.js?v=20260908-1220"></script>\n</body>'
           if 'site-waste-cost-summary.js' not in s:
               if anchor not in s:
-                  raise SystemExit('Expected stable waste-price footer not found; refusing to modify')
+                  raise SystemExit('Expected stable footer not found; refusing to modify')
               s = s.replace(anchor, insert, 1)
           if s.count('site-waste-cost-summary.js') != 1:
               raise SystemExit('Unexpected site-waste summary script count')
           if s.count('waste-price-master.js?v=20260908-1200') != 1:
               raise SystemExit('Waste price script reference changed unexpectedly')
+          if s.count('waste-price-admin.js?v=20260908-1155') != 1:
+              raise SystemExit('Waste price admin script reference changed unexpectedly')
           p.write_text(s, encoding='utf-8')
           PY
       - name: Show minimal diff
