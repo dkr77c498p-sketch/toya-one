@@ -107,3 +107,32 @@
   let n=0;const timer=setInterval(()=>{n++;installAll();if(n>30)clearInterval(timer)},200);
   document.addEventListener('click',e=>{if(e.target?.closest?.('nav button'))setTimeout(refreshNonRecordSiteSelectors,400)});
 })();
+
+/* TOYA_SMALL_TOOLS_MASTER_V1 */
+(function(){
+  const extra=[
+    {name:'散水機',category:'小型機械'},
+    {name:'高圧洗浄機',category:'小型機械'},
+    {name:'2kW発電機',category:'発電機'},
+    {name:'インバーター発電機',category:'発電機'},
+    {name:'コンプレッサー',category:'エア工具'},
+    {name:'ホース20M',category:'エア工具'},
+    {name:'20番ブレーカー',category:'エア工具'},
+    {name:'10番ブレーカー',category:'エア工具'},
+    {name:'チッパー',category:'エア工具'},
+    {name:'エアーカッター',category:'エア工具'}
+  ];
+  function install(){
+    try{
+      if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function'||!LS.attachments)return false;
+      const a=get(LS.attachments,[])||[];
+      const names=new Set(a.map(x=>typeof x==='string'?x:x?.name).filter(Boolean));
+      let changed=false;
+      extra.forEach(x=>{if(!names.has(x.name)){a.push({name:x.name,category:x.category,location:'',mountedOn:'',memo:''});names.add(x.name);changed=true;}});
+      if(changed){set(LS.attachments,a);try{if(typeof renderSelectors==='function')renderSelectors();if(typeof renderMasters==='function'&&document.querySelector('#masterPage')?.classList.contains('active'))renderMasters();}catch(e){}}
+      window.__toyaSmallToolsMasterV1=true;
+      return true;
+    }catch(e){console.warn('小型工具マスター追加失敗',e);return false;}
+  }
+  if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>30)clearInterval(t)},200);}
+})();
