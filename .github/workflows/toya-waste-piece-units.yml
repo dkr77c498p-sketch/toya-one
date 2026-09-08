@@ -1,0 +1,34 @@
+name: Support waste piece units and decimal prices
+on:
+  push:
+    paths:
+      - '.github/workflows/toya-waste-piece-units.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply tested waste-price-only patch
+        run: |
+          python .github/scripts/toya_waste_piece_patch.py docs
+          node --check docs/waste-price-master.js
+          node --check docs/waste-price-admin.js
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, hashlib
+          allowed={'docs/index.html','docs/waste-price-master.js','docs/waste-price-admin.js'}
+          changed=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert changed==allowed, changed
+          assert hashlib.sha256(Path('docs/waste-price-master.js').read_bytes()).hexdigest()=='c291b6616702cb440bf26c0ce922392b88a3ae055cdfb69e9e1bf298e15de7a0', 'Tested content differs: waste-price-master.js'
+          assert hashlib.sha256(Path('docs/waste-price-admin.js').read_bytes()).hexdigest()=='dfdc86aaac4b1aa9f0ae86bff40227e54d313afb9de6bcaa5401213eb1868753', 'Tested content differs: waste-price-admin.js'
+          assert hashlib.sha256(Path('docs/index.html').read_bytes()).hexdigest()=='be7063cec62602f240324a6acdfeca47c2de958519f5c896b8033b4ae16686c3', 'Tested content differs: index.html'
+          PY
+      - name: Commit verified waste-price support
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/waste-price-master.js docs/waste-price-admin.js
+          git commit -m 'Support tatami piece rates and precise decimal waste unit prices'
+          git push
