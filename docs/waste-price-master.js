@@ -1,4 +1,4 @@
-/* TOYA One 廃材処分単価マスター（税別） v1.0 */
+/* TOYA One 廃材処分単価マスター（税別） v1.1 */
 (() => {
   'use strict';
 
@@ -15,9 +15,14 @@
   }
 
   function wpmEnsureUI(){
-    if(document.getElementById('wastePriceCard')) return;
     const wasteCard = wpmFindWasteCard();
     if(!wasteCard) return;
+
+    /* 旧「産業廃棄物（タップ入力）」は廃材処分単価へ一本化したため非表示 */
+    wasteCard.style.display = 'none';
+    wasteCard.setAttribute('aria-hidden','true');
+
+    if(document.getElementById('wastePriceCard')) return;
 
     const card = document.createElement('div');
     card.className = 'card no-print';
