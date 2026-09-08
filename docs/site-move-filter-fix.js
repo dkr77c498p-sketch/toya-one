@@ -231,3 +231,115 @@
   }
   if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>30)clearInterval(t)},200);}
 })();
+
+/* TOYA_ATTACHMENT_ADD_AUTO_TRACK_V1 */
+(function(){
+  const smallCats=new Set(['小型機械','発電機','エア工具']);
+  const cleanName=v=>String(v||'').replace(/\s*×\s*\d+(?:台|本)$/,'').trim();
+  const machineNames=d=>(d?.machines||[]).map(x=>typeof x==='string'?x:x?.name).filter(Boolean);
+
+  function addMasterAttachment(kind){
+    try{
+      if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function')return;
+      let category='',name='';
+      if(kind==='machine'){
+        category=(prompt('種類を入力してください（例：大割機・カッター・フォーク）')||'').trim();
+        if(!category)return;
+        name=(prompt('名称・型式を入力してください')||'').trim();
+      }else{
+        name=(prompt('小型機械・工具の名称を入力してください')||'').trim();
+        category='小型機械';
+      }
+      if(!name)return;
+      const a=get(LS.attachments,[])||[];
+      if(a.some(x=>cleanName(typeof x==='string'?x:x?.name)===name))return alert('同じ名称がすでに登録されています。');
+      a.push({name,category,location:'',mountedOn:'',memo:''});
+      set(LS.attachments,a);
+      if(typeof renderSelectors==='function')renderSelectors();
+      if(typeof renderMasters==='function'&&document.querySelector('#masterPage')?.classList.contains('active'))renderMasters();
+      if(typeof renderAttachments==='function'&&document.querySelector('#attachmentPage')?.classList.contains('active'))renderAttachments();
+    }catch(e){console.warn('アタッチメント追加失敗',e)}
+  }
+
+  function ensureButtons(){
+    const m=document.querySelector('#machineAttachmentChoices');
+    if(m&&!document.querySelector('#addMachineAttachmentQuick')){
+      const b=document.createElement('button');
+      b.id='addMachineAttachmentQuick';b.type='button';b.className='btn light no-print';b.style.cssText='width:100%;margin-top:9px';
+      b.textContent='＋ 重機アタッチメントを追加';b.onclick=()=>addMasterAttachment('machine');
+      m.insertAdjacentElement('afterend',b);
+    }
+    const t=document.querySelector('#smallToolChoices');
+    if(t&&!document.querySelector('#addSmallToolQuick')){
+      const b=document.createElement('button');
+      b.id='addSmallToolQuick';b.type='button';b.className='btn light no-print';b.style.cssText='width:100%;margin-top:9px';
+      b.textContent='＋ 小型機械・工具を追加';b.onclick=()=>addMasterAttachment('small');
+      t.insertAdjacentElement('afterend',b);
+    }
+  }
+
+  function updateLocalState(d){
+    try{
+      if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function'||!d?.site)return;
+      const selected=new Set((d.attachments||[]).map(cleanName));
+      if(!selected.size)return;
+      const machines=machineNames(d);
+      const a=get(LS.attachments,[])||[];
+      let changed=false;
+      a.forEach(x=>{
+        if(!x||!selected.has(cleanName(x.name)))return;
+        x.location=d.site;
+        if(smallCats.has(x.category))x.mountedOn='';
+        else x.mountedOn=machines.length===1?machines[0]:(machines.length>1?'複数重機':'未装着');
+        changed=true;
+      });
+      if(changed)set(LS.attachments,a);
+    }catch(e){console.warn('アタッチメント自動更新失敗',e)}
+  }
+
+  function latestUsage(name){
+    const reports=(typeof cloudReportsCache!=='undefined'&&Array.isArray(cloudReportsCache)&&cloudReportsCache.length)?cloudReportsCache:(typeof LS!=='undefined'&&typeof get==='function'?get(LS.reports,[]):[]);
+    const n=cleanName(name);
+    return [...(reports||[])].filter(d=>(d.attachments||[]).some(v=>cleanName(v)===n)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0]||null;
+  }
+
+  function applyLatestUsage(){
+    try{
+      const list=document.querySelector('#attachmentList');
+      if(!list||typeof LS==='undefined'||typeof get!=='function')return;
+      const master=get(LS.attachments,[])||[];
+      const rows=[...list.querySelectorAll('.record')];
+      rows.forEach((row,i)=>{
+        const x=master[i];if(!x)return;
+        const d=latestUsage(x.name);if(!d)return;
+        const ms=machineNames(d);
+        const mounted=smallCats.has(x.category)?'—':(ms.length===1?ms[0]:(ms.length>1?'複数重機':'未装着'));
+        const meta=row.querySelector('.record-meta')||row.querySelector('.meta');
+        if(meta)meta.textContent=`現在地：${d.site||x.location||'未登録'} ／ 装着中：${mounted}`;
+      });
+    }catch(e){console.warn('アタッチメント最新位置表示失敗',e)}
+  }
+
+  function install(){
+    ensureButtons();
+    if(typeof window.renderSelectors==='function'&&!window.__toyaAttachmentAddRenderWrap){
+      const old=window.renderSelectors;window.renderSelectors=function(){const out=old.apply(this,arguments);setTimeout(ensureButtons,0);return out;};window.__toyaAttachmentAddRenderWrap=true;
+    }
+    if(typeof window.renderAttachments==='function'&&!window.__toyaAttachmentUsageWrap){
+      const old=window.renderAttachments;window.renderAttachments=function(){const out=old.apply(this,arguments);setTimeout(applyLatestUsage,0);return out;};window.__toyaAttachmentUsageWrap=true;
+    }
+    if(typeof window.saveReport==='function'&&!window.__toyaAttachmentSaveWrap){
+      const old=window.saveReport;window.saveReport=async function(){
+        const before=(typeof LS!=='undefined'&&typeof get==='function')?JSON.stringify(get(LS.reports,[])):'';
+        let snap=null;try{if(typeof collect==='function')snap=collect()}catch(e){}
+        const out=await old.apply(this,arguments);
+        const after=(typeof LS!=='undefined'&&typeof get==='function')?JSON.stringify(get(LS.reports,[])):'';
+        if(snap&&before!==after){updateLocalState(snap);setTimeout(()=>{try{if(typeof renderAttachments==='function')renderAttachments()}catch(e){}},0)}
+        return out;
+      };window.__toyaAttachmentSaveWrap=true;
+    }
+    return !!document.querySelector('#machineAttachmentChoices');
+  }
+
+  if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>40)clearInterval(t)},100);}else setTimeout(ensureButtons,100);
+})();
