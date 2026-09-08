@@ -136,3 +136,35 @@
   }
   if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>30)clearInterval(t)},200);}
 })();
+
+/* TOYA_ATTACHMENT_NAME_ONLY_V1 */
+(function(){
+  function simplify(){
+    const box=document.querySelector('#attachmentChoices');
+    if(!box)return false;
+    box.querySelectorAll('label.choice').forEach(label=>{
+      const input=label.querySelector('input[name="attachment"]');
+      if(!input)return;
+      const checked=input.checked;
+      label.textContent='';
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(input.value||''));
+      input.checked=checked;
+    });
+    return true;
+  }
+  function install(){
+    const box=document.querySelector('#attachmentChoices');
+    if(!box)return false;
+    simplify();
+    if(!window.__toyaAttachmentNameOnlyObserver){
+      const ob=new MutationObserver(()=>simplify());
+      ob.observe(box,{childList:true,subtree:true});
+      window.__toyaAttachmentNameOnlyObserver=ob;
+    }
+    window.__toyaAttachmentNameOnlyV1=true;
+    return true;
+  }
+  if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>30)clearInterval(t)},200);}
+  document.addEventListener('click',e=>{if(e.target?.closest?.('[data-page="reportPage"]'))setTimeout(simplify,150)});
+})();
