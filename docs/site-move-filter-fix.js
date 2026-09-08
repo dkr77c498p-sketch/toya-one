@@ -79,3 +79,34 @@
     let n=0;const t=setInterval(()=>{n++;if(installCalendarSelectionFix()||n>40)clearInterval(t)},100);
   }
 })();
+
+/* TOYA_CALENDAR_MARKERS_FIX_V1 */
+(function(){
+  function installCalendarMarkersFix(){
+    if(typeof window.renderRecordBrowser!=='function'||typeof window.renderRecordCalendar!=='function'||window.__toyaCalendarMarkersFixV1)return false;
+    const original=window.renderRecordBrowser;
+    window.renderRecordBrowser=function(data){
+      const out=original.apply(this,arguments);
+      try{
+        if(typeof recordViewMode!=='undefined'&&recordViewMode==='calendar'){
+          const src=Array.isArray(data)?data:((typeof currentRecordsData!=='undefined'&&Array.isArray(currentRecordsData))?currentRecordsData:[]);
+          const q=(document.querySelector('#recordSearch')?.value||'').trim().toLowerCase();
+          const site=document.querySelector('#recordSiteFilter')?.value||'';
+          const writer=document.querySelector('#recordWriterFilter')?.value||'';
+          const calData=src.filter(d=>{
+            const moves=d?.siteMoves||[];
+            const hay=[d?.site,d?.writer,d?.details,d?.memo,...(d?.workTypes||[]),...moves.flatMap(m=>[m?.site,m?.action,m?.waste,m?.disposal,m?.vehicle])].filter(Boolean).join(' ').toLowerCase();
+            return (!q||hay.includes(q))&&(!site||d?.site===site||moves.some(m=>m?.site===site))&&(!writer||d?.writer===writer);
+          });
+          window.renderRecordCalendar(calData);
+        }
+      }catch(e){console.warn('カレンダー件数表示補正',e)}
+      return out;
+    };
+    window.__toyaCalendarMarkersFixV1=true;
+    return true;
+  }
+  if(!installCalendarMarkersFix()){
+    let n=0;const t=setInterval(()=>{n++;if(installCalendarMarkersFix()||n>40)clearInterval(t)},100);
+  }
+})();
