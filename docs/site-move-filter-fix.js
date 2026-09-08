@@ -1,5 +1,5 @@
 (function(){
-  function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+  function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
   function invalidSite(x){return !x||['新しい現場','現場名をあとで変更','未登録現場'].includes(x)}
   function localReports(){try{return (typeof LS!=='undefined'&&typeof get==='function')?(get(LS.reports,[])||[]):[]}catch(e){return []}}
   function localSites(){try{return (typeof LS!=='undefined'&&typeof get==='function')?(get(LS.sites,[])||[]):[]}catch(e){return []}}
@@ -16,7 +16,7 @@
     }catch(e){console.warn('現場マスター取得失敗',e)}
   }
   function fillSelect(sel,names,all){if(!sel)return;const cur=sel.value;sel.innerHTML=(all?'<option value="">全現場</option>':'')+names.map(n=>`<option>${esc(n)}</option>`).join('');if(cur&&names.includes(cur))sel.value=cur}
-  function refresh(){const names=allKnownSites(currentReports().length?currentReports():cloudReports());fillSelect(document.querySelector('#recordSiteFilter'),names,true);fillSelect(document.querySelector('#ledgerSite'),names,false)}
+  function refresh(){const names=allKnownSites(currentReports().length?currentReports():cloudReports());fillSelect(document.querySelector('#recordSiteFilter'),names,true);fillSelect(document.querySelector('#ledgerSite'),names,false);fillSelect(document.querySelector('#siteSummarySelect'),names,true)}
   async function refreshAll(){await loadMasterSites();refresh()}
   if(typeof recordFilters==='function'&&!window.__moveRecordFiltersFixed4){window.recordFilters=function(a){const q=(document.querySelector('#recordSearch')?.value||'').trim().toLowerCase(),site=document.querySelector('#recordSiteFilter')?.value||'',writer=document.querySelector('#recordWriterFilter')?.value||'',from=document.querySelector('#recordDateFrom')?.value||'',to=document.querySelector('#recordDateTo')?.value||'';return (a||[]).filter(d=>{const moves=d.siteMoves||[],hay=[d.site,d.writer,d.details,d.memo,...(d.workTypes||[]),...moves.flatMap(m=>[m?.site,m?.action,m?.waste,m?.disposal,m?.vehicle])].filter(Boolean).join(' ').toLowerCase();return(!q||hay.includes(q))&&(!site||d.site===site||moves.some(m=>m?.site===site))&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to)});};window.__moveRecordFiltersFixed4=true}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(refreshAll,800));else setTimeout(refreshAll,800);
