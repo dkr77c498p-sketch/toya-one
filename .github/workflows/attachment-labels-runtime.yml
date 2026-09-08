@@ -1,0 +1,74 @@
+name: Attachment labels runtime
+on:
+  push:
+    paths:
+      - '.github/workflows/attachment-labels-runtime.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add machine attachment labels and bust cache
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          js=Path('docs/site-move-filter-fix.js')
+          s=js.read_text()
+          marker='TOYA_MACHINE_ATTACHMENT_LABELS_V1'
+          if marker not in s:
+              s += r'''
+
+/* TOYA_MACHINE_ATTACHMENT_LABELS_V1 */
+(function(){
+  function decorateMachineAttachmentLabels(){
+    const box=document.querySelector('#machineAttachmentChoices');
+    if(!box || typeof LS==='undefined' || typeof get!=='function') return false;
+    const ats=get(LS.attachments,[])||[];
+    const catMap=new Map(ats.map(x=>[x?.name,x?.category||'']).filter(x=>x[0]));
+    box.querySelectorAll('input[name="attachment"]').forEach(input=>{
+      const label=input.closest('label.choice');
+      if(!label)return;
+      const cat=catMap.get(input.value)||'';
+      const text=cat?`${cat}｜${input.value}`:input.value;
+      const checked=input.checked;
+      label.textContent='';
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(text));
+      input.checked=checked;
+    });
+    return true;
+  }
+  function install(){
+    if(typeof window.renderSelectors!=='function')return false;
+    if(!window.__toyaMachineAttachmentLabelsV1){
+      const old=window.renderSelectors;
+      window.renderSelectors=function(){const out=old.apply(this,arguments);setTimeout(decorateMachineAttachmentLabels,0);return out;};
+      window.__toyaMachineAttachmentLabelsV1=true;
+    }
+    setTimeout(decorateMachineAttachmentLabels,0);
+    return true;
+  }
+  if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>40)clearInterval(t)},100);}
+  document.addEventListener('click',e=>{if(e.target?.closest?.('[data-page="reportPage"]'))setTimeout(decorateMachineAttachmentLabels,100)});
+})();
+'''
+              js.write_text(s)
+
+          p=Path('docs/index.html')
+          h=p.read_text()
+          import re
+          h2=re.sub(r'site-move-filter-fix\.js\?v=[0-9-]+','site-move-filter-fix.js?v=20260908-1511',h,count=1)
+          if h2==h:
+              raise SystemExit('site fix script tag not found')
+          p.write_text(h2)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/site-move-filter-fix.js docs/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Show machine attachment types in daily report'
+          git push
