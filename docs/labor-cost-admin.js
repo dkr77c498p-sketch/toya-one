@@ -1,4 +1,4 @@
-/* TOYA One: admin-only labor costing. Does not alter auth, daily-report saves or payroll. */
+/* TOYA One: admin-only labor costing. Simple tap UI v1.1; auth, calculations and persistence unchanged. */
 (() => {
   'use strict';
   if (window.__toyaLaborAdminV1) return;
@@ -48,15 +48,16 @@
   function setBusy(v) {busy=v; q('#lcCard')?.setAttribute('aria-busy', String(v)); ['lcOpen','lcImport','lcSave','lcAddRate'].forEach(id=>{if(q('#'+id))q('#'+id).disabled=v;});}
   function ui() {
     if(q('#lcCard')) return;
+    installStyles();
     const card=document.createElement('div'); card.id='lcCard'; card.className='card';
     card.innerHTML=`<h2>人件費・常用費（管理者用）</h2>
-      <p class="note">日報の人数をもとに計算し、半日・通勤台数・金額を確認して保存します。給与計算ではなく現場原価の管理用です。消費税は自動加算しません。</p>
+      <p class="note">社員の操作は不要です。管理者が勤務・人数・通勤台数を確認して保存します。金額の調整は必要なときだけ開いてください。</p>
       <div class="grid2"><div><label for="lcDate">作業日</label><input id="lcDate" type="date"></div><div><label for="lcSite">現場</label><select id="lcSite"><option value="">読み込み中…</option></select></div></div>
-      <div class="grid2" style="margin-top:10px"><button id="lcOpen" type="button" class="btn dark">この日の人件費を開く</button><button id="lcImport" type="button" class="btn light">日報から人数を読み直す</button></div>
+      <button id="lcOpen" type="button" class="btn dark lc-wide" style="margin-top:10px">この日の人件費を開く</button><details class="lc-options"><summary>日報人数を読み直すとき</summary><p class="note">入力済みの調整をやり直すときだけ使います。</p><button id="lcImport" type="button" class="btn light lc-wide">日報から人数を読み直す</button></details>
       <p id="lcStatus" class="note" role="status" aria-live="polite">単価を読み込み中…</p>
       <div id="lcBody"></div><div id="lcTotals" class="row" hidden></div>
       <button id="lcSave" type="button" class="btn lime" style="width:100%;margin-top:10px" hidden>確認した人件費を保存</button>
-      <details style="margin-top:14px"><summary style="font-weight:900;cursor:pointer;padding:10px 0">人ごと・応援先ごとの単価設定</summary>
+      <details style="margin-top:14px"><summary style="font-weight:900;cursor:pointer;padding:10px 0">単価設定（普段は変更不要）</summary>
       <p class="note">変更は次の新規計算から反映します。保存済みの金額・手入力は勝手に変更しません。</p><div id="lcRates"></div>
       <button id="lcAddRate" type="button" class="btn light" style="width:100%;margin-top:8px">＋ 人・応援先を追加</button></details>`;
     const first=q('#masterPage'); if(!first)return; first.prepend(card);
@@ -69,11 +70,7 @@
     ['lcDate','lcSite'].forEach(id=>q('#'+id).addEventListener('change',()=>{if(rows.length)msg('日付・現場を変更しました。「この日の人件費を開く」を押してください。');}));
     q('#lcBody').addEventListener('input', editRow);
     q('#lcBody').addEventListener('change', editRow);
-    q('#lcBody').addEventListener('click', e=>{
-      const b=e.target.closest('[data-lc-auto]'); if(!b)return;
-      const i=Number(b.closest('[data-lc-index]').dataset.lcIndex), key=b.dataset.lcAuto;
-      if(rows[i]){rows[i][key]=null;dirty=true;renderEntries();msg('この項目を自動計算に戻しました。保存前です。');}
-    });
+    q('#lcBody').addEventListener('click', tapRow);
     q('#lcRates').addEventListener('click',e=>{const b=e.target.closest('[data-lc-rate-save]');if(b)saveRate(Number(b.dataset.lcRateSave));});
   }
   async function init() {
@@ -97,30 +94,108 @@
     } catch(e){initialized=false;msg('人件費の読込エラー：'+e.message,true);}
     finally {setBusy(false);}
   }
-  const numberInput=(i,key,value,label,step='1',placeholder='')=>`<div><label for="lc-${i}-${key}">${label}</label><input id="lc-${i}-${key}" data-lc-key="${key}" type="number" inputmode="decimal" min="0" step="${step}" value="${value??''}" placeholder="${placeholder}"></div>`;
+  function installStyles(){
+    if(q('#lcSimpleStyles'))return;
+    const style=document.createElement('style');style.id='lcSimpleStyles';
+    style.textContent=`
+      #lcCard .lc-wide{width:100%}#lcCard .lc-options{margin-top:10px}
+      #lcCard summary{cursor:pointer}#lcCard .lc-options>summary{font-weight:700;padding:10px 0;color:#555}
+      #lcCard h3.lc-group-title{font-size:16px;margin:20px 0 8px}
+      #lcCard .lc-entry{margin-top:10px;padding:12px;background:#fafafa}
+      #lcCard .lc-row-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+      #lcCard .lc-row-head b{font-size:16px}#lcCard [data-lc-row-total]{font-size:17px;font-weight:900}
+      #lcCard .lc-duty{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:10px}
+      #lcCard .lc-duty button{min-height:44px;border:1px solid #bbb;border-radius:9px;background:#fff;color:#111;font-weight:800;touch-action:manipulation}
+      #lcCard .lc-duty button[aria-pressed="true"]{background:var(--lime,#b8ff00);border:2px solid #678f00;color:#111}
+      #lcCard .lc-count-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+      #lcCard .lc-stepper{display:grid;grid-template-columns:40px minmax(0,1fr) 40px;gap:4px;align-items:center}
+      #lcCard .lc-stepper button{min-height:44px;border:1px solid #bbb;border-radius:9px;background:#fff;color:#111;font-size:22px;font-weight:900;touch-action:manipulation}
+      #lcCard .lc-stepper input{padding:6px 2px;text-align:center;font-weight:800;width:100%;font-size:16px}
+      #lcCard .lc-adjust{border-top:1px solid #ddd;margin-top:10px;padding-top:3px}
+      #lcCard .lc-adjust>summary{font-size:13px;font-weight:700;color:#444;min-height:44px;padding:12px 0}
+      #lcCard .lc-adjust[open]>summary{color:#111}
+      #lcCard .lc-company>summary{font-weight:900;line-height:1.8}
+      #lcCard .lc-support{margin-top:16px}#lcCard .lc-support>summary{font-weight:900;padding:10px 0}
+      #lcCard .lc-calc{margin-top:9px}#lcCard .lc-mini-note{font-size:12px;color:#666;margin:5px 0}
+      #lcCard input,#lcCard select{max-width:100%;min-width:0;box-sizing:border-box;font-size:16px}
+      #lcCard .grid2>div,#lcCard .lc-count-grid>div{min-width:0}
+      #lcCard input[type=date]{width:100%;display:block;-webkit-appearance:none}
+      #lcCard button:focus-visible,#lcCard summary:focus-visible{outline:3px solid #2b6dcc;outline-offset:2px}
+      @media(max-width:350px){#lcCard .lc-count-grid{grid-template-columns:1fr}}
+    `;
+    document.head.appendChild(style);
+  }
+  const numberInput=(i,key,value,label,step='1',placeholder='')=>`<div><label for="lc-${i}-${key}">${label}</label><input id="lc-${i}-${key}" data-lc-key="${key}" type="number" inputmode="decimal" min="0" step="${step}" value="${esc(value??'')}" placeholder="${esc(placeholder)}"></div>`;
+  const counter=(i,key,value,label)=>`<div><label for="lc-${i}-${key}">${label}</label><div class="lc-stepper"><button type="button" data-lc-step="-1" data-lc-field="${key}" aria-label="${label}を1減らす">−</button><input id="lc-${i}-${key}" data-lc-key="${key}" type="number" inputmode="numeric" min="0" step="1" value="${esc(value)}"><button type="button" data-lc-step="1" data-lc-field="${key}" aria-label="${label}を1増やす">＋</button></div></div>`;
+  const travelArea=r=>`<div><label>交通費の区分</label><select data-lc-key="area" aria-label="交通費の区分"><option value="city" ${r.area==='city'?'selected':''}>鹿児島市内</option><option value="outside" ${r.area==='outside'?'selected':''}>市外（交通費を手入力）</option></select></div>`;
+  function adjustment(i,r){
+    const c=calculate(r), hasAdjust=c.manual||r.area==='outside'||num(r.highway)>0||num(r.extra)>0||!!r.memo;
+    const label=r.kind==='outgoing'?'常用代・売上 合計（円）':r.kind==='own'?'この人の人件費 合計（円）':'人件費・常用代 合計（円）';
+    return `<details class="lc-adjust" data-lc-adjust ${hasAdjust?'open':''}><summary data-lc-adjust-label>金額・交通費を調整</summary>
+      <p class="note">金額の欄は空欄なら自動計算。直接入力すると、その合計金額を優先します（0円も可）。</p>
+      ${r.kind==='own'?`<div class="grid2">${travelArea(r)}${counter(i,'vehicles',r.vehicles,'通勤台数（台）')}</div>`:''}
+      <div class="grid2">${numberInput(i,'manualLabor',r.manualLabor,label,'1','空欄なら自動')}${numberInput(i,'manualTravel',r.manualTravel,'交通費 合計（円）','1',r.area==='outside'?'市外は金額を入力':'空欄なら自動')}</div>
+      <div class="grid2" style="margin-top:6px"><button type="button" class="btn light" data-lc-auto="manualLabor">人件費を自動に戻す</button><button type="button" class="btn light" data-lc-auto="manualTravel">交通費を自動に戻す</button></div>
+      <div class="grid2">${numberInput(i,'highway',r.highway,'高速代（円・別途）')}${numberInput(i,'extra',r.extra,'その他加算（円・任意）')}</div>
+      <label for="lc-${i}-memo">調整理由・メモ</label><input id="lc-${i}-memo" type="text" data-lc-key="memo" value="${esc(r.memo)}" placeholder="例：先方との取り決め・残業分など">
+      <div data-lc-calculation class="note lc-calc"></div></details>`;
+  }
+  function entryHTML(r,i){
+    if(r.kind==='own')return `<div class="row lc-entry lc-person" data-lc-index="${i}">
+      <div class="lc-row-head"><b>${esc(r.label)}</b><span data-lc-row-total></span></div>
+      <div class="lc-duty" role="group" aria-label="${esc(r.label)}の勤務">${[['none','なし'],['half','半日'],['full','1日']].map(([key,label])=>`<button type="button" data-lc-duty="${key}" aria-pressed="false">${label}</button>`).join('')}</div>
+      ${adjustment(i,r)}</div>`;
+    return `<details class="row lc-entry lc-company" data-lc-index="${i}" ${calculate(r).active?'open':''}>
+      <summary>${esc(r.label)} <span data-lc-row-total></span></summary>
+      <div class="lc-mini-note">1日 ${yen(r.dayRate)}／半日 ${yen(r.halfRate)}${r.kind==='outgoing'?'（売上）':''}</div>
+      <div class="lc-count-grid">${counter(i,'full',r.full,'1日の人数（人）')}${counter(i,'half',r.half,'半日の人数（人）')}</div>
+      <div class="grid2">${counter(i,'vehicles',r.vehicles,'通勤台数（台）')}${travelArea(r)}</div>
+      ${r.kind==='dispatch'?`<div class="lc-mini-note">市内通勤：1台 ${yen(r.cityRate)}。半日も同額。</div>`:'<div class="lc-mini-note">市外交通費・高速代は別途入力。</div>'}
+      ${adjustment(i,r)}</details>`;
+  }
   function renderEntries(){
     if(!sameOwner())return;
-    q('#lcBody').innerHTML=rows.map((r,i)=>`<details class="row" data-lc-index="${i}" ${calculate(r).active?'open':''}>
-      <summary style="font-weight:900;cursor:pointer;line-height:1.8">${esc(r.label)} <span class="note">${esc(kinds[r.kind]||r.kind)}</span> <span data-lc-row-total></span></summary>
-      <div class="note">全日 ${yen(r.dayRate)}／半日 ${yen(r.halfRate)}${r.kind==='dispatch'?`・市内通勤 ${yen(r.cityRate)}／台（半日も同額）`:''}</div>
-      <div class="grid2">${numberInput(i,'full',r.full,'全日人数')}${numberInput(i,'half',r.half,'半日人数')}</div>
-      <div class="grid2"><div><label>交通費の区分</label><select data-lc-key="area"><option value="city" ${r.area==='city'?'selected':''}>鹿児島市内</option><option value="outside" ${r.area==='outside'?'selected':''}>市外・交通費手入力</option></select></div>${numberInput(i,'vehicles',r.vehicles,'通勤台数（人数とは別）')}</div>
-      <details style="margin-top:8px" ${r.manualLabor!==null||r.manualTravel!==null||r.area==='outside'?'open':''}><summary style="cursor:pointer;font-weight:800">金額の手入力・調整</summary>
-      <p class="note">空欄＝自動。0円も指定できます。手入力はその項目の合計金額を優先し、人数変更でも消しません。</p>
-      <div class="grid2">${numberInput(i,'manualLabor',r.manualLabor,'人件費／常用代 合計（円）','1','空欄なら自動')}${numberInput(i,'manualTravel',r.manualTravel,'交通費 合計（円）','1',r.area==='outside'?'市外は金額を入力':'空欄なら自動')}</div>
-      <div class="grid2" style="margin-top:6px"><button type="button" class="btn light" data-lc-auto="manualLabor">人件費を自動に戻す</button><button type="button" class="btn light" data-lc-auto="manualTravel">交通費を自動に戻す</button></div></details>
-      <div class="grid2">${numberInput(i,'highway',r.highway,'高速代（円・別途）')}${numberInput(i,'extra',r.extra,'その他加算（円・任意）')}</div>
-      <label>調整理由・メモ</label><input type="text" data-lc-key="memo" value="${esc(r.memo)}" placeholder="例：先方との取り決め・残業分など">
-      <div data-lc-calculation class="note" style="margin-top:8px"></div></details>`).join('');
+    const section=(list,title)=>list.length?`<h3 class="lc-group-title">${title}</h3>`+list.map(({r,i})=>entryHTML(r,i)).join(''):'';
+    const all=rows.map((r,i)=>({r,i}));
+    const own=all.filter(x=>x.r.kind==='own'),dispatch=all.filter(x=>x.r.kind==='dispatch'),support=all.filter(x=>!['own','dispatch'].includes(x.r.kind));
+    q('#lcBody').innerHTML=section(own,'自社：勤務を選ぶだけ')+section(dispatch,'明建・朝日など：人数と通勤台数')+
+      (support.length?`<details class="lc-support" ${support.some(x=>calculate(x.r).active)?'open':''}><summary>常用・応援（必要な日だけ）</summary><p class="note">来てもらう分は費用、応援に行く分は売上。自社の人件費は上の自社欄に残します。</p>${support.map(({r,i})=>entryHTML(r,i)).join('')}</details>`:'');
     q('#lcTotals').hidden=false;q('#lcSave').hidden=false;renderTotals();
+  }
+  function tapRow(e){
+    if(!sameOwner()||busy)return;
+    const b=e.target.closest('button');if(!b)return;
+    const el=b.closest('[data-lc-index]');if(!el)return;
+    const r=rows[Number(el.dataset.lcIndex)];if(!r)return;
+    if(b.hasAttribute('data-lc-duty')){
+      r.full=b.dataset.lcDuty==='full'?1:0;r.half=b.dataset.lcDuty==='half'?1:0;
+      dirty=true;renderTotals();
+      msg(calculate(r).manual?'勤務を変更しました。手入力の金額は保持しています。自動計算するには「人件費を自動に戻す」を押してください。':'勤務を変更しました。最後に「確認した人件費を保存」を押してください。');
+    }else if(b.hasAttribute('data-lc-step')){
+      const key=b.dataset.lcField;if(!['full','half','vehicles'].includes(key))return;
+      const input=q(`[data-lc-key="${key}"]`,el);if(!input)return;
+      const value=Number(input.value);input.value=String(Math.max(0,(Number.isFinite(value)?value:0)+Number(b.dataset.lcStep)));
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+    }else if(b.hasAttribute('data-lc-auto')){
+      const key=b.dataset.lcAuto;if(!['manualLabor','manualTravel'].includes(key))return;
+      r[key]=null;const input=q(`[data-lc-key="${key}"]`,el);if(input)input.value='';
+      dirty=true;renderTotals();msg('この項目を自動計算に戻しました。保存前です。');
+    }
   }
   function totals(){let cost=0,revenue=0,pending=false;rows.forEach(r=>{const c=calculate(r);pending ||= c.missingTravel;if(r.kind==='outgoing')revenue+=c.total;else cost+=c.total;});return {cost,revenue,pending};}
   function renderTotals(){
     rows.forEach((r,i)=>{const el=q(`[data-lc-index="${i}"]`);if(!el)return;const c=calculate(r);
-      q('[data-lc-row-total]',el).textContent=yen(c.total)+(c.manual?'［手入力優先］':'');
+      q('[data-lc-row-total]',el).textContent=yen(c.total)+(c.manual?'［手入力］':'')+(c.missingTravel?'［交通費未入力］':'');
+      const duty=num(r.full)===1&&num(r.half)===0?'full':num(r.half)===1&&num(r.full)===0?'half':num(r.full)+num(r.half)===0?'none':'';
+      el.querySelectorAll('[data-lc-duty]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lcDuty===duty)));
+      const adjusted=c.manual||num(r.highway)>0||num(r.extra)>0||!!r.memo;
+      q('[data-lc-adjust-label]',el).textContent=adjusted?'手入力・追加費用あり（確認・変更）':'高速代・金額を調整（必要なときだけ）';
+      q('[data-lc-key="manualLabor"]',el).placeholder='自動：'+yen(c.autoLabor);
+      q('[data-lc-key="manualTravel"]',el).placeholder=c.autoTravel===null?'市外交通費を入力（不要なら0）':'自動：'+yen(c.autoTravel);
+      if(c.missingTravel)q('[data-lc-adjust]',el).open=true;
       q('[data-lc-calculation]',el).textContent=`人件費 ${yen(c.labor)}＋交通費 ${c.travel===null?'要入力':yen(c.travel)}＋高速代 ${yen(num(r.highway))}＋その他 ${yen(num(r.extra))}${c.missingTravel?' ／ 市外交通費を入力してください。':''}`;
     });
-    const t=totals();q('#lcTotals').innerHTML=`<b>費用合計：${yen(t.cost)}</b><br><b>常用に行く分の売上：${yen(t.revenue)}</b><div class="note">常用売上と人件費は別計上です。応援に行く自社作業員の人件費も自社欄に残してください。処分費・燃料費・車両費はこの合計に含みません。${t.pending?' 市外交通費が未入力です。':''}</div>`;
+    const t=totals();q('#lcTotals').innerHTML=`<b>費用合計：${yen(t.cost)}</b><br><b>常用に行く分の売上：${yen(t.revenue)}</b><div class="note">常用売上と人件費は別計上です。応援に行く自社作業員の人件費も自社欄に残してください。処分費・燃料費・車両費はこの合計に含みません。給与計算用ではなく現場原価です。消費税は自動加算しません。${t.pending?' 市外交通費が未入力です。':''}</div>`;
   }
   function editRow(e){
     const key=e.target.dataset.lcKey, el=e.target.closest('[data-lc-index]');if(!key||!el||!sameOwner())return;
