@@ -103,3 +103,46 @@
   let n=0;const t=setInterval(()=>{run();if(++n>25)clearInterval(t)},250);
   document.addEventListener('click',e=>{if(e.target?.closest?.('nav button'))setTimeout(run,250)});
 })();
+
+/* TOYA employee login helper - UI only, auth logic unchanged */
+(function(){
+  const correct={
+    '上村 凌太':'kabushikigaisyatoya+ryota@gmail.com',
+    '宮下 哲也':'kabushikigaisyatoya+tetsuya@gmail.com'
+  };
+  const typo={
+    'kabushikigaisiyatoya+uemura@gmail.com':'kabushikigaisyatoya+ryota@gmail.com',
+    'kabushikigaisiyatoya+tetsuya@gmail.com':'kabushikigaisyatoya+tetsuya@gmail.com'
+  };
+
+  function installLoginHelper(){
+    const loggedOut=document.querySelector('#cloudLoggedOut');
+    const email=document.querySelector('#cloudEmail');
+    if(!loggedOut||!email)return false;
+    if(!document.querySelector('#employeeQuickLogin')){
+      const box=document.createElement('div');
+      box.id='employeeQuickLogin';
+      box.style.cssText='margin:10px 0 0;padding:10px;border:1px solid #ddd;border-radius:10px;background:#fafafa';
+      box.innerHTML='<div style="font-weight:900;margin-bottom:7px">社員は名前をタップ</div>';
+      const row=document.createElement('div');
+      row.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px';
+      Object.entries(correct).forEach(([name,addr])=>{
+        const b=document.createElement('button');
+        b.type='button';b.className='btn light';b.textContent=name;
+        b.onclick=()=>{email.value=addr;email.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#cloudPassword')?.focus();};
+        row.appendChild(b);
+      });
+      box.appendChild(row);
+      loggedOut.insertBefore(box,loggedOut.querySelector('button[onclick="cloudLogin()"]'));
+    }
+    if(!email.dataset.toyaEmployeeFix){
+      email.dataset.toyaEmployeeFix='1';
+      const fix=()=>{const v=email.value.trim().toLowerCase();if(typo[v])email.value=typo[v];};
+      email.addEventListener('change',fix);email.addEventListener('blur',fix);
+    }
+    return true;
+  }
+
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(installLoginHelper,200));else setTimeout(installLoginHelper,200);
+  let i=0;const timer=setInterval(()=>{if(installLoginHelper()||++i>20)clearInterval(timer)},250);
+})();
