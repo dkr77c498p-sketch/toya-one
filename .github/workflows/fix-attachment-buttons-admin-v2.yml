@@ -1,0 +1,61 @@
+name: Fix attachment buttons admin v2
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-attachment-buttons-admin-v2.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch attachment add buttons
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/site-move-filter-fix.js')
+          s=p.read_text()
+          start=s.find('  function ensureButtons(){')
+          end=s.find('\n\n  function updateLocalState', start)
+          if start<0 or end<0:
+              raise SystemExit('ensureButtons block not found')
+          new="""  function ensureButtons(){
+    document.querySelector('#addMachineAttachmentQuick')?.remove();
+    document.querySelector('#addSmallToolQuick')?.remove();
+    const master=document.querySelector('#attachmentMaster');
+    if(!master)return;
+    if(!document.querySelector('#adminAttachmentAddButtons')){
+      const wrap=document.createElement('div');
+      wrap.id='adminAttachmentAddButtons';
+      wrap.className='grid2';
+      wrap.style.marginTop='10px';
+      const machine=document.createElement('button');
+      machine.type='button';machine.className='btn dark';machine.textContent='＋ 重機アタッチメントを追加';
+      machine.onclick=()=>addMasterAttachment('machine');
+      const small=document.createElement('button');
+      small.type='button';small.className='btn light';small.textContent='＋ 小型機械・工具を追加';
+      small.onclick=()=>addMasterAttachment('small');
+      wrap.append(machine,small);
+      master.insertAdjacentElement('afterend',wrap);
+    }
+  }"""
+          s=s[:start]+new+s[end:]
+          p.write_text(s)
+
+          idx=Path('docs/index.html')
+          h=idx.read_text()
+          import re
+          h,n=re.subn(r'site-move-filter-fix\.js\?v=[^"\']+', 'site-move-filter-fix.js?v=20260908-1612', h, count=1)
+          if n!=1:
+              raise SystemExit('script tag not found')
+          idx.write_text(h)
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/site-move-filter-fix.js docs/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'Keep attachment add buttons in registration management only'
+          git push
