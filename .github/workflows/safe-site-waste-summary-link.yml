@@ -1,0 +1,46 @@
+name: Safely link site waste cost summary
+
+on:
+  push:
+    paths:
+      - '.github/workflows/safe-site-waste-summary-link.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add external site waste summary script only
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('docs/index.html')
+          s = p.read_text(encoding='utf-8')
+          anchor = '<script src="waste-price-master.js?v=20260908-1200"></script>\n</body>'
+          insert = '<script src="waste-price-master.js?v=20260908-1200"></script>\n<script src="site-waste-cost-summary.js?v=20260908-1220"></script>\n</body>'
+          if 'site-waste-cost-summary.js' not in s:
+              if anchor not in s:
+                  raise SystemExit('Expected stable waste-price footer not found; refusing to modify')
+              s = s.replace(anchor, insert, 1)
+          if s.count('site-waste-cost-summary.js') != 1:
+              raise SystemExit('Unexpected site-waste summary script count')
+          if s.count('waste-price-master.js?v=20260908-1200') != 1:
+              raise SystemExit('Waste price script reference changed unexpectedly')
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Show minimal diff
+        run: git diff -- docs/index.html
+      - name: Commit
+        run: |
+          git config user.name "TOYA One updater"
+          git config user.email "actions@users.noreply.github.com"
+          git add docs/index.html
+          if git diff --cached --quiet; then
+            echo "No changes"
+            exit 0
+          fi
+          git commit -m "Safely link site waste cost summary"
+          git push
