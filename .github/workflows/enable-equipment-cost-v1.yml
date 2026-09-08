@@ -1,0 +1,45 @@
+name: Enable isolated equipment fuel-deduction costs
+on:
+  push:
+    paths:
+      - '.github/workflows/enable-equipment-cost-v1.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-enable-equipment-cost-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Build exactly the locally tested isolated module
+        run: |
+          python3 .github/scripts/enable-equipment-costs-v1.py
+          node --check docs/equipment-cost-admin.js
+          node - <<'JS'
+          const fs=require('fs'),vm=require('vm'),assert=require('assert');
+          const ctx={window:{},document:{readyState:'loading',addEventListener(){}}};
+          vm.createContext(ctx);vm.runInContext(fs.readFileSync('docs/equipment-cost-admin.js','utf8'),ctx);
+          const {calculate,derive}=ctx.window.ToyaEquipmentCostEngine;
+          const rate=[{code:'sk55',label:'SK55',daily_rate:15000},{code:'sk135_1',label:'SK135（1号機）',daily_rate:20000},{code:'sk135_2',label:'SK135（2号機）',daily_rate:20000}];
+          const report={id:'r',site_id:'s',updated_at:'t',report_data:{machines:[{name:'SK135（1号機）',hours:8}],fuels:[{asset:'SK135（1号機）',type:'軽油',amount:3000},{asset:'3tダンプ',type:'軽油',amount:2224}]}};
+          const d=derive([report],rate,{id:'s',name:'test'});
+          assert.equal(calculate(d.entries[1]).net,17000);
+          assert.equal(calculate({...d.entries[1],manualGross:0,manualFuel:0}).net,0);
+          assert.equal(calculate({...d.entries[1],recordedFuel:23364}).net,-3364);
+          assert.equal(d.entries[2].used,false);
+          assert.equal(derive([{...report,report_data:{machines:['SK55SR']}}],rate,{id:'s'}).entries[0].used,true);
+          console.log('Equipment regression checks passed');
+          JS
+      - name: Publish only the new module and its loader
+        run: |
+          if git diff --quiet -- docs/index.html && git ls-files --error-unmatch docs/equipment-cost-admin.js >/dev/null 2>&1; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/equipment-cost-admin.js docs/index.html
+          git commit -m 'Add tested daily equipment costs with fuel deduction; preserve auth, vehicles and reports'
+          git push
