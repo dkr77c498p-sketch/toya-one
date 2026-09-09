@@ -32,6 +32,28 @@
   if(sum>1440)return '同じ対象の1日の時間合計が24時間を超えています。';
   return '';
  }
+ // Keep an in-progress one-site report coherent when its main site changes.
+ // Multi-site allocations are never discarded, merged or silently reassigned.
+ function syncEntrySites(entry,siteNames){
+  const sites=[...new Map(arr(siteNames).filter(n=>String(n||'').trim()).map(n=>[norm(n),n])).values()];
+  const next={...entry,allocations:arr(entry.allocations).map(a=>({...a}))};
+  const entered=next.allocations.filter(a=>a.minutes!==0||a.clock);
+  if(sites.length===1&&(next.allocations.length===1||(next.allocations.length>1&&entered.length<=1))){
+   // The old UI appended zero placeholders after a main-site change. Remove only
+   // those empty rows; never sum or discard two real/unknown time allocations.
+   const keep=entered[0]||next.allocations.find(a=>norm(a.site)===norm(sites[0]))||next.allocations[0];
+   next.allocations=[{...keep,site:sites[0]}];
+  }else{
+   next.allocations.forEach(a=>{const match=sites.find(n=>norm(n)===norm(a.site));if(match)a.site=match;});
+   for(const site of sites)if(!next.allocations.some(a=>norm(a.site)===norm(site)))next.allocations.push({site,minutes:0});
+  }
+  if(next.kind==='dispatch'){
+   const choices=sites.filter(site=>next.allocations.some(a=>norm(a.site)===norm(site)));
+   if(sites.length===1&&next.allocations.length===1)next.travelSite=sites[0];
+   else next.travelSite=choices.find(site=>norm(site)===norm(next.travelSite))||'';
+  }
+  return next;
+ }
  function used(r,kind,name){const d=r.report_data||{};
   if(kind==='dispatch')return Number(d[norm(name)==='明建'?'meikenCount':'asahiCount'])>0;
   return arr(d[fields[kind]]).some(v=>key(label(v).replace(/\s*[×x]\s*\d+\s*[台本個]$/,''))===key(name));
@@ -137,7 +159,7 @@
   }
   return out;
  }
- const engine=Object.freeze({workMinutes,validateEntry,build,fuelRows,adjust,tools,attachments,key});
+ const engine=Object.freeze({workMinutes,validateEntry,syncEntrySites,build,fuelRows,adjust,tools,attachments,key});
  if(typeof module==='object'&&module.exports){module.exports=engine;return;}
  if(window.ToyaUsageHoursEngine)return;window.ToyaUsageHoursEngine=engine;
  const q=(s,r=document)=>r.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -172,12 +194,11 @@
    const id=rid(r.kind,r.label);
    if(!state[id])state[id]=makeEntry(r,d);
    else{
-    const e=state[id];e.quantity=r.quantity;
+    const e=state[id]=syncEntrySites(state[id],sites);e.quantity=r.quantity;
     if(e.fromReportTime){
-     if(sites.length===1)e.allocations=[{site:sites[0],minutes:['labor','dispatch'].includes(r.kind)?workMinutes(d.start,d.end,breakMinutes):r.minutes}];
-     else{e.allocations=e.allocations.map(a=>({...a,minutes:null}));e.fromReportTime=false;}
+     if(sites.length===1&&e.allocations.length===1)e.allocations[0].minutes=['labor','dispatch'].includes(r.kind)?workMinutes(d.start,d.end,breakMinutes):r.minutes;
+     else e.fromReportTime=false; // Retain entered minutes when adding a destination.
     }
-    for(const site of sites)if(!e.allocations.some(a=>a.site===site))e.allocations.push({site,minutes:0});
    }
   }
   return rows.map(r=>state[rid(r.kind,r.label)]);
@@ -215,7 +236,8 @@
   const total=e.allocations.reduce((n,a)=>n+(a.minutes||0),0);
   const message=validateEntry(e)||'合計 '+Math.floor(total/60)+'時間'+total%60+'分';
   return '<div class="uh-row" data-uh-id="'+esc(id)+'"><b>'+esc(friendly(e))+count+'</b>'+al+
-   (kind==='dispatch'?'<label>通勤費・高速代の計上先（1回だけ）<select data-uh-travel>'+e.allocations.map(a=>'<option '+(a.site===e.travelSite?'selected':'')+'>'+esc(a.site)+'</option>').join('')+'</select></label>':'')+
+   (kind==='dispatch'?(e.allocations.length===1?'<p class="note uh-travel-auto">通勤費・高速代：'+esc(e.travelSite)+'へ自動計上（1回だけ）</p>':
+    '<label>通勤費・高速代の計上先（1回だけ）<select data-uh-travel><option value="" '+(!e.travelSite?'selected':'')+'>計上先の現場を選択</option>'+e.allocations.filter(a=>availableSites().some(n=>norm(n)===norm(a.site))).map(a=>'<option value="'+esc(a.site)+'" '+(a.site===e.travelSite?'selected':'')+'>'+esc(a.site)+'</option>').join('')+'</select></label>'):'')+
    '<p class="note uh-note" role="status">'+esc(message)+'</p>'+
    (kind==='attachment'?'<p class="note">アタッチメント独自の時間です。重機の時間・燃料は重ねて加算しません。単価未登録なら金額のみ要確認です。</p>':'')+'</div>';
  }
@@ -304,6 +326,7 @@
    if(d.usageHours&&[...document.querySelectorAll('.uh-inline:not([hidden]) [data-uh-part]')].some(i=>!i.checkValidity())){alert('使用時間は整数、分は0〜59で入力してください。');return false;}
    for(const e of arr(d.usageHours?.entries)){
     if(e.allocations.some(a=>!availableSites().includes(a.site))){alert('移動先変更により時間欄の現場が一致しません。時間計算の設定から時間入力を確認してください。');return false;}
+    if(e.kind==='dispatch'&&!e.allocations.some(a=>norm(a.site)===norm(e.travelSite))){alert(e.label+'：作業時間欄の「通勤費・高速代の計上先」で現場を1つ選んでください。');return false;}
     const problem=validateEntry(e);if(problem&&!problem.includes('未入力')){alert(e.label+'：'+problem);return false;}
    }return true;
   };
