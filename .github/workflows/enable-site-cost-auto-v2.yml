@@ -1,0 +1,36 @@
+name: Enable automatic home costs v2
+on:
+  push:
+    paths:
+      - '.github/workflows/enable-site-cost-auto-v2.yml'
+      - 'scripts/enable-site-cost-auto-v2.py'
+      - 'scripts/site-cost-auto-v2-functions.js'
+      - 'scripts/site-cost-auto-v2.test.js'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-auto-site-costs-v2
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify baseline and run automatic costing tests
+        run: python3 scripts/enable-site-cost-auto-v2.py
+      - name: Publish only summary and cache version
+        run: |
+          if git diff --quiet -- docs/site-financial-summary.js docs/index.html; then exit 0; fi
+          python3 - <<'PY'
+          import subprocess
+          names=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert names == {'docs/site-financial-summary.js','docs/index.html'}, names
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/site-financial-summary.js docs/index.html
+          git commit -m 'Show automatic daily-report costs on home; preserve saved adjustments and all source data'
+          git push
