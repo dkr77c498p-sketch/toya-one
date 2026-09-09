@@ -1,6 +1,7 @@
 /* TOYA One site cost summary v2. Automatic estimates + saved overrides; read-only admin view. */
 (() => {
   'use strict';
+  const transportEngine = typeof module === 'object' && module.exports ? require('./equipment-transport.js') : window.ToyaTransportEngine;
   const list = value => Array.isArray(value) ? value : [];
   const normal = value => String(value || '').normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
   const assetKey = value => {
@@ -168,19 +169,19 @@
     const reports = uniqueReports(data.reports), own = reports.filter(r => r.site_id === site.id);
     const byDay = new Map(), warnings = new Set();
     const day = date => {
-      if (!byDay.has(date)) byDay.set(date, {date, labor: 0, vehicle: 0, equipment: 0, fuel: 0, waste: 0, other: 0, revenue: 0, pending: [], stale: [], unknown: 0});
+      if (!byDay.has(date)) byDay.set(date, {date, labor: 0, vehicle: 0, equipment: 0, fuel: 0, waste: 0, transport: 0, other: 0, revenue: 0, pending: [], stale: [], unknown: 0});
       return byDay.get(date);
     };
     const needed = {labor: new Set(), vehicle: new Set(), equipment: new Set()};
     const vehicleKeys = new Set(list(data.vehicleRates).map(r => assetKey(r.label)));
     const equipmentKeys = new Set(list(data.equipmentRates).map(r => assetKey(r.label)));
-    const expenses = {fuel: {value: 0, count: 0, missing: 0}, waste: {value: 0, count: 0, missing: 0}, other: {value: 0, count: 0, missing: 0}};
+    const expenses = {fuel: {value: 0, count: 0, missing: 0}, waste: {value: 0, count: 0, missing: 0}, transport: {value: 0, count: 0, missing: 0}, other: {value: 0, count: 0, missing: 0}};
     const addExpense = (kind, value, date) => {
       const e = expenses[kind]; e.count++;
       if (value === null) {e.missing++; day(date).unknown++;}
       else {e.value = round(e.value + value); day(date)[kind] = round(day(date)[kind] + value);}
     };
-    const writerCounts = new Map(), fuelFingerprints = new Map();
+    const writerCounts = new Map(), fuelFingerprints = new Map(), transportFingerprints = new Map();
     own.forEach(r => {
       const date = r.report_date, d = r.report_data || {};
       day(date); needed.labor.add(date);
@@ -203,6 +204,16 @@
         fuelFingerprints.set(fp, r.id);
       });
       list(d.items).forEach(x => {
+        if (String(x.name || '').startsWith('重機回送：')) {
+          if (!transportEngine) throw new Error('回送計算のプログラムを読み込めませんでした。再読み込みしてください。');
+          const c = transportEngine.calculate(x, data.transportRates);
+          addExpense('transport', c.value, date);
+          if (c.issue) warnings.add(date + '：' + c.issue);
+          const fp = JSON.stringify([date, normal(x.name), x.qty, x.unit]);
+          if (transportFingerprints.has(fp)) warnings.add(date + '：同じ会社・重機・距離・回数の回送が複数あります。別の運搬か二重記録か確認してください。自動削除はしません。');
+          transportFingerprints.set(fp, r.id);
+          return; // Never add the same transport expense to "other" too.
+        }
         const kind = x.isWaste || String(x.name || '').startsWith('産廃：') ? 'waste' : 'other';
         // `price` in the existing daily report is a row TOTAL, not a unit price.
         addExpense(kind, amount(x.price), date);
@@ -256,8 +267,8 @@
       missingDates.forEach(date => day(date).pending.push(kind));
       categories[kind] = {value: sum, gross, deduction, revenue, savedDays: stored.length, autoDates, reviewDates, missingDates, staleDates};
     });
-    const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({...d, subtotal: round(d.labor + d.vehicle + d.equipment + d.fuel + d.waste + d.other)}));
-    const subtotal = round(categories.labor.value + categories.vehicle.value + categories.equipment.value + expenses.fuel.value + expenses.waste.value + expenses.other.value);
+    const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({...d, subtotal: round(d.labor + d.vehicle + d.equipment + d.fuel + d.waste + d.transport + d.other)}));
+    const subtotal = round(categories.labor.value + categories.vehicle.value + categories.equipment.value + expenses.fuel.value + expenses.waste.value + expenses.transport.value + expenses.other.value);
     const partial = Object.values(categories).some(c => c.missingDates.length || c.staleDates.length) || Object.values(expenses).some(e => e.missing) || warnings.size > 0;
     return {categories, expenses, days, subtotal, partial, warnings: [...warnings], reportCount: own.length, hasData: byDay.size > 0};
   }
@@ -331,15 +342,15 @@
       const note = ['自動計算 ' + c.autoDates.length + '日', '保存額を優先 ' + c.savedDays + '日', c.reviewDates.length ? '一部費用の要確認 ' + c.reviewDates.length + '日' : '', c.staleDates.length ? '保存後の日報変更 ' + c.staleDates.length + '日（保存額を保持）' : ''].filter(Boolean).join(' ／ ');
       html += line(names[kind], value, note);
     });
-    [['fuel', '燃料・油脂（日報の記録分）'], ['waste', '処分費（日報の記録分）'], ['other', '材料・その他経費（日報）']].forEach(([kind, label]) => {
+    [['fuel', '燃料・油脂（日報の記録分）'], ['waste', '処分費（日報の記録分）'], ['transport', '重機回送費（自動計算・手入力）'], ['other', '材料・その他経費（日報）']].forEach(([kind, label]) => {
       const e = result.expenses[kind];
       html += line(label, e.missing === e.count && e.count ? '金額未入力' : e.count ? yen(e.value) : '記録なし', e.count + '件' + (e.missing ? ' ／ 金額未入力 ' + e.missing + '件は小計に含めていません。' : ''));
     });
     const pending = Object.entries(result.categories).filter(([, c]) => c.reviewDates.length).map(([kind, c]) => names[kind].replace('（燃料差引後）', '') + c.reviewDates.length + '日');
     if (pending.length) html += '<p class="sf-alert">一部費用の要確認：' + escape(pending.join('・')) + '。計算できる分はすでに小計へ反映済みです。通勤台数や現場間の配分など、不明な分だけ確認・調整してください。通常の日は費用保存なしで表示します。</p>';
     if (result.categories.labor.revenue) html += line('常用に行く分の売上（原価と別）', yen(result.categories.labor.revenue), 'この売上は上の原価小計へ加算・相殺していません。');
-    html += '<details><summary>計算方法・燃料の二重計上防止</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両費の燃料差引後＋重機費の燃料差引後＋日報の燃料・油脂＋処分費＋その他経費。差引前の日額に燃料を重ねて足しません。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両：差引前 ' + yen(result.categories.vehicle.gross) + ' − 差引燃料 ' + yen(result.categories.vehicle.deduction) + '。重機：差引前 ' + yen(result.categories.equipment.gross) + ' − 差引燃料 ' + yen(result.categories.equipment.deduction) + '。</p><p class="sf-note">自社は同じ日・現場の同じ人を1回だけ、車両・重機も1台につき日額1回で仮計算します。8〜12時間の時間帯が記録された日報は1日勤務として計算し、それ以外の勤務区分・半日・現場間配分は要確認とします。明建・朝日の未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。メモだけの金額、未入力の回送・リース・小型機械費などは自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
-    html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind].replace('（燃料差引後）', '') + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
+    html += '<details><summary>計算方法・燃料の二重計上防止</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両費の燃料差引後＋重機費の燃料差引後＋日報の燃料・油脂＋処分費＋重機回送費＋その他経費。差引前の日額に燃料を重ねて足しません。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両：差引前 ' + yen(result.categories.vehicle.gross) + ' − 差引燃料 ' + yen(result.categories.vehicle.deduction) + '。重機：差引前 ' + yen(result.categories.equipment.gross) + ' − 差引燃料 ' + yen(result.categories.equipment.deduction) + '。</p><p class="sf-note">自社は同じ日・現場の同じ人を1回だけ、車両・重機も1台につき日額1回で仮計算します。8〜12時間の時間帯が記録された日報は1日勤務として計算し、それ以外の勤務区分・半日・現場間配分は要確認とします。明建・朝日の未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。回送は日報の専用欄に追加した重機1台・片道回数×現行登録単価で計算し、手入力の合計額（0円も含む）を優先します。運搬会社へ支払う回送費から自社燃料代を差し引きません。メモだけの金額、未入力の回送・リース・小型機械費などは自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
+    html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind].replace('（燃料差引後）', '') + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
     if (result.warnings.length) html += '<details><summary>要確認の記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
     q('#sfResult').innerHTML = html;
     status(site.name + ' ／ ' + label + ' ／ 日報' + result.reportCount + '件を確認。更新 ' + new Date().toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}));
@@ -365,7 +376,8 @@
         ['equipmentSheets', 'equipment_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', site.id],
         ['laborRates', 'labor_rate_master', 'id,code,label,kind,day_rate,half_rate,city_per_vehicle,active', null, null],
         ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,active', null, null],
-        ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,active', null, null]
+        ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,active', null, null],
+        ['transportRates', 'equipment_transport_rate_master', 'id,carrier,machine_name,distance_label,unit_price,price_basis,active', null, null]
       ];
       const values = await Promise.all(definitions.map(([, table, fields, df, sid]) => readAll(table, fields, company, bounds, df, sid, ticket)));
       if (ticket !== token || owner !== mine || identity() !== mine || currentKey() !== k) return;
