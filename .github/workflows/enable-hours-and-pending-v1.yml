@@ -1,0 +1,32 @@
+name: Enable hourly usage and pending transport
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/enable-hours-and-pending-v1.yml
+      - scripts/enable-hours-and-pending-v1.py
+      - scripts/hourly-patch-part-*.b64
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-enable-hours-pending-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify baseline, generate tested modules, and run isolated regressions
+        run: python3 scripts/enable-hours-and-pending-v1.py
+      - name: Publish verified time and pending-price integrations
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/usage-hours.js docs/pending-transport-tools.js docs/site-financial-summary.js docs/labor-cost-admin.js docs/vehicle-cost-admin.js docs/equipment-cost-admin.js docs/index.html tests/hourly-usage-and-transport.cjs
+          if git diff --cached --quiet; then echo 'Already enabled'; exit 0; fi
+          git diff --cached --stat
+          git commit -m 'Enable minute-based resource costs and deferred pricing for other-machine transport'
+          git push origin HEAD:main
