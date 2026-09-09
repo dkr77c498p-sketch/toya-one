@@ -1,6 +1,7 @@
 /* TOYA One site cost summary v2. Automatic estimates + saved overrides; read-only admin view. */
 (() => {
   'use strict';
+  const travelEngine = typeof module === 'object' && module.exports ? require('./dispatch-travel.js') : window.ToyaDispatchTravelEngine;
   const transportEngine = typeof module === 'object' && module.exports ? require('./equipment-transport.js') : window.ToyaTransportEngine;
   const list = value => Array.isArray(value) ? value : [];
   const normal = value => String(value || '').normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
@@ -115,13 +116,16 @@
           note(label + 'が同日に複数現場へ記録されています。別班か現場移動か不明のため、この会社の人工・交通費は自動加算を保留しています。'); return;
         }
         const counts = [...new Set(working.map(x => x.n))];
-        if (counts.length !== 1 || !fullDay(working.map(x => x.r))) {note(label + 'の人数・勤務区分が一定でありません。この会社の人工は要確認です。'); return;}
         const rate = findRate(data.laborRates, r => r.kind === 'dispatch' && r.code === code, label); if (!rate) return;
-        const value = rateValue(rate, 'day_rate', label); if (value === null) return;
-        const cost = round(value * counts[0]);
-        entries.push({key: code, label, kind: 'dispatch', full: counts[0], half: 0, cost});
+        if (!travelEngine) throw new Error('交通費の計算処理を読み込めませんでした。再読み込みしてください。');
+        const travel = travelEngine.resolve(own, code, rate.city_per_vehicle);
+        travel.issues.forEach(issue => note(label + '：' + issue));
+        let laborCost = 0;
+        if (counts.length !== 1 || !fullDay(working.map(x => x.r))) note(label + 'の人数・勤務区分は要確認です。記録済みの交通費は勤務時間で半額にせず計上しています。');
+        else {const value = rateValue(rate, 'day_rate', label); if (value !== null) laborCost = round(value * counts[0]);}
+        const cost = round(laborCost + travel.value);
+        entries.push({key: code, label, kind: 'dispatch', full: counts[0], half: 0, cost, laborCost, travel:travel.travel, highway:travel.highway});
         sheet.cost_total = round(sheet.cost_total + cost);
-        note(label + 'の人件費は自動計算済み。通勤台数・市内/市外・高速代は日報に記録がないため含めていません（交通費等のみ要確認）。');
         if (working.length > 1) note(label + 'が同じ現場の複数日報にあります。同一班とみなし人数を1回だけ計算しています。別班なら調整してください。');
       });
       if (own.some(r => String(raw(r).otherWorker || '').trim())) note('その他の作業者は人数・単価を確定できないため含めていません。');
@@ -280,7 +284,7 @@
   const q = selector => document.querySelector(selector);
   const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const yen = n => Number(n).toLocaleString('ja-JP', {maximumFractionDigits: 2}) + '円';
-  const names = {labor: '人件費・常用費', vehicle: '車両費（燃料差引後）', equipment: '重機費（燃料差引後）'};
+  const names = {labor: '人件費・常用費（交通費込）', vehicle: '車両費（燃料差引後）', equipment: '重機費（燃料差引後）'};
   const identity = () => typeof cloudProfile !== 'undefined' && cloudProfile?.role === 'admin' && cloudProfile.active === true && cloudProfile.company_id && typeof cloudClient !== 'undefined' && cloudClient ? cloudProfile.id + ':' + cloudProfile.company_id : '';
   const visible = () => !!q('#homePage')?.classList.contains('active');
   const todayLocal = () => typeof today === 'function' ? today() : new Date().toLocaleDateString('sv-SE');
@@ -349,7 +353,7 @@
     const pending = Object.entries(result.categories).filter(([, c]) => c.reviewDates.length).map(([kind, c]) => names[kind].replace('（燃料差引後）', '') + c.reviewDates.length + '日');
     if (pending.length) html += '<p class="sf-alert">一部費用の要確認：' + escape(pending.join('・')) + '。計算できる分はすでに小計へ反映済みです。通勤台数や現場間の配分など、不明な分だけ確認・調整してください。通常の日は費用保存なしで表示します。</p>';
     if (result.categories.labor.revenue) html += line('常用に行く分の売上（原価と別）', yen(result.categories.labor.revenue), 'この売上は上の原価小計へ加算・相殺していません。');
-    html += '<details><summary>計算方法・燃料の二重計上防止</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両費の燃料差引後＋重機費の燃料差引後＋日報の燃料・油脂＋処分費＋重機回送費＋その他経費。差引前の日額に燃料を重ねて足しません。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両：差引前 ' + yen(result.categories.vehicle.gross) + ' − 差引燃料 ' + yen(result.categories.vehicle.deduction) + '。重機：差引前 ' + yen(result.categories.equipment.gross) + ' − 差引燃料 ' + yen(result.categories.equipment.deduction) + '。</p><p class="sf-note">自社は同じ日・現場の同じ人を1回だけ、車両・重機も1台につき日額1回で仮計算します。8〜12時間の時間帯が記録された日報は1日勤務として計算し、それ以外の勤務区分・半日・現場間配分は要確認とします。明建・朝日の未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。回送は日報の専用欄に追加した重機1台・片道回数×現行登録単価で計算し、手入力の合計額（0円も含む）を優先します。運搬会社へ支払う回送費から自社燃料代を差し引きません。メモだけの金額、未入力の回送・リース・小型機械費などは自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
+    html += '<details><summary>計算方法・燃料の二重計上防止</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両費の燃料差引後＋重機費の燃料差引後＋日報の燃料・油脂＋処分費＋重機回送費＋その他経費。差引前の日額に燃料を重ねて足しません。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両：差引前 ' + yen(result.categories.vehicle.gross) + ' − 差引燃料 ' + yen(result.categories.vehicle.deduction) + '。重機：差引前 ' + yen(result.categories.equipment.gross) + ' − 差引燃料 ' + yen(result.categories.equipment.deduction) + '。</p><p class="sf-note">自社は同じ日・現場の同じ人を1回だけ、車両・重機も1台につき日額1回で仮計算します。8〜12時間の時間帯が記録された日報は1日勤務として計算し、それ以外の勤務区分・半日・現場間配分は要確認とします。明建・朝日の通勤費・高速代は日報の専用欄から人件費内へ1回だけ加算します。市内は台数×登録単価、市外・特別料金は入力合計額です。半日でも通勤費は半額にしません。未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。回送は日報の専用欄に追加した重機1台・片道回数×現行登録単価で計算し、手入力の合計額（0円も含む）を優先します。運搬会社へ支払う回送費から自社燃料代を差し引きません。メモだけの金額、未入力の回送・リース・小型機械費などは自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
     html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind].replace('（燃料差引後）', '') + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
     if (result.warnings.length) html += '<details><summary>要確認の記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
     q('#sfResult').innerHTML = html;

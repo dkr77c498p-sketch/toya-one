@@ -1,6 +1,7 @@
 /* TOYA One: admin-only labor costing. Simple tap UI v1.1; auth, calculations and persistence unchanged. */
 (() => {
   'use strict';
+  const travelEngine = window.ToyaDispatchTravelEngine;
   if (window.__toyaLaborAdminV1) return;
   window.__toyaLaborAdminV1 = true;
   const q = (s, root = document) => root.querySelector(s);
@@ -34,8 +35,19 @@
       meiken = Math.max(meiken, num(d.meikenCount));
       asahi = Math.max(asahi, num(d.asahiCount));
     });
-    return rates.filter(r => r.active !== false).map(r => newEntry(r,
-      r.kind === 'own' && names.has(norm(r.label)) ? 1 : r.code === 'meiken' ? meiken : r.code === 'asahi' ? asahi : 0));
+    return rates.filter(r => r.active !== false).map(rate => {
+      const r = newEntry(rate, rate.kind === 'own' && names.has(norm(rate.label)) ? 1 : rate.code === 'meiken' ? meiken : rate.code === 'asahi' ? asahi : 0);
+      if (rate.kind === 'dispatch' && ['meiken','asahi'].includes(rate.code) && travelEngine) {
+        const travel = travelEngine.resolve(reports, rate.code, rate.city_per_vehicle);
+        if (travel.entry && !travel.conflict) {
+          r.area = travel.entry.area || 'city'; r.vehicles = travel.entry.vehicles ?? 0;
+          r.highway = travel.highway ?? 0; r.manualTravel = travel.entry.manualTravel;
+          r.memo = travel.entry.memo;
+        }
+        r.travelImportNote = travel.issues.join(' ');
+      }
+      return r;
+    });
   }
   // Pure calculations exposed for regression tests; no account or rate data is exposed here.
   window.ToyaLaborEngine = Object.freeze({calculate,newEntry,fromReports});
@@ -241,7 +253,7 @@
       sheet=saved.data;selectedDate=date;selectedSite=site;
       if(sheet&&!rebuild){rows=structuredClone(sheet.entries);sources=sheet.source_reports||[];dirty=false;msg('保存済みの金額を読み込みました。手入力と当時の単価を保持しています。');}
       else{rows=fromReports(reports,rates);sources=reports.map(r=>({id:r.id,updated_at:r.updated_at}));dirty=true;
-        msg(`日報${reports.length}件から人数を読み込みました。全日・半日、通勤台数、市外交通費、高速代を確認してください。${reports.length>1?' 同じ人は1人、明建・朝日は最大人数で仮入力しています。別班の場合は人数を修正してください。':''}${reports.some(r=>r.report_data?.siteMoves?.length)?' 現場移動あり：各現場の人工配分と交通費の重複を確認してください。':''}${reports.some(r=>r.report_data?.otherWorker)?' その他の作業者は自動算入していません。単価設定から追加してください。':''}`);
+        msg(`日報${reports.length}件から人数・記録済みの通勤台数・交通費を読み込みました。${rows.filter(r=>r.travelImportNote).map(r=>r.label+'：'+r.travelImportNote).join(' ')} 全日・半日、通勤台数、市外交通費、高速代を確認してください。${reports.length>1?' 同じ人は1人、明建・朝日は最大人数で仮入力しています。別班の場合は人数を修正してください。':''}${reports.some(r=>r.report_data?.siteMoves?.length)?' 現場移動あり：各現場の人工配分と交通費の重複を確認してください。':''}${reports.some(r=>r.report_data?.otherWorker)?' その他の作業者は自動算入していません。単価設定から追加してください。':''}`);
       }
       renderEntries();
     }catch(e){msg('読込エラー：'+e.message,true);}finally{setBusy(false);}
