@@ -13,7 +13,7 @@
   const optional = v => v === '' || v == null ? null : Number(v);
   const round = n => Math.round((n + Number.EPSILON) * 100) / 100;
   function calculate(r) {
-    const autoLabor = round(num(r.full) * num(r.dayRate) + num(r.half) * num(r.halfRate));
+    const autoLabor = round(Number.isFinite(r.hourlyMinutes)?r.hourlyMinutes*(r.hourlyQuantity||1)*num(r.dayRate)/480:num(r.full) * num(r.dayRate) + num(r.half) * num(r.halfRate));
     const manualLabor = optional(r.manualLabor), manualTravel = optional(r.manualTravel);
     const autoTravel = r.area === 'outside' ? null : round(num(r.vehicles) * num(r.cityRate));
     const labor = manualLabor === null ? autoLabor : manualLabor;
@@ -48,6 +48,22 @@
       }
       return r;
     });
+  }
+  let hoursImportBlocked='';
+  function fromTimedReports(all,rates,site){
+    hoursImportBlocked='';const own=all.filter(r=>r.site_id===site.id),base=fromReports(own,rates);
+    if(!window.ToyaUsageHoursEngine||!all.some(r=>r.report_data?.usageHours?.version===1))return base;
+    const legacy={sheet:{entries:base.map(r=>({...r,cost:calculate(r).total}))},issues:[]};
+    const data={reports:all,sites:sites,laborRates:rates,laborSheets:[],vehicleSheets:[],equipmentSheets:[]};
+    const result=window.ToyaUsageHoursEngine.adjust('labor',all[0]?.report_date,data,site,legacy,()=>0,travelEngine);
+    hoursImportBlocked=(result.pendingResources||[]).join('・');
+    const mapped=base.map(r=>{
+      const e=result.sheet.entries.find(e=>e.key===r.key);
+      if(!e)return {...r,full:0,half:0,manualLabor:0,manualTravel:0,highway:0,travelImportNote:result.issues.join(' ')};
+      if(!Number.isFinite(e.minutes))return r;
+      return {...r,full:e.minutes>0?(e.quantity||1):0,half:0,hourlyMinutes:e.minutes,hourlyQuantity:e.quantity||1,
+        manualLabor:e.laborCost,manualTravel:e.travel??0,highway:e.highway??0,travelImportNote:result.issues.join(' ')};
+    });return mapped;
   }
   // Pure calculations exposed for regression tests; no account or rate data is exposed here.
   window.ToyaLaborEngine = Object.freeze({calculate,newEntry,fromReports});
@@ -155,12 +171,12 @@
   function entryHTML(r,i){
     if(r.kind==='own')return `<div class="row lc-entry lc-person" data-lc-index="${i}">
       <div class="lc-row-head"><b>${esc(r.label)}</b><span data-lc-row-total></span></div>
-      <div class="lc-duty" role="group" aria-label="${esc(r.label)}の勤務">${[['none','なし'],['half','半日'],['full','1日']].map(([key,label])=>`<button type="button" data-lc-duty="${key}" aria-pressed="false">${label}</button>`).join('')}</div>
+      <p class="note">${Number.isFinite(r.hourlyMinutes)?`日報の実働：${r.hourlyMinutes/60}時間（時間変更は日報で行います）`:""}</p><div class="lc-duty" style="${Number.isFinite(r.hourlyMinutes)?"display:none":""}" role="group" aria-label="${esc(r.label)}の勤務">${[['none','なし'],['half','半日'],['full','1日']].map(([key,label])=>`<button type="button" data-lc-duty="${key}" aria-pressed="false">${label}</button>`).join('')}</div>
       ${adjustment(i,r)}</div>`;
     return `<details class="row lc-entry lc-company" data-lc-index="${i}" ${calculate(r).active?'open':''}>
       <summary>${esc(r.label)} <span data-lc-row-total></span></summary>
       <div class="lc-mini-note">1日 ${yen(r.dayRate)}／半日 ${yen(r.halfRate)}${r.kind==='outgoing'?'（売上）':''}</div>
-      <div class="lc-count-grid">${counter(i,'full',r.full,'1日の人数（人）')}${counter(i,'half',r.half,'半日の人数（人）')}</div>
+      <p class="note">${Number.isFinite(r.hourlyMinutes)?`日報の実働：1人${r.hourlyMinutes/60}時間 × ${r.hourlyQuantity||1}人`:""}</p><div class="lc-count-grid" style="${Number.isFinite(r.hourlyMinutes)?"display:none":""}">${counter(i,'full',r.full,'1日の人数（人）')}${counter(i,'half',r.half,'半日の人数（人）')}</div>
       <div class="grid2">${counter(i,'vehicles',r.vehicles,'通勤台数（台）')}${travelArea(r)}</div>
       ${r.kind==='dispatch'?`<div class="lc-mini-note">市内通勤：1台 ${yen(r.cityRate)}。半日も同額。</div>`:'<div class="lc-mini-note">市外交通費・高速代は別途入力。</div>'}
       ${adjustment(i,r)}</details>`;
@@ -169,7 +185,7 @@
     if(!sameOwner())return;
     const section=(list,title)=>list.length?`<h3 class="lc-group-title">${title}</h3>`+list.map(({r,i})=>entryHTML(r,i)).join(''):'';
     const all=rows.map((r,i)=>({r,i}));
-    const own=all.filter(x=>x.r.kind==='own'),dispatch=all.filter(x=>x.r.kind==='dispatch'),support=all.filter(x=>!['own','dispatch'].includes(x.r.kind));
+    hoursImportBlocked='';const own=all.filter(x=>x.r.kind==='own'),dispatch=all.filter(x=>x.r.kind==='dispatch'),support=all.filter(x=>!['own','dispatch'].includes(x.r.kind));
     q('#lcBody').innerHTML=section(own,'自社：勤務を選ぶだけ')+section(dispatch,'明建・朝日など：人数と通勤台数')+
       (support.length?`<details class="lc-support" ${support.some(x=>calculate(x.r).active)?'open':''}><summary>常用・応援（必要な日だけ）</summary><p class="note">来てもらう分は費用、応援に行く分は売上。自社の人件費は上の自社欄に残します。</p>${support.map(({r,i})=>entryHTML(r,i)).join('')}</details>`:'');
     q('#lcTotals').hidden=false;q('#lcSave').hidden=false;renderTotals();
@@ -248,17 +264,18 @@
     try{
       const saved=await cloudClient.from('labor_cost_sheets').select('*').eq('company_id',cloudProfile.company_id).eq('work_date',date).eq('site_id',site).maybeSingle();if(saved.error)throw saved.error;
       let reports=[];
-      if(rebuild||!saved.data){const rs=await cloudClient.from('daily_reports').select('id,report_data,updated_at,recorder_name').eq('company_id',cloudProfile.company_id).eq('report_date',date).eq('site_id',site);if(rs.error)throw rs.error;reports=rs.data||[];}
+      if(rebuild||!saved.data){const rs=await cloudClient.from('daily_reports').select('id,site_id,report_date,report_data,updated_at,recorder_name').eq('company_id',cloudProfile.company_id).eq('report_date',date);if(rs.error)throw rs.error;reports=rs.data||[];}
       if(token!==request||mine!==owner||!sameOwner())return;
       sheet=saved.data;selectedDate=date;selectedSite=site;
-      if(sheet&&!rebuild){rows=structuredClone(sheet.entries);sources=sheet.source_reports||[];dirty=false;msg('保存済みの金額を読み込みました。手入力と当時の単価を保持しています。');}
-      else{rows=fromReports(reports,rates);sources=reports.map(r=>({id:r.id,updated_at:r.updated_at}));dirty=true;
+      if(sheet&&!rebuild){hoursImportBlocked='';rows=structuredClone(sheet.entries);sources=sheet.source_reports||[];dirty=false;msg('保存済みの金額を読み込みました。手入力と当時の単価を保持しています。');}
+      else{rows=fromTimedReports(reports,rates,sites.find(s=>s.id===site));sources=(rows.some(r=>Number.isFinite(r.hourlyMinutes))?reports:reports.filter(r=>r.site_id===site)).map(r=>({id:r.id,updated_at:r.updated_at}));dirty=true;
         msg(`日報${reports.length}件から人数・記録済みの通勤台数・交通費を読み込みました。${rows.filter(r=>r.travelImportNote).map(r=>r.label+'：'+r.travelImportNote).join(' ')} 全日・半日、通勤台数、市外交通費、高速代を確認してください。${reports.length>1?' 同じ人は1人、明建・朝日は最大人数で仮入力しています。別班の場合は人数を修正してください。':''}${reports.some(r=>r.report_data?.siteMoves?.length)?' 現場移動あり：各現場の人工配分と交通費の重複を確認してください。':''}${reports.some(r=>r.report_data?.otherWorker)?' その他の作業者は自動算入していません。単価設定から追加してください。':''}`);
       }
       renderEntries();
     }catch(e){msg('読込エラー：'+e.message,true);}finally{setBusy(false);}
   }
   function validateRows(){
+    if(hoursImportBlocked)return '時間・単価等が未確認：'+hoursImportBlocked+'。日報の入力を確認してから保存してください。';
     for(const r of rows){
       for(const k of ['full','half','vehicles','highway','extra','dayRate','halfRate','cityRate'])if(!Number.isFinite(num(r[k]))||num(r[k])<0)return '人数・金額は0以上の数値で入力してください。';
       for(const k of ['full','half','vehicles'])if(!Number.isInteger(num(r[k])))return '人数と通勤台数は整数で入力してください。';
