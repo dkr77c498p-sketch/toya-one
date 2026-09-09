@@ -1,4 +1,4 @@
-/* TOYA One site cost summary v1. Read-only admin view; no auth, report or cost writes. */
+/* TOYA One site cost summary v2. Automatic estimates + saved overrides; read-only admin view. */
 (() => {
   'use strict';
   const list = value => Array.isArray(value) ? value : [];
@@ -54,7 +54,116 @@
     return {start: value + '-01', end: new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10)};
   }
 
-  /** Calculate only known amounts, retaining missing and stale coverage separately. */
+  // Read-only estimates. These objects are NEVER written to cost tables or daily reports.
+  // Explicitly saved sheets (including manual zero amounts) always take priority.
+  function automaticSheet(kind, date, data, site, reports) {
+    const all = reports.filter(r => r.report_date === date);
+    const own = all.filter(r => r.site_id === site.id);
+    const issues = new Set(), entries = [];
+    const note = text => issues.add(date + '：' + text);
+    const raw = r => r.report_data || {};
+    const hasMoves = r => list(raw(r).siteMoves).length > 0;
+    const named = v => typeof v === 'string' ? v : String(v?.name || '');
+    const others = all.filter(r => r.site_id !== site.id);
+    const incoming = others.flatMap(r => list(raw(r).siteMoves).filter(m => normal(m?.site) === normal(site.name)));
+    const rateValue = (r, field, label) => {
+      const n = amount(r?.[field]);
+      if (n === null || n < 0) {note(label + 'の単価が未登録です。その分は含めていません。'); return null;}
+      return n;
+    };
+    const findRate = (rates, match, label) => {
+      const found = list(rates).filter(r => r.active !== false && match(r));
+      if (found.length !== 1) {note(label + 'の単価を一意に確認できません。その分は含めていません。'); return null;}
+      return found[0];
+    };
+    // A short or unspecified shift cannot establish each person's half/full-day agreement.
+    const fullDay = rs => {
+      const spans = rs.map(r => {
+        const d = raw(r), parse = t => /^\d{2}:\d{2}(?::\d{2})?$/.test(String(t || '')) ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : NaN;
+        return (parse(d.end) - parse(d.start)) / 60;
+      });
+      return spans.length > 0 && spans.every(h => Number.isFinite(h) && h >= 8 && h <= 12);
+    };
+    const sheet = {id: 'automatic:' + kind + ':' + date, site_id: site.id, work_date: date,
+      source_reports: (kind === 'labor' ? own : all).map(r => ({id: r.id, updated_at: r.updated_at})),
+      entries, cost_total: 0, revenue_total: 0, gross_total: 0, fuel_deduction_total: 0, net_total: 0,
+      review_warnings: [], _automatic: true};
+    if (kind === 'labor') {
+      const workers = new Map();
+      own.forEach(r => list(raw(r).workers).forEach(w => {
+        const label = named(w), k = normal(label); if (!k) return;
+        if (!workers.has(k)) workers.set(k, {label, reports: []});
+        workers.get(k).reports.push(r);
+      }));
+      workers.forEach(({label, reports: rs}, k) => {
+        if (rs.some(hasMoves) || others.some(r => list(raw(r).workers).some(w => normal(named(w)) === k))) {
+          note(label + 'の現場間の人工配分が必要です。この人の自動加算は保留しています。'); return;
+        }
+        if (!fullDay(rs)) {note(label + 'は短時間または勤務時間が未記録です。半日・1日の確認分だけ登録管理で調整してください。'); return;}
+        const rate = findRate(data.laborRates, r => r.kind === 'own' && normal(r.label) === k, label);
+        if (!rate) return;
+        const cost = rateValue(rate, 'day_rate', label); if (cost === null) return;
+        entries.push({key: rate.code, label, kind: 'own', full: 1, half: 0, cost});
+        sheet.cost_total = round(sheet.cost_total + cost);
+      });
+      [['meiken', 'meikenCount', '明建'], ['asahi', 'asahiCount', '朝日']].forEach(([code, field, label]) => {
+        const observed = own.map(r => ({r, n: amount(raw(r)[field])}));
+        if (observed.some(x => x.n !== null && (!Number.isInteger(x.n) || x.n < 0))) {note(label + 'の人数を確認してください。'); return;}
+        const working = observed.filter(x => x.n > 0); if (!working.length) return;
+        if (working.some(x => hasMoves(x.r)) || others.some(r => amount(raw(r)[field]) > 0)) {
+          note(label + 'が同日に複数現場へ記録されています。別班か現場移動か不明のため、この会社の人工・交通費は自動加算を保留しています。'); return;
+        }
+        const counts = [...new Set(working.map(x => x.n))];
+        if (counts.length !== 1 || !fullDay(working.map(x => x.r))) {note(label + 'の人数・勤務区分が一定でありません。この会社の人工は要確認です。'); return;}
+        const rate = findRate(data.laborRates, r => r.kind === 'dispatch' && r.code === code, label); if (!rate) return;
+        const value = rateValue(rate, 'day_rate', label); if (value === null) return;
+        const cost = round(value * counts[0]);
+        entries.push({key: code, label, kind: 'dispatch', full: counts[0], half: 0, cost});
+        sheet.cost_total = round(sheet.cost_total + cost);
+        note(label + 'の人件費は自動計算済み。通勤台数・市内/市外・高速代は日報に記録がないため含めていません（交通費等のみ要確認）。');
+        if (working.length > 1) note(label + 'が同じ現場の複数日報にあります。同一班とみなし人数を1回だけ計算しています。別班なら調整してください。');
+      });
+      if (own.some(r => String(raw(r).otherWorker || '').trim())) note('その他の作業者は人数・単価を確定できないため含めていません。');
+      if (own.some(r => (amount(raw(r).overtime) || 0) > 0)) note('残業の割増単価が未設定です。残業代は含めていません。');
+      if (incoming.length) note('移動先としての作業があります。移動者と人工配分が未確認のため、移動分だけ自動加算を保留しています。');
+      if (!workers.size && own.length && !entries.length) note('作業者の記録を確認してください。記入者を作業者として勝手に加算しません。');
+    } else {
+      const field = kind === 'vehicle' ? 'vehicles' : 'machines';
+      const rates = kind === 'vehicle' ? data.vehicleRates : data.equipmentRates;
+      const used = new Map();
+      own.forEach(r => list(raw(r)[field]).forEach(v => {
+        const label = named(v), k = assetKey(label); if (!k) return;
+        if (!used.has(k)) used.set(k, {label, reports: []});
+        used.get(k).reports.push(r);
+      }));
+      used.forEach(({label, reports: rs}, k) => {
+        const moved = kind === 'vehicle' && rs.some(r => list(raw(r).siteMoves).some(m => assetKey(m.vehicle) === k));
+        const otherUse = others.some(r => list(raw(r)[field]).some(v => assetKey(v) === k)) || (kind === 'vehicle' && incoming.some(m => assetKey(m.vehicle) === k));
+        if (moved || otherUse) {note(label + 'は同日に複数現場の使用・移動があります。日額を重複加算せず、配分するまで自動加算を保留しています。'); return;}
+        const rate = findRate(rates, r => assetKey(r.label) === k, label); if (!rate) return;
+        const gross = rateValue(rate, 'daily_rate', label); if (gross === null) return;
+        let fuel = 0, fuelCount = 0;
+        own.forEach(r => list(raw(r).fuels).filter(f => ['軽油', 'ガソリン'].includes(f.type) && assetKey(f.asset) === k).forEach(f => {
+          const n = fuelAmount(f);
+          if (n === null || n < 0) {note(label + 'の給油額が未入力です。該当する燃料差引額は未計上です。'); return;}
+          fuel = round(fuel + n); fuelCount++;
+        }));
+        entries.push({code: rate.code, label: rate.label, used: true, dayRate: gross,
+          recordedFuel: fuel, fuelCount, manualGross: null, manualFuel: null, memo: ''});
+        sheet.gross_total = round(sheet.gross_total + gross);
+        sheet.fuel_deduction_total = round(sheet.fuel_deduction_total + fuel);
+        if (fuel > gross) note(label + 'は記録した給油額が日額を上回ります。差引額はマイナスのまま計算し、燃料費を1回だけ別計上しています。まとめ給油の配分は必要時に調整してください。');
+      });
+      own.forEach(r => list(raw(r).fuels).forEach(f => {
+        if (!used.has(assetKey(f.asset)) && list(rates).some(rate => assetKey(rate.label) === assetKey(f.asset))) note(String(f.asset) + 'は給油記録だけで使用記録がありません。日額は追加せず、燃料欄だけ反映しています。');
+      }));
+      if (kind === 'vehicle' && incoming.some(m => m.vehicle)) note('移動先の車両代・燃料の配分が未確認です。移動元と重複しないよう、移動分だけ自動加算を保留しています。');
+      sheet.net_total = round(sheet.gross_total - sheet.fuel_deduction_total);
+    }
+    return {sheet, issues: [...issues]};
+  }
+
+  /** Saved adjustments take priority; otherwise derive display-only daily estimates. */
   function analyze(data, site) {
     const reports = uniqueReports(data.reports), own = reports.filter(r => r.site_id === site.id);
     const byDay = new Map(), warnings = new Set();
@@ -113,7 +222,14 @@
     const categories = {};
     const configs = [['labor', 'laborSheets'], ['vehicle', 'vehicleSheets'], ['equipment', 'equipmentSheets']];
     configs.forEach(([kind, source]) => {
-      const saved = list(data[source]).filter(s => s.site_id === site.id), dateMap = new Map();
+      const stored = list(data[source]).filter(s => s.site_id === site.id);
+      const autoDates = [], reviewDates = [], saved = [...stored], dateMap = new Map();
+      [...needed[kind]].sort().forEach(date => {
+        if (stored.some(s => s.work_date === date)) return;
+        const derived = automaticSheet(kind, date, data, site, reports);
+        saved.push(derived.sheet); autoDates.push(date);
+        if (derived.issues.length) {reviewDates.push(date); derived.issues.forEach(w => warnings.add(w));}
+      });
       let sum = 0, gross = 0, deduction = 0, revenue = 0;
       const staleDates = [];
       saved.forEach(s => {
@@ -138,14 +254,14 @@
       });
       const missingDates = [...needed[kind]].filter(date => !dateMap.has(date)).sort();
       missingDates.forEach(date => day(date).pending.push(kind));
-      categories[kind] = {value: sum, gross, deduction, revenue, savedDays: saved.length, missingDates, staleDates};
+      categories[kind] = {value: sum, gross, deduction, revenue, savedDays: stored.length, autoDates, reviewDates, missingDates, staleDates};
     });
     const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({...d, subtotal: round(d.labor + d.vehicle + d.equipment + d.fuel + d.waste + d.other)}));
     const subtotal = round(categories.labor.value + categories.vehicle.value + categories.equipment.value + expenses.fuel.value + expenses.waste.value + expenses.other.value);
     const partial = Object.values(categories).some(c => c.missingDates.length || c.staleDates.length) || Object.values(expenses).some(e => e.missing) || warnings.size > 0;
     return {categories, expenses, days, subtotal, partial, warnings: [...warnings], reportCount: own.length, hasData: byDay.size > 0};
   }
-  const engine = Object.freeze({analyze, periodBounds, amount, fuelAmount, signature: sig});
+  const engine = Object.freeze({analyze, automaticSheet, periodBounds, amount, fuelAmount, signature: sig});
   if (typeof module === 'object' && module.exports) {module.exports = engine; return;}
   if (window.__toyaSiteFinancialSummaryV1) return;
   window.__toyaSiteFinancialSummaryV1 = true;
@@ -177,7 +293,7 @@
     }
     if (!q('#sfPanel')) {
       const panel = document.createElement('div'); panel.id = 'sfPanel';
-      panel.innerHTML = '<h3>現場原価・費用の集計</h3><div class="sf-period"><div><label for="sfMode">集計期間</label><select id="sfMode"><option value="month">月ごと</option><option value="day">1日だけ</option><option value="all">全期間</option></select></div><div><label id="sfPeriodLabel" for="sfMonth">対象月</label><input id="sfMonth" type="month"><input id="sfDay" type="date" hidden></div></div><button id="sfRefresh" class="btn dark sf-button" type="button">集計を更新</button><p id="sfStatus" class="note" role="status" aria-live="polite">現場を選んでください。</p><div id="sfResult"></div>';
+      panel.innerHTML = '<h3>現場原価・自動計算</h3><p class="sf-note">日報から自動計算します。日ごとの費用保存は不要です。保存済みの調整額は優先し、未記録・配分不明の費用だけ要確認にします。</p><div class="sf-period"><div><label for="sfMode">集計期間</label><select id="sfMode"><option value="month">月ごと</option><option value="day">1日だけ</option><option value="all">全期間</option></select></div><div><label id="sfPeriodLabel" for="sfMonth">対象月</label><input id="sfMonth" type="month"><input id="sfDay" type="date" hidden></div></div><button id="sfRefresh" class="btn dark sf-button" type="button">集計を更新</button><p id="sfStatus" class="note" role="status" aria-live="polite">現場を選んでください。</p><div id="sfResult"></div>';
       const body = q('#siteSummaryBody'); card.insertBefore(panel, q('#sfLegacyDetails') || (body?.parentElement === card ? body : null));
       q('#sfMonth').value = todayLocal().slice(0, 7); q('#sfDay').value = todayLocal();
       q('#sfMode').addEventListener('change', () => {const mode = q('#sfMode').value; q('#sfMonth').hidden = mode !== 'month'; q('#sfDay').hidden = mode !== 'day'; q('#sfPeriodLabel').hidden = mode === 'all'; q('#sfPeriodLabel').textContent = mode === 'day' ? '作業日' : '対象月'; q('#sfPeriodLabel').htmlFor = mode === 'day' ? 'sfDay' : 'sfMonth'; invalidate();});
@@ -209,21 +325,21 @@
   function line(label, value, note) {return '<div class="sf-line"><div class="sf-line-head"><span>' + escape(label) + '</span><span>' + escape(value) + '</span></div><div class="sf-note">' + escape(note) + '</div></div>';}
   function render(result, site, label) {
     if (!result.hasData) {status(site.name + ' ／ ' + label + ' ／ 記録なし'); q('#sfResult').innerHTML = '<div class="sf-alert">この期間の日報・保存済み費用はありません。実際に費用が0円だったという意味ではありません。</div>'; return;}
-    let html = '<div class="sf-total"><div>' + (result.partial ? '確認できる分の原価小計' : '保存・記録済み原価小計') + '</div><strong>' + yen(result.subtotal) + '</strong><small>' + (result.partial ? '未確定・要確認の項目があります。全費用の確定額ではありません。' : '選んだ期間の保存済み費用と日報の入力額です。未記入の費用は含みません。') + '</small></div>';
+    let html = '<div class="sf-total"><div>' + '自動計算の原価小計（概算）' + '</div><strong>' + yen(result.subtotal) + '</strong><small>' + (result.partial ? '入力済みの人数・使用車両・重機を自動計算済み。通勤台数や現場移動などの要確認分・未入力費用は含まれない場合があります。' : '日報×登録単価と入力済み費用の合計です。保存済みの調整額を優先しています。未記入の費用は含みません。') + '</small></div>';
     Object.entries(result.categories).forEach(([kind, c]) => {
-      const value = !c.savedDays && c.missingDates.length ? '未確定' : !c.savedDays ? '使用・費用記録なし' : yen(c.value);
-      const note = ['保存済み ' + c.savedDays + '日', c.missingDates.length ? '未確定 ' + c.missingDates.length + '日' : '', c.staleDates.length ? '日報変更後の再確認 ' + c.staleDates.length + '日' : ''].filter(Boolean).join(' ／ ');
+      const value = !c.savedDays && !c.autoDates.length ? '使用・費用記録なし' : yen(c.value) + (c.reviewDates.length ? '［要確認］' : '');
+      const note = ['自動計算 ' + c.autoDates.length + '日', '保存額を優先 ' + c.savedDays + '日', c.reviewDates.length ? '一部費用の要確認 ' + c.reviewDates.length + '日' : '', c.staleDates.length ? '保存後の日報変更 ' + c.staleDates.length + '日（保存額を保持）' : ''].filter(Boolean).join(' ／ ');
       html += line(names[kind], value, note);
     });
     [['fuel', '燃料・油脂（日報の記録分）'], ['waste', '処分費（日報の記録分）'], ['other', '材料・その他経費（日報）']].forEach(([kind, label]) => {
       const e = result.expenses[kind];
       html += line(label, e.missing === e.count && e.count ? '金額未入力' : e.count ? yen(e.value) : '記録なし', e.count + '件' + (e.missing ? ' ／ 金額未入力 ' + e.missing + '件は小計に含めていません。' : ''));
     });
-    const pending = Object.entries(result.categories).filter(([, c]) => c.missingDates.length).map(([kind, c]) => names[kind].replace('（燃料差引後）', '') + c.missingDates.length + '日');
-    if (pending.length) html += '<p class="sf-alert">未確定：' + escape(pending.join('・')) + '。管理者の費用確認画面で保存すると反映します。未確定分を0円で確定したり、日報を書き換えたりはしません。</p>';
+    const pending = Object.entries(result.categories).filter(([, c]) => c.reviewDates.length).map(([kind, c]) => names[kind].replace('（燃料差引後）', '') + c.reviewDates.length + '日');
+    if (pending.length) html += '<p class="sf-alert">一部費用の要確認：' + escape(pending.join('・')) + '。計算できる分はすでに小計へ反映済みです。通勤台数や現場間の配分など、不明な分だけ確認・調整してください。通常の日は費用保存なしで表示します。</p>';
     if (result.categories.labor.revenue) html += line('常用に行く分の売上（原価と別）', yen(result.categories.labor.revenue), 'この売上は上の原価小計へ加算・相殺していません。');
-    html += '<details><summary>計算方法・燃料の二重計上防止</summary><p class="sf-note">人件費・常用費（交通費・高速代等を含む保存額）＋車両費の燃料差引後＋重機費の燃料差引後＋日報の燃料・油脂＋処分費＋その他経費。差引前の日額に燃料を重ねて足しません。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両：差引前 ' + yen(result.categories.vehicle.gross) + ' − 差引燃料 ' + yen(result.categories.vehicle.deduction) + '。重機：差引前 ' + yen(result.categories.equipment.gross) + ' − 差引燃料 ' + yen(result.categories.equipment.deduction) + '。</p><p class="sf-note">給油額は当日の消費額とは限りません。メモだけの金額、未入力の回送・リース・小型機械費などは自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
-    html += '<details><summary>日別の内訳・未確定を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind].replace('（燃料差引後）', '') + '：' + (d.pending.includes(kind) ? '未確定' : yen(d[kind])) + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
+    html += '<details><summary>計算方法・燃料の二重計上防止</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両費の燃料差引後＋重機費の燃料差引後＋日報の燃料・油脂＋処分費＋その他経費。差引前の日額に燃料を重ねて足しません。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両：差引前 ' + yen(result.categories.vehicle.gross) + ' − 差引燃料 ' + yen(result.categories.vehicle.deduction) + '。重機：差引前 ' + yen(result.categories.equipment.gross) + ' − 差引燃料 ' + yen(result.categories.equipment.deduction) + '。</p><p class="sf-note">自社は同じ日・現場の同じ人を1回だけ、車両・重機も1台につき日額1回で仮計算します。8〜12時間の時間帯が記録された日報は1日勤務として計算し、それ以外の勤務区分・半日・現場間配分は要確認とします。明建・朝日の未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。メモだけの金額、未入力の回送・リース・小型機械費などは自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
+    html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind].replace('（燃料差引後）', '') + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
     if (result.warnings.length) html += '<details><summary>要確認の記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
     q('#sfResult').innerHTML = html;
     status(site.name + ' ／ ' + label + ' ／ 日報' + result.reportCount + '件を確認。更新 ' + new Date().toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}));
@@ -247,8 +363,9 @@
         ['laborSheets', 'labor_cost_sheets', 'id,site_id,work_date,cost_total,revenue_total,source_reports,updated_at', 'work_date', site.id],
         ['vehicleSheets', 'vehicle_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', site.id],
         ['equipmentSheets', 'equipment_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', site.id],
-        ['vehicleRates', 'vehicle_rate_master', 'id,label,active', null, null],
-        ['equipmentRates', 'equipment_rate_master', 'id,label,active', null, null]
+        ['laborRates', 'labor_rate_master', 'id,code,label,kind,day_rate,half_rate,city_per_vehicle,active', null, null],
+        ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,active', null, null],
+        ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,active', null, null]
       ];
       const values = await Promise.all(definitions.map(([, table, fields, df, sid]) => readAll(table, fields, company, bounds, df, sid, ticket)));
       if (ticket !== token || owner !== mine || identity() !== mine || currentKey() !== k) return;
@@ -266,7 +383,9 @@
     window.addEventListener('pageshow', () => {mount(); schedule(true);});
     document.addEventListener('visibilitychange', () => {if (!document.hidden) {mount(); schedule(true);}});
     let attempts = 0; const initial = setInterval(() => {if (mount()) schedule(); if (owner || ++attempts >= 30) clearInterval(initial);}, 1000);
-    // Identity check only: never signs out, creates an auth client, or starts a data polling loop.
+    // Refresh while the home is visible, at most once a minute. No auth/client or DB writes.
+    setInterval(() => {if (!document.hidden && visible() && identity() && !runningKey) schedule(true);}, 60000);
+    // Identity check only: never signs out or creates an auth client.
     setInterval(() => {if (owner && identity() !== owner) clear();}, 1000);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, {once: true}); else start();
