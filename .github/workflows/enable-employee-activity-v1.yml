@@ -1,0 +1,33 @@
+name: Enable employee non-monetary activity summary
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/enable-employee-activity-v1.yml
+      - scripts/enable-employee-activity-v1.py
+      - scripts/employee-activity-v1.part1
+      - scripts/employee-activity-v1.part2
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-enable-employee-activity-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify payload, keep administrator app untouched, and run employee summary tests
+        run: python3 scripts/enable-employee-activity-v1.py
+      - name: Publish the tested employee-only display
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/employee-activity-summary.js docs/index.html tests/employee-activity-summary.cjs
+          if git diff --cached --quiet; then echo 'Already enabled'; exit 0; fi
+          git diff --cached --stat
+          git commit -m 'Show employees site activity totals without money or rate information'
+          git push origin HEAD:main
