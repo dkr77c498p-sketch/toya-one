@@ -1,0 +1,23 @@
+from pathlib import Path
+import hashlib,json,subprocess
+ROOT=Path(__file__).resolve().parents[1]
+def blob(b): return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+PATCH=json.loads(r'''[{"path":"docs/usage-hours.js","before":"f5767fc1342113d1ede37311374a7d8f04e7eba6","after":"179ab23e793842e94964049c42b128d3688f3286","changes":[{"start":33,"end":33,"text":" }\n // Keep an in-progress one-site report coherent when its main site changes.\n // Multi-site allocations are never discarded, merged or silently reassigned.\n function syncEntrySites(entry,siteNames){\n  const sites=[...new Map(arr(siteNames).filter(n=>String(n||'').trim()).map(n=>[norm(n),n])).values()];\n  const next={...entry,allocations:arr(entry.allocations).map(a=>({...a}))};\n  const entered=next.allocations.filter(a=>a.minutes!==0||a.clock);\n  if(sites.length===1&&(next.allocations.length===1||(next.allocations.length>1&&entered.length<=1))){\n   // The old UI appended zero placeholders after a main-site change. Remove only\n   // those empty rows; never sum or discard two real/unknown time allocations.\n   const keep=entered[0]||next.allocations.find(a=>norm(a.site)===norm(sites[0]))||next.allocations[0];\n   next.allocations=[{...keep,site:sites[0]}];\n  }else{\n   next.allocations.forEach(a=>{const match=sites.find(n=>norm(n)===norm(a.site));if(match)a.site=match;});\n   for(const site of sites)if(!next.allocations.some(a=>norm(a.site)===norm(site)))next.allocations.push({site,minutes:0});\n  }\n  if(next.kind==='dispatch'){\n   const choices=sites.filter(site=>next.allocations.some(a=>norm(a.site)===norm(site)));\n   if(sites.length===1&&next.allocations.length===1)next.travelSite=sites[0];\n   else next.travelSite=choices.find(site=>norm(site)===norm(next.travelSite))||'';\n  }\n  return next;\n"},{"start":139,"end":140,"text":" const engine=Object.freeze({workMinutes,validateEntry,syncEntrySites,build,fuelRows,adjust,tools,attachments,key});\n"},{"start":174,"end":175,"text":"    const e=state[id]=syncEntrySites(state[id],sites);e.quantity=r.quantity;\n"},{"start":176,"end":178,"text":"     if(sites.length===1&&e.allocations.length===1)e.allocations[0].minutes=['labor','dispatch'].includes(r.kind)?workMinutes(d.start,d.end,breakMinutes):r.minutes;\n     else e.fromReportTime=false; // Retain entered minutes when adding a destination.\n"},{"start":179,"end":180,"text":""},{"start":217,"end":218,"text":"   (kind==='dispatch'?(e.allocations.length===1?'<p class=\"note uh-travel-auto\">通勤費・高速代：'+esc(e.travelSite)+'へ自動計上（1回だけ）</p>':\n    '<label>通勤費・高速代の計上先（1回だけ）<select data-uh-travel><option value=\"\" '+(!e.travelSite?'selected':'')+'>計上先の現場を選択</option>'+e.allocations.filter(a=>availableSites().some(n=>norm(n)===norm(a.site))).map(a=>'<option value=\"'+esc(a.site)+'\" '+(a.site===e.travelSite?'selected':'')+'>'+esc(a.site)+'</option>').join('')+'</select></label>'):'')+\n"},{"start":306,"end":306,"text":"    if(e.kind==='dispatch'&&!e.allocations.some(a=>norm(a.site)===norm(e.travelSite))){alert(e.label+'：作業時間欄の「通勤費・高速代の計上先」で現場を1つ選んでください。');return false;}\n"}]},{"path":"docs/index.html","before":"da93f2034c1b6712c8ab9f76dc9ba6c92efc229a","after":"ac05708a23680771f21ffb7162433292883da712","changes":[{"start":1895,"end":1896,"text":"<script src=\"usage-hours.js?v=20260909-travel-site-v4\"></script>\n"},{"start":1901,"end":1901,"text":"<script src=\"report-draft-recovery.js?v=20260909-travel-site-v4\"></script>\n"}]}]''')
+if blob((ROOT/'docs/report-draft-recovery.js').read_bytes())!='83e70537b27d39c711ec37f66972adea83fddd23':
+    raise RuntimeError('Draft recovery changed; stop before modifying live files')
+staged={}
+for f in PATCH:
+    path=ROOT/f['path'];old=path.read_bytes()
+    if blob(old)==f['after']: continue
+    if blob(old)!=f['before']: raise RuntimeError('Concurrent change; stop: '+f['path'])
+    lines=old.decode('utf-8').splitlines(keepends=True)
+    for c in reversed(f['changes']): lines[c['start']:c['end']]=c['text'].splitlines(keepends=True)
+    new=''.join(lines).encode('utf-8')
+    if blob(new)!=f['after']: raise RuntimeError('Output mismatch; stop: '+f['path'])
+    staged[path]=new
+for path,new in staged.items(): path.write_bytes(new)
+for path in ['docs/usage-hours.js','docs/report-draft-recovery.js']:
+    subprocess.run(['node','--check',str(ROOT/path)],check=True)
+for path in ['tests/travel-site-sync.cjs','tests/hourly-usage-and-transport.cjs','tests/inline-hours-attachments.cjs','tests/employee-activity-summary.cjs','tests/shared-site-master.cjs']:
+    subprocess.run(['node',str(ROOT/path)],check=True)
+print('Verified travel site synchronization and local draft restoration. No production data writes.')
