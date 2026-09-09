@@ -1,0 +1,51 @@
+name: Enable daily dispatch travel input
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/enable-dispatch-travel-v1.yml
+      - scripts/enable-dispatch-travel-v1.py
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-enable-dispatch-travel-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Apply guarded changes matching browser-tested files
+        run: python3 scripts/enable-dispatch-travel-v1.py
+      - name: Verify commuting facts and home totals without production writes
+        run: |
+          node <<'JS'
+          const assert=require('node:assert/strict');
+          const travel=require('./docs/dispatch-travel.js');
+          const summary=require('./docs/site-financial-summary.js');
+          const f={area:'city',vehicles:1,highway:0,manualTravel:null,memo:''};
+          assert.equal(travel.calculate(f,1000).value,1000);
+          assert.equal(travel.calculate({...f,vehicles:2,highway:720},1000).value,2720);
+          assert.equal(travel.calculate({...f,manualTravel:0},1000).value,0);
+          assert.equal(travel.calculate({...f,area:'outside'},1000).travel,null);
+          assert.equal(travel.calculate({...f,area:'outside',manualTravel:3800,highway:500},1000).value,4300);
+          assert.equal(travel.calculate(null,1000).travel,null);
+          const report={id:'r1',site_id:'s1',report_date:'2026-09-09',updated_at:'2026-09-09T00:00:00Z',report_data:{site:'Test',date:'2026-09-09',start:'08:00',end:'17:00',writer:'Test',workers:[],meikenCount:2,asahiCount:0,dispatchTravel:{meiken:f}}};
+          const data={reports:[report],laborRates:[{code:'meiken',kind:'dispatch',label:'明建',day_rate:13000,half_rate:6500,city_per_vehicle:1000,active:true}],laborSheets:[],vehicleSheets:[],equipmentSheets:[],vehicleRates:[],equipmentRates:[],transportRates:[]};
+          assert.equal(summary.analyze(data,{id:'s1',name:'Test'}).subtotal,27000);
+          assert.equal(travel.resolve([report,{...report,id:'r2'}],'meiken',1000).value,1000);
+          data.laborSheets=[{id:'l1',site_id:'s1',work_date:'2026-09-09',cost_total:0,revenue_total:0,entries:[],source_reports:[{id:report.id,updated_at:report.updated_at}]}];
+          assert.equal(summary.analyze(data,{id:'s1',name:'Test'}).subtotal,0);
+          console.log('Regression checks passed. No database writes performed.');
+          JS
+      - name: Publish only the verified integrations
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/labor-cost-admin.js docs/site-financial-summary.js
+          git diff --cached --stat
+          git commit -m 'Enable commuting vehicles and travel fees in daily reports and automatic home costs'
+          git push origin HEAD:main
