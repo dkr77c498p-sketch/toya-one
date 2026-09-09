@@ -495,79 +495,83 @@ function cloudWorkText(d){
   const types=(d.workTypes||[]).join('・');
   return [types,d.details||''].filter(Boolean).join('\n');
 }
-async function cloudSaveReport(d){
-  if(!cloudClient||!cloudProfile)return {skipped:true};
-  const {data:{session}}=await cloudClient.auth.getSession();
-  const siteId=await cloudEnsureSite(d.site);
-  const sourceReportId=String(d.id);
-  const reportData=JSON.parse(JSON.stringify({
-    ...d,
-    cloudSubmittedById:d.cloudCreatedById||session?.user?.id||null,
-    cloudSubmittedByName:d.cloudCreatedByName||cloudProfile.name||''
-  }));
-  const row={
-    company_id:cloudProfile.company_id,
-    site_id:siteId,
-    source_report_id:sourceReportId,
-    report_date:d.date||today(),
-    recorder_name:d.writer||cloudProfile.name||'',
-    weather:d.weather||'',
-    work_content:cloudWorkText(d),
-    worker_count:(d.workers||[]).length+(d.otherWorker?1:0),
-    dispatch_count:Number(d.meikenCount||0)+Number(d.asahiCount||0),
-    start_time:d.start||null,
-    end_time:d.end||null,
-    overtime_hours:Number(d.overtime||0),
-    notes:d.memo||'',
-    created_by:d.cloudCreatedById||session?.user?.id||null,
-    report_data:reportData,
-    updated_at:new Date().toISOString()
-  };
-
-  // 1) すでに同じiPhone日報IDがある場合は更新だけする
-  const {data:existing,error:existingErr}=await cloudClient.from('daily_reports')
-    .select('id')
-    .eq('company_id',cloudProfile.company_id)
-    .eq('source_report_id',sourceReportId)
-    .limit(1);
-  if(existingErr)throw existingErr;
-  if(existing&&existing.length){
-    const {error:updateErr}=await cloudClient.from('daily_reports')
-      .update(row).eq('id',existing[0].id);
-    if(updateErr)throw updateErr;
-    return {id:existing[0].id,updated:true};
-  }
-
-  // 2) v4.0で作られた旧データ(source_report_idなし)を同一内容で探し、
-  //    最初の1件を引き継ぎ、余分な重複は管理者なら削除する
-  const {data:legacy,error:legacyErr}=await cloudClient.from('daily_reports')
-    .select('id')
-    .eq('company_id',cloudProfile.company_id)
-    .eq('site_id',siteId)
-    .eq('report_date',row.report_date)
-    .eq('recorder_name',row.recorder_name)
-    .eq('work_content',row.work_content)
-    .is('source_report_id',null)
-    .order('created_at',{ascending:true});
-  if(legacyErr)throw legacyErr;
-  if(legacy&&legacy.length){
-    const keepId=legacy[0].id;
-    const {error:updateLegacyErr}=await cloudClient.from('daily_reports')
-      .update(row).eq('id',keepId);
-    if(updateLegacyErr)throw updateLegacyErr;
-    if(legacy.length>1 && cloudProfile.role==='admin'){
-      const extraIds=legacy.slice(1).map(x=>x.id);
-      const {error:deleteErr}=await cloudClient.from('daily_reports').delete().in('id',extraIds);
-      if(deleteErr)console.warn('重複削除に失敗',deleteErr);
-    }
-    return {id:keepId,migrated:true,deduped:Math.max(0,legacy.length-1)};
-  }
-
-  // 3) 初回だけ新規登録
-  const {data,error}=await cloudClient.from('daily_reports').insert(row).select('id').single();
-  if(error)throw error;
-  return {id:data.id,inserted:true};
+/* TOYA One verified report writes. Uses existing RLS; no permission/schema changes. */
+function cloudCanEditReport(d){
+  return Boolean(cloudProfile?.active===true && (cloudProfile.role==='admin' ||
+    (d?.cloudCreatedById && String(d.cloudCreatedById)===String(cloudProfile.id))));
 }
+async function cloudReportWriteContext(d){
+  if(!cloudClient||!cloudProfile?.active)throw new Error('接続状態を確認してください。クラウドには保存していません。');
+  const profile={...cloudProfile};
+  const {data:{session},error}=await cloudClient.auth.getSession();
+  if(error)throw error;
+  if(!session?.user?.id||session.user.id!==profile.id)throw new Error('ログインの確認が必要です。入力はそのまま残っています。');
+  if(d.id==null)throw new Error('日報IDを確認できませんでした。新しい日報として勝手に登録しません。');
+  const edit=typeof editingReport!=='undefined'&&String(editingReport?.id)===String(d.id)?editingReport:null;
+  const cloudId=d.cloudId||edit?.cloudId;
+  const fields='id,company_id,created_by,updated_at,source_report_id';
+  let query=cloudClient.from('daily_reports').select(fields).eq('company_id',profile.company_id);
+  query=cloudId?query.eq('id',cloudId):query.eq('source_report_id',String(d.id));
+  const result=await query.limit(2);if(result.error)throw result.error;
+  if(result.data?.length>1)throw new Error('同じ日報IDが複数あります。管理者が確認してください。');
+  const target=result.data?.[0]||null;
+  if(cloudId&&!target)throw new Error('編集元の日報が見つかりません。削除や変更がないか管理者へ確認してください。');
+  if(target&&profile.role!=='admin'&&target.created_by!==profile.id)
+    throw new Error('この日報は別の社員が登録しています。変更できるのは登録した本人か管理者です。');
+  if(!target&&profile.role!=='admin'&&d.cloudCreatedById&&d.cloudCreatedById!==profile.id)
+    throw new Error('他の社員の日報として保存できません。本人か管理者へ確認してください。');
+  const expected=d.cloudUpdatedAt||edit?.cloudUpdatedAt;
+  if(target&&expected&&Date.parse(expected)!==Date.parse(target.updated_at))
+    throw new Error('この日報は編集中に更新されています。入力を残したまま、最新の日報を確認してください。');
+  if(cloudProfile?.id!==profile.id||cloudProfile?.company_id!==profile.company_id)
+    throw new Error('ログイン状態が変わりました。保存していません。');
+  return {profile,target,sourceReportId:String(target?.source_report_id??d.id)};
+}
+function cloudReportDataEqual(a,b){
+  const stable=v=>Array.isArray(v)?v.map(stable):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,stable(v[k])])):v;
+  return JSON.stringify(stable(a))===JSON.stringify(stable(b));
+}
+async function cloudSaveReport(d){
+  const context=await cloudReportWriteContext(d),profile=context.profile;
+  let target=context.target;
+  const siteId=await cloudEnsureSite(d.site);
+  if(!target){
+    const legacy=await cloudClient.from('daily_reports').select('id,company_id,created_by,updated_at,source_report_id')
+      .eq('company_id',profile.company_id).eq('site_id',siteId).eq('report_date',d.date||today())
+      .eq('recorder_name',d.writer||profile.name||'').eq('work_content',cloudWorkText(d))
+      .is('source_report_id',null).limit(2);
+    if(legacy.error)throw legacy.error;
+    if(legacy.data?.length>1)throw new Error('旧日報が複数一致しました。削除・統合せず、管理者の確認が必要です。');
+    target=legacy.data?.[0]||null;
+  }
+  if(target&&profile.role!=='admin'&&target.created_by!==profile.id)
+    throw new Error('この日報を変更できるのは登録した本人か管理者です。');
+  if(cloudProfile?.id!==profile.id||cloudProfile?.company_id!==profile.company_id)
+    throw new Error('ログイン状態が変わりました。保存していません。');
+  const creator=target?target.created_by:profile.id;
+  const reportData=JSON.parse(JSON.stringify({...d,cloudSubmittedById:creator,
+    cloudSubmittedByName:d.cloudCreatedByName||profile.name||''}));
+  const row={company_id:profile.company_id,site_id:siteId,source_report_id:String(target?.source_report_id??d.id),
+    report_date:d.date||today(),recorder_name:d.writer||profile.name||'',weather:d.weather||'',work_content:cloudWorkText(d),
+    worker_count:(d.workers||[]).length+(d.otherWorker?1:0),dispatch_count:Number(d.meikenCount||0)+Number(d.asahiCount||0),
+    start_time:d.start||null,end_time:d.end||null,overtime_hours:Number(d.overtime||0),notes:d.memo||'',
+    created_by:creator,report_data:reportData,updated_at:new Date().toISOString()};
+  let request;
+  if(target){
+    request=cloudClient.from('daily_reports').update(row).eq('company_id',profile.company_id).eq('id',target.id);
+    request=target.updated_at?request.eq('updated_at',target.updated_at):request.is('updated_at',null);
+  }else request=cloudClient.from('daily_reports').insert(row);
+  const result=await request.select('id,company_id,site_id,created_by,report_date,recorder_name,report_data,updated_at');
+  if(result.error)throw result.error;
+  const saved=result.data?.length===1?result.data[0]:null;
+  if(!saved)throw new Error('クラウドの保存を確認できませんでした。権限または同時更新を確認してください。');
+  if((target&&saved.id!==target.id)||saved.company_id!==profile.company_id||saved.site_id!==siteId||
+    saved.created_by!==creator||saved.report_date!==row.report_date||saved.recorder_name!==row.recorder_name||
+    !cloudReportDataEqual(saved.report_data,reportData))
+    throw new Error('保存結果が入力内容と一致しません。保存成功として扱わず、管理者の確認が必要です。');
+  return {id:saved.id,updated:!!target,inserted:!target,verified:true,updatedAt:saved.updated_at};
+}
+
 function cloudSafePhotoId(v){
   return String(v||'photo').replace(/[^a-zA-Z0-9_-]/g,'_');
 }
@@ -737,6 +741,7 @@ function cloudNormalizeReport(r){
     ...full,
     id:full.id??r.source_report_id??r.id,
     cloudId:r.id,
+    cloudUpdatedAt:r.updated_at||null,
     date:full.date||r.report_date||'',
     site:full.site||r.sites?.name||'現場未設定',
     writer:full.writer||r.recorder_name||'',
@@ -790,8 +795,9 @@ async function cloudFetchReports(){
 
 function cloudReportButtons(d){
   const title=encodeURIComponent(`${d.date||''} ${d.site||'現場未設定'}`);
+  const canEdit=cloudCanEditReport(d);
   const canDelete=cloudProfile&&(cloudProfile.role==='admin'||String(d.cloudCreatedById||'')===String(cloudProfile.id||''));
-  return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px"><button class="btn dark" onclick="showCloudReportDetail('${d.cloudId}')">日報詳細を見る</button>${d.photoCount?`<button class="btn light" onclick="cloudShowPhotos('${d.cloudId}',decodeURIComponent('${title}'))">クラウド写真を見る（${d.photoCount}）</button>`:''}<button class="btn light" onclick="editCloudReport('${d.cloudId}')">編集</button><button class="btn light" onclick="duplicateCloudReport('${d.cloudId}')">別現場へ複製</button>${canDelete?`<button class="btn danger" onclick="deleteCloudReport('${d.cloudId}')">削除</button>`:''}</div>`;
+  return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:8px"><button class="btn dark" onclick="showCloudReportDetail('${d.cloudId}')">日報詳細を見る</button>${d.photoCount?`<button class="btn light" onclick="cloudShowPhotos('${d.cloudId}',decodeURIComponent('${title}'))">クラウド写真を見る（${d.photoCount}）</button>`:''}${canEdit?`<button class="btn light" onclick="editCloudReport('${d.cloudId}')">編集</button><button class="btn light" onclick="duplicateCloudReport('${d.cloudId}')">別現場へ複製</button>`:'<span class="note">閲覧のみ（変更は登録者本人・管理者）</span>'}${canDelete?`<button class="btn danger" onclick="deleteCloudReport('${d.cloudId}')">削除</button>`:''}</div>`;
 }
 
 async function cloudLoadReports(){
@@ -855,6 +861,7 @@ async function saveCurrentReportBeforeMove(){
   const d=collect();
   if(!validate(d))return false;
   try{
+    if(cloudProfile)await cloudReportWriteContext(d);
     const addedPhotos=await savePhotosForReport(d.id);
     d.photoCount=Number(editingReport?.photoCount||0)+Number(addedPhotos||0);
     const a=get(LS.reports,[]);
@@ -874,7 +881,7 @@ async function saveCurrentReportBeforeMove(){
         if(photoResult.ok)await cloudLogActivity('photo_save',cloudResult?.id,{count:photoResult.ok});
         if(wasteResult.ok)await cloudLogActivity('waste_save',cloudResult?.id,{count:wasteResult.ok});
         await cloudLoadReports();
-      }catch(cloudErr){console.error(cloudErr);cloudMsg('1現場目は端末に保存しましたが、クラウド同期に失敗：'+(cloudErr?.message||cloudErr),'warn');}
+      }catch(cloudErr){set(LS.draft,d);throw cloudErr;}
     }
     clearReportEditState();
     return true;
@@ -1371,7 +1378,7 @@ function renderFuelSummary(reports){
   const b=$('#fuelBreakdown');if(b)b.innerHTML=Object.keys(map).length?Object.entries(map).sort((a,b)=>b[1].amount-a[1].amount).map(([k,v])=>{const parts=[];if(v.fuel)parts.push(`燃料 ${v.fuel.toLocaleString()}L`);if(v.adblue)parts.push(`AdBlue ${v.adblue.toLocaleString()}L`);if(v.grease)parts.push(`グリース ${v.grease.toLocaleString()}本`);return `<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(k)}</b><div class="meta" style="margin:3px 0 0">${parts.join(' ／ ')} ／ ${yen(v.amount)}</div></div>`}).join(''):'<div class="empty" style="padding:18px 8px">今月の燃料・油脂入力はまだありません。</div>';
 }
 
-function collect(){return {id:editingReport?.id??Date.now(),cloudCreatedById:editingReport?.cloudCreatedById||null,cloudCreatedByName:editingReport?.cloudCreatedByName||'',date:$('#date').value,weather:$('#weather').value,site:$('#site').value,writer:$('#writer').value,workers:checked('worker'),meikenCount:Number($('#meikenCount').value||0),asahiCount:Number($('#asahiCount').value||0),otherWorker:esc($('#otherWorker').value),start:$('#start').value,end:$('#end').value,overtime:$('#overtime').value,workTypes:checked('workType'),details:esc($('#details').value),vehicles:checked('vehicle'),leaseVehicles:$$('.lease-vehicle').map(r=>({name:esc(r.querySelector('.lv-name').value),company:esc(r.querySelector('.lv-company').value),count:Number(r.querySelector('.lv-count').value||1),hours:r.querySelector('.lv-hours').value})).filter(x=>x.name),machines:$$('#machineHours .mh').map(x=>({name:x.dataset.name,hours:x.querySelector('input[type=number]').value})),leaseMachines:$$('.lease-machine').map(r=>({name:esc(r.querySelector('.lm-name').value),company:esc(r.querySelector('.lm-company').value),count:Number(r.querySelector('.lm-count').value||1),hours:r.querySelector('.lm-hours').value})).filter(x=>x.name),
+function collect(){return {id:editingReport?.id??Date.now(),cloudId:editingReport?.cloudId||null,cloudUpdatedAt:editingReport?.cloudUpdatedAt||null,cloudCreatedById:editingReport?.cloudCreatedById||null,cloudCreatedByName:editingReport?.cloudCreatedByName||'',date:$('#date').value,weather:$('#weather').value,site:$('#site').value,writer:$('#writer').value,workers:checked('worker'),meikenCount:Number($('#meikenCount').value||0),asahiCount:Number($('#asahiCount').value||0),otherWorker:esc($('#otherWorker').value),start:$('#start').value,end:$('#end').value,overtime:$('#overtime').value,workTypes:checked('workType'),details:esc($('#details').value),vehicles:checked('vehicle'),leaseVehicles:$$('.lease-vehicle').map(r=>({name:esc(r.querySelector('.lv-name').value),company:esc(r.querySelector('.lv-company').value),count:Number(r.querySelector('.lv-count').value||1),hours:r.querySelector('.lv-hours').value})).filter(x=>x.name),machines:$$('#machineHours .mh').map(x=>({name:x.dataset.name,hours:x.querySelector('input[type=number]').value})),leaseMachines:$$('.lease-machine').map(r=>({name:esc(r.querySelector('.lm-name').value),company:esc(r.querySelector('.lm-company').value),count:Number(r.querySelector('.lm-count').value||1),hours:r.querySelector('.lm-hours').value})).filter(x=>x.name),
   attachments:checked('attachment'),
   leaseAttachments:$$('.lease-attachment').map(r=>({name:esc(r.querySelector('.la-name').value),model:esc(r.querySelector('.la-model').value),company:esc(r.querySelector('.la-company').value),machine:esc(r.querySelector('.la-machine').value),startDate:r.querySelector('.la-start').value,returnDate:r.querySelector('.la-return').value,price:r.querySelector('.la-price').value})).filter(x=>x.name),
   fuels:$$('.fuel-row').map(r=>({asset:r.querySelector('.f-asset').value,source:r.querySelector('.f-source').value,outlet:r.querySelector('.f-source').value==='スタンド'?r.querySelector('.f-outlet').value:'',type:r.querySelector('.f-type').value,qty:Number(r.querySelector('.f-qty').value||0),unit:r.dataset.qtyUnit||'L',liters:(r.dataset.qtyUnit||'L')==='L'?Number(r.querySelector('.f-qty').value||0):0,unitPrice:Number(r.querySelector('.f-unit').value||0),amount:Number(r.querySelector('.f-amount').value||0),note:esc(r.querySelector('.f-note').value)})).filter(x=>x.qty||x.amount),
@@ -1384,9 +1391,12 @@ function lineText(d){let p=[...(d.workers||[])];if(d.meikenCount>0)p.push(`明�
 async function copyLine(){const d=collect();if(!validate(d))return;const txt=lineText(d);try{await navigator.clipboard.writeText(txt)}catch(e){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove()}showStatus('LINE報告用の文章をコピーしました。')}
 function saveDraft(){set(LS.draft,collect());showStatus('一時保存しました。')}
 async function saveReport(){
+  if(window.__toyaReportSaveBusy)return;
   const d=collect();
   if(!validate(d))return;
+  window.__toyaReportSaveBusy=true;const saveButton=$('#saveReportBtn');if(saveButton)saveButton.disabled=true;
   try{
+    if(cloudProfile){const c=await cloudReportWriteContext(d);if(c.target){d.cloudId=c.target.id;d.cloudUpdatedAt=c.target.updated_at;}}
     const addedPhotos=await savePhotosForReport(d.id);
     d.photoCount=Number(editingReport?.photoCount||0)+Number(addedPhotos||0);
     const a=get(LS.reports,[]);
@@ -1399,11 +1409,16 @@ async function saveReport(){
     renderStagedPhotos();
     let cloudNote='';
     if(cloudProfile){
+      let cloudResult=null;
       try{
-        const cloudResult=await cloudSaveReport(d);
+        cloudResult=await cloudSaveReport(d);
+        if(!cloudResult?.verified)throw new Error('クラウドの保存結果を確認できませんでした。');
+        d.cloudId=cloudResult.id;d.cloudUpdatedAt=cloudResult.updatedAt;
+        const savedLocal=get(LS.reports,[]),savedIndex=savedLocal.findIndex(x=>String(x.id)===String(d.id));
+        if(savedIndex>=0){savedLocal[savedIndex]=d;set(LS.reports,savedLocal);}
+        await cloudLogActivity('report_save',cloudResult.id,{site:d.site,date:d.date,verified:true});
         const photoResult=await cloudSyncPhotosForReport(d.id,cloudResult?.id);
         const wasteResult=await cloudSyncWasteForReport(d,cloudResult?.id);
-        await cloudLogActivity('report_save',cloudResult?.id,{site:d.site,date:d.date});
         if(photoResult.ok)await cloudLogActivity('photo_save',cloudResult?.id,{count:photoResult.ok});
         if(wasteResult.ok)await cloudLogActivity('waste_save',cloudResult?.id,{count:wasteResult.ok});
         const errs=[]; if(photoResult.ng)errs.push(`写真${photoResult.ng}枚失敗`); if(wasteResult.ng)errs.push(`産廃${wasteResult.ng}件失敗`);
@@ -1413,16 +1428,19 @@ async function saveReport(){
         cloudLoadReports();
       }catch(cloudErr){
         console.error(cloudErr);
-        cloudNote='／クラウド同期失敗';
-        cloudMsg('日報・写真のクラウド同期に失敗：'+(cloudErr?.message||cloudErr),'warn');
+        if(!cloudResult?.verified){set(LS.draft,d);throw cloudErr;}
+        cloudNote='／日報はクラウド確認済み・写真または産廃の同期は要確認';
+        cloudMsg('日報本文は保存済みです。写真・産廃の同期を確認してください：'+(cloudErr?.message||cloudErr),'warn');
+        cloudLoadReports();
       }
     }
     showStatus((d.photoCount?`日報と写真${d.photoCount}枚を保存しました。`:'日報を保存しました。')+cloudNote);
     clearReportEditState();
     setTimeout(()=>document.querySelector('[data-page="recordsPage"]').click(),400);
   }catch(err){
-    alert('写真の保存に失敗しました。もう一度お試しください。');
-  }
+    const message='保存を完了できませんでした：'+(err?.message||err)+'\n入力画面は残しています。成功表示にはしていません。';
+    showStatus(message);cloudMsg(message,'bad');alert(message);
+  }finally{window.__toyaReportSaveBusy=false;if(saveButton)saveButton.disabled=false;}
 }
 
 const PHOTO_CATEGORIES=['着工前','養生','施工中','積込','搬出','完了','その他'];
@@ -1719,8 +1737,8 @@ function fillReportForm(d,mode='edit'){
   else{clearReportEditState();if($('#editBannerText'))$('#editBannerText').textContent='別現場用に複製しました。現場名・時間を確認してください。';$('#editBanner')?.classList.add('show')}
   document.querySelector('[data-page="reportPage"]')?.click();window.scrollTo({top:0,behavior:'smooth'});
 }
-function editCloudReport(id){const d=cloudReportsCache.find(x=>String(x.cloudId)===String(id));if(!d)return alert('日報が見つかりません。');closeCloudReportDetail();fillReportForm(d,'edit')}
-function duplicateCloudReport(id){const d=cloudReportsCache.find(x=>String(x.cloudId)===String(id));if(!d)return;closeCloudReportDetail();fillReportForm({...d,id:Date.now(),cloudId:null,cloudCreatedById:null,cloudCreatedByName:''},'duplicate')}
+function editCloudReport(id){const d=cloudReportsCache.find(x=>String(x.cloudId)===String(id));if(!d)return alert('日報が見つかりません。');if(!cloudCanEditReport(d))return alert('この日報を変更できるのは登録した本人か管理者です。');closeCloudReportDetail();fillReportForm(d,'edit')}
+function duplicateCloudReport(id){const d=cloudReportsCache.find(x=>String(x.cloudId)===String(id));if(!d)return;if(!cloudCanEditReport(d))return alert('他の社員の日報は閲覧のみです。本人か管理者へ確認してください。');closeCloudReportDetail();fillReportForm({...d,id:Date.now(),cloudId:null,cloudUpdatedAt:null,cloudCreatedById:null,cloudCreatedByName:''},'duplicate')}
 function editLocalReport(id){const d=get(LS.reports,[]).find(x=>String(x.id)===String(id));if(d)fillReportForm(d,'edit')}
 function duplicateLocalReport(id){const d=get(LS.reports,[]).find(x=>String(x.id)===String(id));if(d)fillReportForm({...d,id:Date.now()},'duplicate')}
 async function deleteCloudReport(id){
