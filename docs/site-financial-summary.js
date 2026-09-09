@@ -175,13 +175,13 @@
     const reports = uniqueReports(data.reports), own = reports.filter(r => r.site_id === site.id);
     const byDay = new Map(), warnings = new Set();
     const day = date => {
-      if (!byDay.has(date)) byDay.set(date, {date, labor: 0, vehicle: 0, equipment: 0, fuel: 0, waste: 0, transport: 0, tools: 0, other: 0, revenue: 0, pending: [], stale: [], unknown: 0});
+      if (!byDay.has(date)) byDay.set(date, {date, labor: 0, vehicle: 0, equipment: 0, fuel: 0, waste: 0, transport: 0, tools: 0, attachments: 0, other: 0, revenue: 0, pending: [], stale: [], unknown: 0});
       return byDay.get(date);
     };
     const needed = {labor: new Set(), vehicle: new Set(), equipment: new Set()};
     const vehicleKeys = new Set(list(data.vehicleRates).map(r => assetKey(r.label)));
     const equipmentKeys = new Set(list(data.equipmentRates).map(r => assetKey(r.label)));
-    const expenses = {tools: {value: 0, count: 0, missing: 0}, fuel: {value: 0, count: 0, missing: 0}, waste: {value: 0, count: 0, missing: 0}, transport: {value: 0, count: 0, missing: 0}, other: {value: 0, count: 0, missing: 0}};
+    const expenses = {attachments: {value: 0, count: 0, missing: 0}, tools: {value: 0, count: 0, missing: 0}, fuel: {value: 0, count: 0, missing: 0}, waste: {value: 0, count: 0, missing: 0}, transport: {value: 0, count: 0, missing: 0}, other: {value: 0, count: 0, missing: 0}};
     const addExpense = (kind, value, date) => {
       const e = expenses[kind]; e.count++;
       if (value === null) {e.missing++; day(date).unknown++;}
@@ -249,6 +249,10 @@
       addExpense('tools', x.value, x.date);
       if (x.issue) warnings.add(x.date + '：' + x.issue);
     });
+    hoursEngine.attachments(data, site).forEach(x => {
+      addExpense('attachments', x.value, x.date);
+      if (x.issue) warnings.add(x.date + '：' + x.issue);
+    });
     const categories = {};
     const configs = [['labor', 'laborSheets'], ['vehicle', 'vehicleSheets'], ['equipment', 'equipmentSheets']];
     configs.forEach(([kind, source]) => {
@@ -286,8 +290,8 @@
       missingDates.forEach(date => day(date).pending.push(kind));
       categories[kind] = {value: sum, gross, deduction, revenue, savedDays: stored.length, autoDates, reviewDates, missingDates, staleDates};
     });
-    const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({...d, subtotal: round(d.labor + d.vehicle + d.equipment + d.fuel + d.waste + d.transport + d.tools + d.other)}));
-    const subtotal = round(categories.labor.value + categories.vehicle.value + categories.equipment.value + expenses.fuel.value + expenses.waste.value + expenses.transport.value + expenses.tools.value + expenses.other.value);
+    const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({...d, subtotal: round(d.labor + d.vehicle + d.equipment + d.fuel + d.waste + d.transport + d.tools + d.attachments + d.other)}));
+    const subtotal = round(categories.labor.value + categories.vehicle.value + categories.equipment.value + expenses.fuel.value + expenses.waste.value + expenses.transport.value + expenses.tools.value + expenses.attachments.value + expenses.other.value);
     const partial = Object.values(categories).some(c => c.missingDates.length || c.staleDates.length) || Object.values(expenses).some(e => e.missing) || warnings.size > 0;
     return {categories, expenses, days, subtotal, partial, warnings: [...warnings], reportCount: own.length, hasData: byDay.size > 0};
   }
@@ -361,7 +365,7 @@
       const note = ['自動計算 ' + c.autoDates.length + '日', '保存額を優先 ' + c.savedDays + '日', c.reviewDates.length ? '一部費用の要確認 ' + c.reviewDates.length + '日' : '', c.staleDates.length ? '保存後の日報変更 ' + c.staleDates.length + '日（保存額を保持）' : ''].filter(Boolean).join(' ／ ');
       html += line(names[kind], value, note);
     });
-    [['fuel', '燃料・油脂（日報の記録分）'], ['waste', '処分費（日報の記録分）'], ['transport', '重機回送費（自動計算・手入力）'], ['tools', '小型機械・工具費（時間計算）'], ['other', '材料・その他経費（日報）']].forEach(([kind, label]) => {
+    [['fuel', '燃料・油脂（日報の記録分）'], ['waste', '処分費（日報の記録分）'], ['transport', '重機回送費（自動計算・手入力）'], ['attachments', 'アタッチメント費（時間計算）'], ['tools', '小型機械・工具費（時間計算）'], ['other', '材料・その他経費（日報）']].forEach(([kind, label]) => {
       const e = result.expenses[kind];
       html += line(label, e.missing === e.count && e.count ? '金額未入力' : e.count ? yen(e.value) : '記録なし', e.count + '件' + (e.missing ? ' ／ 金額未入力 ' + e.missing + '件は小計に含めていません。' : ''));
     });
@@ -397,7 +401,8 @@
         ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,active', null, null],
         ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,active', null, null],
         ['transportRates', 'equipment_transport_rate_master', 'id,carrier,machine_name,distance_label,unit_price,price_basis,active', null, null],
-        ['toolRates', 'small_tool_rate_master', 'id,label,hourly_rate,fuel_included,active', null, null]
+        ['toolRates', 'small_tool_rate_master', 'id,label,hourly_rate,fuel_included,active', null, null],
+        ['attachmentRates', 'attachment_rate_master', 'id,label,hourly_rate,active', null, null]
       ];
       const values = await Promise.all(definitions.map(([, table, fields, df, sid]) => readAll(table, fields, company, bounds, df, sid, ticket)));
       if (ticket !== token || owner !== mine || identity() !== mine || currentKey() !== k) return;
