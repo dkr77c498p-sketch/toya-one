@@ -1,0 +1,26 @@
+name: Prepare inline hours and Kawasaki grease
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/prepare-inline-hours-grease-v3.yml
+      - scripts/prepare-inline-hours-and-grease-v3.py
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build guarded integration and run regressions
+        run: python3 scripts/prepare-inline-hours-and-grease-v3.py
+      - name: Export for offline browser checks only
+        uses: actions/upload-artifact@v4
+        with:
+          name: prepared-inline-hours-grease-v3
+          path: |
+            docs/
+            tests/
+            prepared-inline-manifest.json
+          retention-days: 1
