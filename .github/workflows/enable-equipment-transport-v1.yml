@@ -1,0 +1,33 @@
+name: Enable equipment transport input and home summary
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/enable-equipment-transport-v1.py'
+      - '.github/workflows/enable-equipment-transport-v1.yml'
+      - 'docs/equipment-transport.js'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: enable-equipment-transport-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: main
+          fetch-depth: 1
+      - name: Verify exact sources and run transport tests
+        run: python3 scripts/enable-equipment-transport-v1.py
+      - name: Publish only verified summary and loader
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/site-financial-summary.js
+          if ! git diff --cached --quiet; then
+            git commit -m 'Enable one-way equipment transport calculation in daily reports and home summary'
+            git push origin HEAD:main
+          fi
