@@ -1,0 +1,46 @@
+name: Enable company shared sites
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/enable-shared-sites-v1.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-shared-sites-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify tested shared site code
+        run: |
+          node --check docs/shared-site-master.js
+          node tests/shared-site-master.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          def blob(b): return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+          assert blob(Path('docs/shared-site-master.js').read_bytes())=='1e77d1bd9f81049f7ad68bc0fd77bb316283b3f0', 'Module differs from browser-tested source'
+          p=Path('docs/index.html'); old=p.read_bytes()
+          after='da93f2034c1b6712c8ab9f76dc9ba6c92efc229a'
+          if blob(old)!=after:
+              assert blob(old)=='61b332506c19fc26d924537e166ca30193681bf3', 'Concurrent index change; stop without publishing'
+              left,right=old.decode().rsplit('</body>',1)
+              new=(left+'<script src="shared-site-master.js?v=20260909-site-share-v1"></script>\n</body>'+right).encode()
+              assert blob(new)==after, 'Loader differs from tested source'
+              p.write_bytes(new)
+          PY
+      - name: Publish only the one-line loader addition
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html
+          if git diff --cached --quiet; then echo 'Already enabled'; exit 0; fi
+          git diff --cached --stat
+          git commit -m 'Share new job sites with all employees without changing reports or login'
+          git push origin HEAD:main
