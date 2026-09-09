@@ -1,0 +1,29 @@
+name: Verify and enable honest report saving
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/enable-report-save-confirmation-v1.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-report-save-confirmation-v1
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Guard baseline and verify report writes without database requests
+        run: python3 scripts/enable-report-save-confirmation-v1.py
+      - name: Publish only verified application changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html
+          git diff --cached --stat
+          git commit -m 'Confirm actual report updates and hide unauthorized editing; preserve input on rejected writes'
+          git push origin HEAD:main
