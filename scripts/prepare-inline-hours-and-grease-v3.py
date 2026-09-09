@@ -2,9 +2,7 @@ from pathlib import Path
 import hashlib,json,re,subprocess
 ROOT=Path(__file__).resolve().parents[1]
 def blob(b): return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
-expected={'docs/usage-hours.js':'fab43f246aa5de4ca160b435f5a6f279a26b8ab0','docs/site-financial-summary.js':'f6a39642f406f5d5eaa952521f43ce1a190cbab4','docs/index.html':'29c840bfa3d4d236d940c3bd299f3b7d21c4a398','scripts/inline-hours-ui-v2.js':'e7e78bcf8e010d7b1b823fff1398e3302db080ff','docs/attachment-rate-admin.js':'5d606067-placeholder'}
-# The staged rate editor is read, not rewritten; its source is included in the build artifact.
-expected.pop('docs/attachment-rate-admin.js')
+expected={'docs/usage-hours.js':'fab43f246aa5de4ca160b435f5a6f279a26b8ab0','docs/site-financial-summary.js':'f6a39642f406f5d5eaa952521f43ce1a190cbab4','docs/index.html':'29c840bfa3d4d236d940c3bd299f3b7d21c4a398','scripts/inline-hours-ui-v2.js':'e7e78bcf8e010d7b1b823fff1398e3302db080ff'}
 for p,sha in expected.items():
  if blob((ROOT/p).read_bytes())!=sha: raise RuntimeError('Concurrent source change: '+p)
 def replace(s,a,b,count=1):
@@ -30,8 +28,8 @@ addon=''' function attachments(data,site){
  }
 '''
 h=replace(h,' const engine=Object.freeze({workMinutes,validateEntry,build,fuelRows,adjust,tools,key});',addon+' const engine=Object.freeze({workMinutes,validateEntry,build,fuelRows,adjust,tools,attachments,key});')
-pos=h.index(' const groups=')
-h=h[:pos]+(ROOT/'scripts/inline-hours-ui-v2.js').read_text()
+pos=h.index('\n const groups=[')
+h=h[:pos]+'\n'+(ROOT/'scripts/inline-hours-ui-v2.js').read_text()
 s=(ROOT/'docs/site-financial-summary.js').read_text()
 s=replace(s,'transport: 0, tools: 0, other: 0','transport: 0, tools: 0, attachments: 0, other: 0')
 s=replace(s,'const expenses = {tools:', 'const expenses = {attachments: {value: 0, count: 0, missing: 0}, tools:')
@@ -53,10 +51,9 @@ p=replace(p,'<script src="usage-hours.js?v=20260909-hours-v1"></script>', '<scri
 p=replace(p,'<script src="site-financial-summary.js?v=20260909-hours-v1"></script>', '<script src="site-financial-summary.js?v=20260909-inline-v3"></script>')
 outputs={'docs/usage-hours.js':h,'docs/site-financial-summary.js':s,'docs/index.html':p}
 for name,text in outputs.items(): (ROOT/name).write_text(text)
-# Validate inline script syntax as well as both isolated regression suites.
 for name in ['docs/usage-hours.js','docs/site-financial-summary.js','docs/attachment-rate-admin.js']:
  subprocess.run(['node','--check',str(ROOT/name)],check=True)
-for i,text in enumerate(re.findall(r'<script(?:\\s[^>]*)?>(.*?)</script>',p,re.S)):
+for i,text in enumerate(re.findall(r'<script(?:\s[^>]*)?>(.*?)</script>',p,re.S)):
  f=ROOT/('inline-script-'+str(i)+'.js');f.write_text(text);subprocess.run(['node','--check',str(f)],check=True);f.unlink()
 for name in ['tests/hourly-usage-and-transport.cjs','tests/inline-hours-attachments.cjs']:
  subprocess.run(['node',str(ROOT/name)],check=True)
