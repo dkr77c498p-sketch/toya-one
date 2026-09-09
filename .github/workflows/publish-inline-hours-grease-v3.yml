@@ -1,0 +1,44 @@
+name: Publish verified inline hours and Kawasaki grease
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/publish-inline-hours-grease-v3.yml
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-publish-inline-hours-grease-v3
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reproduce prepared files and isolated tests
+        run: python3 scripts/prepare-inline-hours-and-grease-v3.py
+      - name: Match the offline mobile-browser verified artifact exactly
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          expected={
+            'docs/usage-hours.js':'f5767fc1342113d1ede37311374a7d8f04e7eba6',
+            'docs/site-financial-summary.js':'4b9112b3ef71854f8194a9ea6b759d0811751021',
+            'docs/index.html':'3a99718a09326170c3270eebecc7803144716cb6',
+            'docs/attachment-rate-admin.js':'45688301503b1bf061814ecbd1dc9e702f5fddde'
+          }
+          actual=json.loads(Path('prepared-inline-manifest.json').read_text())
+          if actual != expected: raise SystemExit('Content differs from mobile-tested artifact; not publishing')
+          print('Exact tested content verified. No database records modified.')
+          PY
+      - name: Publish only requested UI and calculation integrations
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/usage-hours.js docs/site-financial-summary.js docs/index.html
+          git diff --cached --stat
+          git commit -m 'Show hours beside each resource; enable attachment hours and Kawasaki blue grease'
+          git push origin HEAD:main
