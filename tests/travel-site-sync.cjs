@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict');
+const H=require('../docs/usage-hours.js'),S=require('../docs/site-financial-summary.js');
+const base=(over={})=>({kind:'dispatch',label:'明建',quantity:2,fromReportTime:false,travelSite:'Site A',allocations:[{site:'Site A',minutes:480,clock:{start:'08:00',end:'17:00',pause:60}}],...over});
+let tests=0;const t=(title,fn)=>{fn();tests++;console.log('PASS',title);};
+t('single site change follows travel site and retains all time details',()=>{const e=base(),before=JSON.stringify(e),n=H.syncEntrySites(e,['Site B']);assert.equal(n.travelSite,'Site B');assert.equal(n.allocations[0].site,'Site B');assert.equal(n.allocations[0].minutes,480);assert.deepEqual(n.allocations[0].clock,e.allocations[0].clock);assert.equal(n.quantity,2);assert.equal(JSON.stringify(e),before);assert.equal(H.validateEntry(n),'');});
+t('already-stale travel site recovered on draft restore',()=>{const e=base({travelSite:'Old Site',allocations:[{site:'Site B',minutes:480}]});assert.equal(H.syncEntrySites(e,['Site B']).travelSite,'Site B');});
+t('manual fractional hours retained',()=>assert.equal(H.syncEntrySites(base({allocations:[{site:'Site A',minutes:145}]}),['Site B']).allocations[0].minutes,145));
+t('zero remains zero',()=>assert.equal(H.syncEntrySites(base({allocations:[{site:'Site A',minutes:0}]}),['Site B']).allocations[0].minutes,0));
+t('missing time remains unknown',()=>assert.equal(H.syncEntrySites(base({allocations:[{site:'Site A',minutes:null}]}),['Site B']).allocations[0].minutes,null));
+t('Asahi same handling',()=>assert.equal(H.syncEntrySites(base({label:'朝日'}),['Site B']).travelSite,'Site B'));
+t('one-site normalization canonicalizes without changing minutes',()=>{const n=H.syncEntrySites(base({allocations:[{site:'Site A',minutes:33}]}),['Ｓｉｔｅ　Ａ']);assert.equal(n.travelSite,'Ｓｉｔｅ　Ａ');assert.equal(n.allocations[0].minutes,33);});
+t('multi-site explicit travel choice retained',()=>{const e=base({travelSite:'Site B',allocations:[{site:'Site A',minutes:120},{site:'Site B',minutes:360}]});assert.deepEqual(H.syncEntrySites(e,['Site A','Site B']),e);});
+t('invalid multi-site choice becomes explicitly blank',()=>{const n=H.syncEntrySites(base({travelSite:'Site C',allocations:[{site:'Site A',minutes:120},{site:'Site B',minutes:360}]}),['Site A','Site B']);assert.equal(n.travelSite,'');assert.match(H.validateEntry(n),/通勤費/);});
+t('removed site hours not discarded',()=>{const e=base({allocations:[{site:'Site A',minutes:120},{site:'Site B',minutes:360}]});const n=H.syncEntrySites(e,['Site A']);assert.deepEqual(n.allocations,e.allocations);});
+t('adding a site does not erase existing minutes',()=>{const n=H.syncEntrySites(base(),['Site A','Site B']);assert.equal(n.allocations[0].minutes,480);assert.equal(n.travelSite,'Site A');});
+t('non-dispatch resource one-site minutes retained',()=>{const n=H.syncEntrySites(base({kind:'vehicle',quantity:1,label:'Van'}),['Site B']);assert.equal(n.allocations[0].minutes,480);});
+const site={id:'b',name:'Site B'};
+function data(e){return {sites:[{id:'a',name:'Site A'},site],reports:[{id:'r',site_id:'b',report_date:'2026-09-01',updated_at:'2026-09-01T00:00:00Z',report_data:{site:'Site B',writer:'Test',workers:[],meikenCount:2,asahiCount:0,start:'08:00',end:'17:00',vehicles:[],machines:[],items:[],fuels:[],usageHours:{version:1,entries:[e]},dispatchTravel:{meiken:{area:'city',vehicles:1,highway:0,manualTravel:null}}}}],laborRates:[{code:'meiken',kind:'dispatch',label:'明建',day_rate:13000,half_rate:6500,city_per_vehicle:1000}],vehicleRates:[],equipmentRates:[],attachmentRates:[],toolRates:[],transportRates:[],laborSheets:[],vehicleSheets:[],equipmentSheets:[]};}
+t('full-day two people plus one commuting vehicle counted once',()=>{const d=data(H.syncEntrySites(base(),['Site B']));assert.equal(S.analyze(d,site).categories.labor.value,27000);});
+t('saved override retains priority',()=>{const d=data(H.syncEntrySites(base(),['Site B']));d.laborSheets=[{site_id:'b',work_date:'2026-09-01',cost_total:12345,revenue_total:0,entries:[],source_reports:[]}];assert.equal(S.analyze(d,site).categories.labor.value,12345);});
+t('legacy obsolete unknown plus appended zero becomes unknown current-site time',()=>{const n=H.syncEntrySites(base({allocations:[{site:'Site A',minutes:null},{site:'Site B',minutes:0}]}),['Site B']);assert.deepEqual(n.allocations,[{site:'Site B',minutes:null}]);});
+t('legacy single entered time plus empty placeholder retains entered time',()=>{const n=H.syncEntrySites(base({allocations:[{site:'Site A',minutes:145},{site:'Site B',minutes:0}]}),['Site B']);assert.deepEqual(n.allocations,[{site:'Site B',minutes:145}]);});
+console.log('Passed '+tests+' travel-site tests');
