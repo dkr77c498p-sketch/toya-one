@@ -14,7 +14,9 @@
   }
 
   async function refreshNonRecordSiteSelectors(){
+    if(window.ToyaSharedSiteUI?.ready()){window.ToyaSharedSiteUI.syncBrowse(document.querySelector('#ledgerSite'));window.ToyaSharedSiteUI.syncBrowse(document.querySelector('#siteSummarySelect'));return;}
     const names=await loadActiveSites();
+    if(window.ToyaSharedSiteUI?.ready()){window.ToyaSharedSiteUI.syncBrowse(document.querySelector('#ledgerSite'));window.ToyaSharedSiteUI.syncBrowse(document.querySelector('#siteSummarySelect'));return;}
     if(!names.length)return;
     const fill=(sel,all)=>{if(!sel)return;const cur=sel.value;sel.innerHTML=(all?'<option value="">現場を選択</option>':'')+names.map(n=>`<option>${String(n).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</option>`).join('');if(cur&&names.includes(cur))sel.value=cur};
     fill(document.querySelector('#ledgerSite'),false);
@@ -29,10 +31,11 @@
       const writer=document.querySelector('#recordWriterFilter')?.value||'';
       const from=document.querySelector('#recordDateFrom')?.value||'';
       const to=document.querySelector('#recordDateTo')?.value||'';
+      const siteKey=v=>String(v||'').normalize('NFKC').replace(/[\s　]/g,'');
       return (a||[]).filter(d=>{
         const moves=d.siteMoves||[];
         const hay=[d.site,d.writer,d.details,d.memo,...(d.workTypes||[]),...moves.flatMap(m=>[m?.site,m?.action,m?.waste,m?.disposal,m?.vehicle])].filter(Boolean).join(' ').toLowerCase();
-        return(!q||hay.includes(q))&&(!site||d.site===site||moves.some(m=>m?.site===site))&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to);
+        return(!q||hay.includes(q))&&(!site||siteKey(d.site)===siteKey(site)||moves.some(m=>siteKey(m?.site)===siteKey(site)))&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to);
       });
     };
     window.__moveRecordFiltersFixed5=true;

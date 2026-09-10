@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict');
+const P=require('../docs/shared-site-master.js');
+const rows=[{id:'a',name:'会社の清掃(犬迫町)',status:'active'},{id:'b',name:'郡元 小松ビル',status:'active'},{id:'c',name:'武町アスファルト撤去',status:'active'},{id:'d',name:'荒田（田中ビル）',status:'active'},{id:'z',name:'終了現場',status:'inactive'},{id:'p',name:'現場名をあとで変更',status:'inactive'}];
+const values=os=>os.map(o=>o.value),names=os=>os.filter(o=>o.value).map(o=>P.norm(o.label));
+let n=0;function t(name,fn){fn();n++;console.log('PASS',name)}
+t('four active text choices',()=>assert.equal(P.browseOptions(rows,[]).length,5));
+t('ID choices use same names',()=>assert.deepEqual(names(P.browseOptions(rows,[])),names(P.browseOptions(rows,[],'',true))));
+t('spacing and parentheses normalized only',()=>{assert.equal(P.norm('荒田 (田中ビル)'),P.norm('荒田（田中ビル）'));assert.notEqual(P.norm('荒田田中ビル'),P.norm('荒田（田中ビル）'))});
+t('new site without reports available',()=>assert.ok(values(P.browseOptions(rows,[])).includes('武町アスファルト撤去')));
+t('archived hidden ordinarily',()=>assert.ok(!values(P.browseOptions(rows,[])).includes('終了現場')));
+t('history includes placeholder',()=>assert.ok(values(P.browseOptions(rows,[],'',false,true)).includes('現場名をあとで変更')));
+t('report-only history searchable',()=>assert.ok(values(P.browseOptions(rows,['旧日報名'],'',false,true)).includes('旧日報名')));
+t('selected historical ID retained',()=>assert.ok(values(P.browseOptions(rows,[],'z',true)).includes('z')));
+t('selected spelling retained exactly once',()=>{const os=P.browseOptions(rows,[],'荒田 (田中ビル)');assert.equal(os.filter(o=>P.norm(o.value)===P.norm('荒田（田中ビル）')).length,1);assert.ok(values(os).includes('荒田 (田中ビル)'))});
+t('old placeholder input preserved',()=>assert.ok(values(P.options(rows,[],'現場名をあとで変更',false)).includes('現場名をあとで変更')));
+t('unshared admin draft not ordinary',()=>assert.ok(!values(P.options(rows,['未共有'],'',true)).includes('未共有')));
+t('selected local draft preserved',()=>assert.ok(values(P.options(rows,['未共有'],'未共有',true)).includes('未共有')));
+t('employee shares same active choices',()=>assert.deepEqual(names(P.options(rows,[],'',false)),names(P.browseOptions(rows,[]))));
+t('move destination excludes origin',()=>assert.ok(!values(P.options(rows,[],'',false,'郡元 小松ビル')).includes('郡元 小松ビル')));
+t('different database IDs never merged',()=>{const copy=rows.concat({id:'d2',name:'荒田 (田中ビル)',status:'active'}),os=P.browseOptions(copy,[],'',true);assert.ok(values(os).includes('d'));assert.ok(values(os).includes('d2'));assert.match(os.find(o=>o.value==='d').label,/ID末尾/)});
+t('history includes move and time destinations',()=>assert.deepEqual(P.historyNames([{site:'a',siteMoves:[{site:'b'}],usageHours:{entries:[{allocations:[{site:'c'}]}]}}]),['a','b','c']));
+t('source catalog never mutated',()=>{const old=JSON.stringify(rows);P.options(rows,[],'',true);P.browseOptions(rows,[],'z',true,true);assert.equal(JSON.stringify(rows),old)});
+console.log(n+' unified-selector regressions passed. No database writes.');

@@ -97,8 +97,9 @@
       const [rr,ss]=await Promise.all([cloudClient.from('equipment_rate_master').select('*').eq('company_id',cloudProfile.company_id).order('sort_order'),cloudClient.from('sites').select('id,name,status').eq('company_id',cloudProfile.company_id).order('name')]);
       if(!same(mine))return;if(rr.error)throw rr.error;if(ss.error)throw ss.error;
       rates=rr.data||[];sites=ss.data||[];initialized=true;renderRates();
-      q('#ecSite').innerHTML='<option value="">現場を選択</option>'+sites.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-      const current=q('#site')?.value,match=sites.find(s=>s.name===current);if(match)q('#ecSite').value=match.id;
+      q('#ecSite').innerHTML='<option value="">現場を選択</option>'+sites.filter(s=>s.status==='active'&&!['新しい現場','現場名をあとで変更','未登録現場'].includes(s.name)).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+      const current=q('#site')?.value,match=sites.find(s=>String(s.name).normalize('NFKC').replace(/[\s　]/g,'')===String(current||'').normalize('NFKC').replace(/[\s　]/g,''));if(match)q('#ecSite').value=match.id;
+      window.ToyaSharedSiteUI?.syncBrowse(q('#ecSite'));
       msg('日付・現場を選ぶと、使用重機と燃料代を日報から読み込みます。');
     }catch(e){if(same(mine))msg('読込エラー：'+e.message,true);}finally{if(same(mine))setBusy(false);}
   }
@@ -178,4 +179,9 @@
     setInterval(()=>{if(owner&&!same(owner))clear();},1000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+  document.addEventListener('toya-shared-sites-updated',event=>{
+    if(typeof cloudProfile==='undefined'||!cloudProfile?.active||cloudProfile.role!=='admin'||event.detail?.companyId!==cloudProfile.company_id)return;
+    sites=(Array.isArray(event.detail.sites)?event.detail.sites:[]).map(s=>({...s}));
+    window.ToyaSharedSiteUI?.syncBrowse(q('#ecSite'));
+  });
 })();

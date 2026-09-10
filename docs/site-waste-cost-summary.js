@@ -21,7 +21,8 @@
 
   function buildRows(site){
     const reports = getCloudReports();
-    const mine = reports.filter(d => String(d.site || '') === String(site || ''));
+    const siteKey=v=>String(v||'').normalize('NFKC').replace(/[\s　]/g,'');
+    const mine = reports.filter(d => siteKey(d.site) === siteKey(site));
     const rows = [];
     mine.forEach(d => {
       (Array.isArray(d.items) ? d.items : []).forEach(x => {
@@ -42,6 +43,7 @@
   async function ensureSiteOptions(){
     const sel = document.getElementById('siteSummarySelect');
     if(!sel) return false;
+    if(window.ToyaSharedSiteUI?.ready()){window.ToyaSharedSiteUI.syncBrowse(sel);return true;}
 
     let sites = getCloudSites().filter(x => x && x.status !== 'inactive' && x.name);
 
@@ -58,6 +60,7 @@
       }catch(e){ console.warn('現場別集計の現場取得に失敗', e); }
     }
 
+    if(window.ToyaSharedSiteUI?.ready()){window.ToyaSharedSiteUI.syncBrowse(sel);return true;}
     const names = [...new Set(sites.map(x => String(x.name || '').trim()).filter(Boolean))];
     if(!names.length) return false;
 

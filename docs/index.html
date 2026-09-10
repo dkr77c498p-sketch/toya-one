@@ -1264,6 +1264,7 @@ function setFuelOutlet(btn,outlet){
 }
 function fuelAmount(x){const a=Number(x?.amount||0);if(a>0)return a;return Number(x?.liters||0)*Number(x?.unitPrice||0)}
 function populateSiteSummarySelect(){
+  if(window.ToyaSharedSiteUI?.ready()){window.ToyaSharedSiteUI.syncBrowse($('#siteSummarySelect'));return;}
   const sel=$('#siteSummarySelect');if(!sel)return;
   const current=sel.value;
   const names=[...new Set((cloudReportsCache||[]).map(d=>d.site).filter(Boolean))].sort();
@@ -1274,7 +1275,8 @@ function timeHours(a,b){if(!a||!b)return 0;const [ah,am]=a.split(':').map(Number
 function renderSiteSummary(){
   if(!cloudProfile||cloudProfile.role!=='admin')return;
   populateSiteSummarySelect();const site=$('#siteSummarySelect')?.value,box=$('#siteSummaryBody');if(!box||!site)return;
-  const arr=(cloudReportsCache||[]).filter(d=>d.site===site);
+  const siteKey=v=>String(v||'').normalize('NFKC').replace(/[\s　]/g,'');
+  const arr=(cloudReportsCache||[]).filter(d=>siteKey(d.site)===siteKey(site));
   let personHours=0,machineHours=0,fuel=0,adblue=0,grease=0,fuelCost=0,other=0;
   const machines={},vehicles={};
   arr.forEach(d=>{
@@ -1446,6 +1448,7 @@ async function saveReport(){
 const PHOTO_CATEGORIES=['着工前','養生','施工中','積込','搬出','完了','その他'];
 
 function populateLedgerSites(){
+  if(window.ToyaSharedSiteUI?.ready()){window.ToyaSharedSiteUI.syncBrowse($('#ledgerSite'));return;}
   const sel=$('#ledgerSite');
   if(!sel)return;
   const reports=cloudProfile?cloudReportsCache:get(LS.reports,[]);
@@ -1459,7 +1462,8 @@ function populateLedgerSites(){
 
 async function getSiteLedgerData(site){
   if(cloudProfile){
-    const reports=cloudReportsCache.filter(r=>(r.site||'現場名をあとで変更')===site);
+    const siteKey=v=>String(v||'').normalize('NFKC').replace(/[\s　]/g,'');
+    const reports=cloudReportsCache.filter(r=>siteKey(r.site||'現場名をあとで変更')===siteKey(site));
     const ids=reports.map(r=>r.cloudId);
     const items=[];
     if(!ids.length)return {reports,items};
@@ -1672,6 +1676,11 @@ function recordFilters(a){
 function updateRecordFilterOptions(a){
   const site=$('#recordSiteFilter'),writer=$('#recordWriterFilter');if(!site||!writer)return;
   const sv=site.value,wv=writer.value;
+  if(window.ToyaSharedSiteUI?.ready()){
+    const writers=[...new Set((a||[]).map(x=>x.writer).filter(Boolean))].sort();
+    writer.innerHTML='<option value="">全員</option>'+writers.map(x=>`<option>${cloudHtml(x)}</option>`).join('');if(writers.includes(wv))writer.value=wv;
+    window.ToyaSharedSiteUI.syncBrowse(site,false,sv);return;
+  }
   const sites=[...new Set(a.map(x=>x.site).filter(Boolean))].sort();
   const writers=[...new Set(a.map(x=>x.writer).filter(Boolean))].sort();
   site.innerHTML='<option value="">全現場</option>'+sites.map(x=>`<option>${cloudHtml(x)}</option>`).join('');
@@ -1900,23 +1909,23 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 
 
 </script>
-<script src="midway.js?v=20260906-1636"></script>
-<script src="site-move-filter-fix.js?v=20260908-1542"></script>
+<script src="midway.js?v=20260910-sites-v3"></script>
+<script src="site-move-filter-fix.js?v=20260910-sites-v3"></script>
 <script src="attachment-separation-stable.js?v=20260908-1705"></script>
 <script src="waste-price-master.js?v=20260908-shori-v1"></script>
 <script src="waste-price-admin.js?v=20260908-shori-v1"></script>
-<script src="site-waste-cost-summary.js?v=20260908-1220"></script>
+<script src="site-waste-cost-summary.js?v=20260910-sites-v3"></script>
 <script src="dispatch-travel.js?v=20260909-travel-v1"></script>
-<script src="labor-cost-admin.js?v=20260909-hours-v1"></script>
-<script src="vehicle-cost-admin.js?v=20260909-hours-v1"></script>
-<script src="equipment-cost-admin.js?v=20260909-hours-v1"></script>
+<script src="labor-cost-admin.js?v=20260910-sites-v3"></script>
+<script src="vehicle-cost-admin.js?v=20260910-sites-v3"></script>
+<script src="equipment-cost-admin.js?v=20260910-sites-v3"></script>
 <script src="equipment-transport.js?v=20260909-transport-v1"></script>
 <script src="usage-hours.js?v=20260909-travel-site-v4"></script>
 <script src="attachment-rate-admin.js?v=20260909-inline-v3"></script>
 <script src="pending-transport-tools.js?v=20260909-hours-v1"></script>
-<script src="site-financial-summary.js?v=20260909-inline-v3"></script>
-<script src="employee-activity-summary.js?v=20260909-employee-v1"></script>
-<script src="shared-site-master.js?v=20260909-site-share-v1"></script>
+<script src="site-financial-summary.js?v=20260910-sites-v3"></script>
+<script src="employee-activity-summary.js?v=20260910-sites-v3"></script>
+<script src="shared-site-master.js?v=20260910-sites-v3"></script>
 <script src="report-draft-recovery.js?v=20260909-travel-site-v4"></script>
 </body>
 </html>

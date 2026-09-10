@@ -116,8 +116,9 @@
       if(rr.error)throw rr.error;if(ss.error)throw ss.error;
       if(owner!==mine || !sameOwner())return;
       rates=rr.data||[];sites=ss.data||[];renderRates();
-      q('#lcSite').innerHTML='<option value="">現場を選択</option>'+sites.map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-      const current=q('#site')?.value; const match=sites.find(s=>s.name===current);if(match)q('#lcSite').value=match.id;
+      q('#lcSite').innerHTML='<option value="">現場を選択</option>'+sites.filter(s=>s.status==='active'&&!['新しい現場','現場名をあとで変更','未登録現場'].includes(s.name)).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+      const current=q('#site')?.value; const match=sites.find(s=>String(s.name).normalize('NFKC').replace(/[\s　]/g,'')===String(current||'').normalize('NFKC').replace(/[\s　]/g,''));if(match)q('#lcSite').value=match.id;
+      window.ToyaSharedSiteUI?.syncBrowse(q('#lcSite'));
       msg('現場を選んで開くと、保存済みの金額または日報から計算した人数を表示します。');
     } catch(e){initialized=false;msg('人件費の読込エラー：'+e.message,true);}
     finally {setBusy(false);}
@@ -313,4 +314,9 @@
     let tries=0;const timer=setInterval(()=>{init();if(initialized||++tries>=30)clearInterval(timer);},1000);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+  document.addEventListener('toya-shared-sites-updated',event=>{
+    if(typeof cloudProfile==='undefined'||!cloudProfile?.active||cloudProfile.role!=='admin'||event.detail?.companyId!==cloudProfile.company_id)return;
+    sites=(Array.isArray(event.detail.sites)?event.detail.sites:[]).map(s=>({...s}));
+    window.ToyaSharedSiteUI?.syncBrowse(q('#lcSite'));
+  });
 })();

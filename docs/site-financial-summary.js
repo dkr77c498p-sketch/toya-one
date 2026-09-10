@@ -389,7 +389,7 @@
       const mode = q('#sfMode').value, value = mode === 'day' ? q('#sfDay').value : q('#sfMonth').value;
       const bounds = periodBounds(mode, value), company = cloudProfile.company_id;
       const sites = await readAll('sites', 'id,name,status', company, {}, null, null, ticket);
-      const matches = sites.filter(s => s.name === siteName);
+      const matches = sites.filter(s => normal(s.name) === normal(siteName));
       if (matches.length !== 1) throw new Error('現場名を一意に確認できません。登録を確認してください。');
       const site = matches[0];
       const definitions = [

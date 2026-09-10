@@ -5,7 +5,7 @@ const rows=[{id:'1',name:'会社の清掃(犬迫町)',status:'active'},{id:'2',n
 t('new shared sites available to employees',()=>assert.equal(S.options(rows,[],'',false).length,5));
 t('only active sites normally shown',()=>assert.ok(!S.options(rows,[],'',false).some(x=>x.value==='完了済み現場')));
 t('local-only name not newly offered to employee',()=>assert.ok(!S.options(rows,['ローカル'],'',false).some(x=>x.value==='ローカル')));
-t('local-only admin option is marked not shared',()=>assert.match(S.options(rows,['ローカル'],'',true).find(x=>x.value==='ローカル').label,/未共有/));
+t('local-only admin draft stays out of shared picker until registered',()=>assert.ok(!S.options(rows,['ローカル'],'',true).some(x=>x.value==='ローカル')));
 t('current historical selection retained',()=>assert.equal(S.options(rows,[],'完了済み現場',false)[1].value,'完了済み現場'));
 t('current local-only selection retained for safety',()=>assert.ok(S.options(rows,[],'ローカル',false).some(x=>x.value==='ローカル')));
 t('spacing/fullwidth alias does not create second choice',()=>{const x=S.options(rows,['荒田 (田中ビル)'],'荒田 (田中ビル)',true);assert.equal(x.filter(o=>S.norm(o.value)==='荒田(田中ビル)').length,1);assert.ok(x.some(o=>o.value==='荒田 (田中ビル)'));});

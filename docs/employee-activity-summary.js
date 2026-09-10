@@ -177,13 +177,14 @@
     q('#esRefresh').disabled=true;q('#esStatus').textContent='記録を読み込み中…';q('#esResult').innerHTML='';
     try {
       const company=cloudProfile.company_id,bounds=period(q('#esMode').value,q('#esMonth').value,q('#esDay').value);
-      const rawSites=await read('sites','id,name',company,null,t);
+      const rawSites=await read('sites','id,name,status',company,null,t);
       if(t!==ticket||mine!==identity())return;
-      sites=rawSites.map(s=>({id:s.id,name:safe(s.name)})).filter(s=>s.name&&!['新しい現場','現場名をあとで変更','未登録現場'].includes(s.name)).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+      sites=rawSites.map(s=>({id:s.id,name:safe(s.name),status:s.status})).filter(s=>s.name).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
       const chosen=q('#esSite').value,mainSite=q('#site')?.value;
-      q('#esSite').innerHTML=sites.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('');
-      q('#esSite').value=sites.find(s=>s.id===chosen)?.id || sites.find(s=>s.name===mainSite)?.id || sites[0]?.id || '';
-      const target=sites.find(s=>s.id===q('#esSite').value);if(!target){q('#esStatus').textContent='登録現場がありません。';return;}
+      q('#esSite').innerHTML='<option value="">現場を選択</option>'+sites.filter(s=>s.status==='active'&&!['新しい現場','現場名をあとで変更','未登録現場'].includes(s.name)||s.id===chosen).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+'</option>').join('');
+      q('#esSite').value=sites.find(s=>s.id===chosen)?.id || sites.find(s=>norm(s.name)===norm(mainSite)&&s.status==='active')?.id || '';
+      window.ToyaSharedSiteUI?.syncBrowse(q('#esSite'));
+      const target=sites.find(s=>s.id===q('#esSite').value);if(!target){q('#esStatus').textContent='現場を選んでください。';return;}
       // Read shared report facts only. Never query pricing masters or confirmed cost sheets.
       const fields='id,site_id,report_date,workers:report_data->workers,meikenCount:report_data->meikenCount,asahiCount:report_data->asahiCount,vehicles:report_data->vehicles,machines:report_data->machines,attachments:report_data->attachments,usageHours:report_data->usageHours,siteMoves:report_data->siteMoves,items:report_data->items,fuels:report_data->fuels';
       const rows=await read('daily_reports',fields,company,bounds,t);
