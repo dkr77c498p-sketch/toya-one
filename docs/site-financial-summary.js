@@ -1,9 +1,10 @@
-/* TOYA One site financial summary v3. Automatic costs + admin-only contract revenue. */
+/* TOYA One site financial summary v4. Review reasons separate from movement records. */
 (() => {
   'use strict';
   const hoursEngine = typeof module === 'object' && module.exports ? require('./usage-hours.js') : window.ToyaUsageHoursEngine;
   const travelEngine = typeof module === 'object' && module.exports ? require('./dispatch-travel.js') : window.ToyaDispatchTravelEngine;
   const transportEngine = typeof module === 'object' && module.exports ? require('./equipment-transport.js') : window.ToyaTransportEngine;
+  const names = {labor: '人件費・常用費（交通費込）', vehicle: '車両使用料', equipment: '重機使用料'};
   const list = value => Array.isArray(value) ? value : [];
   const normal = value => String(value || '').normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
   const assetKey = value => {
@@ -166,7 +167,7 @@
   /** Saved adjustments take priority; otherwise derive display-only daily estimates. */
   function analyze(data, site) {
     const reports = uniqueReports(data.reports), own = reports.filter(r => r.site_id === site.id);
-    const byDay = new Map(), warnings = new Set();
+    const byDay = new Map(), warnings = new Set(), notes = new Set();
     const day = date => {
       if (!byDay.has(date)) byDay.set(date, {date, labor: 0, vehicle: 0, equipment: 0, fuel: 0, waste: 0, transport: 0, tools: 0, attachments: 0, other: 0, revenue: 0, pending: [], stale: [], unknown: 0});
       return byDay.get(date);
@@ -177,7 +178,11 @@
     const expenses = {attachments: {value: 0, count: 0, missing: 0}, tools: {value: 0, count: 0, missing: 0}, fuel: {value: 0, count: 0, missing: 0}, waste: {value: 0, count: 0, missing: 0}, transport: {value: 0, count: 0, missing: 0}, other: {value: 0, count: 0, missing: 0}};
     const addExpense = (kind, value, date) => {
       const e = expenses[kind]; e.count++;
-      if (value === null) {e.missing++; day(date).unknown++;}
+      if (value === null) {
+        e.missing++; day(date).unknown++;
+        const label = {fuel: '燃料・油脂', waste: '処分費', other: '材料・その他経費'}[kind];
+        if (label) warnings.add(date + '：' + label + 'の金額を確認できません。その分は原価に含めていません。日報の金額を確認してください。');
+      }
       else {e.value = round(e.value + value); day(date)[kind] = round(day(date)[kind] + value);}
     };
     const writerCounts = new Map(), fuelFingerprints = new Map(), transportFingerprints = new Map();
@@ -219,7 +224,7 @@
         if (kind === 'waste' && (amount(x.qty ?? x.quantity) === null || !x.unit)) warnings.add(date + '：産廃に数量・単位の未入力があります。');
         if (kind === 'other' && /人件費|常用|車両費|重機費|燃料|給油|高速|交通費/.test(String(x.name || ''))) warnings.add(date + '：日報の経費と人件費・車両費等で同じ費用を重ねていないか確認してください。');
       });
-      if (list(d.siteMoves).length) warnings.add(date + '：現場移動あり。現場別の時間が入力済みの対象は時間で配分し、それ以外は要確認です。');
+      if (list(d.siteMoves).length) notes.add(date + '：現場移動の記録があります。入力済みの現場別時間で計算し、保存済みの調整額があれば優先します。配分を確認できない費用は「要確認の記録」に表示します。');
       if (list(d.leaseVehicles).length || list(d.leaseMachines).length || list(d.leaseAttachments).length) warnings.add(date + '：リースの記録があります。リース代は専用欄から自動加算しません。日報の経費に含めたか確認してください。');
       if (/給油|リッター|リットル|軽油|ガソリン|運搬|回送|高山/.test(String(d.memo || ''))) warnings.add(date + '：メモの給油・運搬等は自動で金額にしません。燃料・経費欄の記録を確認してください。');
     });
@@ -227,7 +232,7 @@
       if (m?.site !== site.name || r.site_id === site.id) return;
       day(r.report_date); needed.labor.add(r.report_date);
       if (m.vehicle) needed.vehicle.add(r.report_date);
-      warnings.add(r.report_date + '：別現場からの移動記録あり。現場別の時間が入力済みの人・車両・機械とその燃料を配分します。その他経費は元の日報に残します。');
+      notes.add(r.report_date + '：別現場からの移動記録があります。入力済みの現場別時間で計算し、保存済みの調整額があれば優先します。その他経費は元の日報に残します。配分を確認できない費用は「要確認の記録」に表示します。');
     }));
     // Time facts create coverage for each explicitly selected site, including destinations.
     if (!hoursEngine) throw new Error('時間計算を読み込めませんでした。');
@@ -269,13 +274,16 @@
         } else {const v = requiredAmount(s.revenue_total); revenue = round(revenue + v); day(s.work_date).revenue = v;}
         sum = round(sum + n); day(s.work_date)[kind] = n;
         const current = (kind === 'labor' && !list(s.entries).some(e => Number.isFinite(e.hourlyMinutes)) ? own : reports).filter(r => r.report_date === s.work_date);
-        if (sig(s.source_reports) !== sig(current)) {staleDates.push(s.work_date); day(s.work_date).stale.push(kind);}
-        if (list(s.review_warnings).length) warnings.add(s.work_date + '：保存時の重複・配分等の注意事項があります。費用の確認画面で見直せます。');
-        if (!s._automatic && !own.some(r => r.report_date === s.work_date)) warnings.add(s.work_date + '：費用は保存されていますが、この現場の日報がありません。');
+        if (sig(s.source_reports) !== sig(current)) {
+          staleDates.push(s.work_date); day(s.work_date).stale.push(kind);
+          warnings.add(s.work_date + '：' + names[kind] + 'は、保存時と最新の日報の情報が一致していません。保存額を表示しています。登録管理でこの日・現場の費用を開き、日報を読み直して内容を確認・保存してください。');
+        }
+        if (list(s.review_warnings).length) warnings.add(s.work_date + '：' + names[kind] + 'に保存時の重複・配分等の注意事項があります。登録管理でこの日・現場の費用を開いて確認してください。');
+        if (!s._automatic && !own.some(r => r.report_date === s.work_date)) warnings.add(s.work_date + '：' + names[kind] + 'は保存されていますが、この現場の日報がありません。');
       });
       const missingDates = [...needed[kind]].filter(date => !dateMap.has(date)).sort();
       missingDates.forEach(date => day(date).pending.push(kind));
-      categories[kind] = {value: sum, gross, deduction, revenue, savedDays: stored.length, autoDates, reviewDates, missingDates, staleDates};
+      categories[kind] = {value: sum, gross, deduction, revenue, savedDays: stored.length, savedDates: stored.map(s => s.work_date), autoDates, reviewDates, missingDates, staleDates};
     });
     const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({...d, subtotal: round(d.labor + d.vehicle + d.equipment + d.fuel + d.waste + d.transport + d.tools + d.attachments + d.other)}));
     const subtotal = round(categories.labor.value + categories.vehicle.value + categories.equipment.value + expenses.fuel.value + expenses.waste.value + expenses.transport.value + expenses.tools.value + expenses.attachments.value + expenses.other.value);
@@ -289,7 +297,7 @@
     const profit = sales === null ? null : round(sales - subtotal);
     const profitMargin = sales > 0 ? round(profit / sales * 100) : null;
     const partial = Object.values(categories).some(c => c.missingDates.length || c.staleDates.length) || Object.values(expenses).some(e => e.missing) || warnings.size > 0;
-    return {categories, expenses, days, subtotal, partial, warnings: [...warnings], reportCount: own.length, hasData: byDay.size > 0,
+    return {categories, expenses, days, subtotal, partial, warnings: [...warnings], notes: [...notes], reportCount: own.length, hasData: byDay.size > 0,
       contract, contractAmount, outgoingRevenue, sales, profit, profitMargin};
   }
   const engine = Object.freeze({analyze, automaticSheet, periodBounds, amount, fuelAmount, signature: sig});
@@ -300,7 +308,6 @@
   const q = selector => document.querySelector(selector);
   const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const yen = n => Number(n).toLocaleString('ja-JP', {maximumFractionDigits: 2}) + '円';
-  const names = {labor: '人件費・常用費（交通費込）', vehicle: '車両使用料', equipment: '重機使用料'};
   const identity = () => typeof cloudProfile !== 'undefined' && cloudProfile?.role === 'admin' && cloudProfile.active === true && cloudProfile.company_id && typeof cloudClient !== 'undefined' && cloudClient ? cloudProfile.id + ':' + cloudProfile.company_id : '';
   const visible = () => !!q('#homePage')?.classList.contains('active');
   const todayLocal = () => typeof today === 'function' ? today() : new Date().toLocaleDateString('sv-SE');
@@ -408,7 +415,7 @@
     }
     html += '<div class="sf-total"><div>' + (mode === 'all' ? '現場原価 合計（概算）' : '期間原価 小計（概算）') + '</div><strong>' + yen(result.subtotal) + '</strong><small>' + (result.partial ? '入力済みの人数・使用車両・重機を自動計算済み。通勤台数や現場移動などの要確認分・未入力費用は含まれない場合があります。' : '日報×登録単価と入力済み費用の合計です。保存済みの調整額を優先しています。未記入の費用は含みません。') + '</small></div>';
     Object.entries(result.categories).forEach(([kind, c]) => {
-      const value = !c.savedDays && !c.autoDates.length ? '使用・費用記録なし' : yen(c.value) + (c.reviewDates.length ? '［要確認］' : '');
+      const value = !c.savedDays && !c.autoDates.length ? '使用・費用記録なし' : yen(c.value) + (c.reviewDates.length || c.staleDates.length ? '［要確認］' : '');
       const note = ['自動計算 ' + c.autoDates.length + '日', '保存額を優先 ' + c.savedDays + '日', c.reviewDates.length ? '一部費用の要確認 ' + c.reviewDates.length + '日' : '', c.staleDates.length ? '保存後の日報変更 ' + c.staleDates.length + '日（保存額を保持）' : ''].filter(Boolean).join(' ／ ');
       html += line(names[kind], value, note);
     });
@@ -420,8 +427,16 @@
     if (pending.length) html += '<p class="sf-alert">一部費用の要確認：' + escape(pending.join('・')) + '。計算できる分はすでに小計へ反映済みです。通勤台数や現場間の配分など、不明な分だけ確認・調整してください。通常の日は費用保存なしで表示します。</p>';
     if (result.categories.labor.revenue) html += line('常用に行く分の売上（原価と別）', yen(result.categories.labor.revenue), 'この売上は上の原価小計へ加算・相殺していません。');
     html += '<details><summary>計算方法</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両使用料＋重機使用料＋日報の燃料・油脂＋処分費＋重機回送費＋小型機械費＋その他経費。車両・重機・小型機械の使用料から燃料代は差し引かず、燃料費として別に1回加算します。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両使用料 ' + yen(result.categories.vehicle.gross) + ' ＋ 重機使用料 ' + yen(result.categories.equipment.gross) + '。燃料・油脂は上の専用欄に別表示しています。</p><p class="sf-note">現場別の時間を入力した人工・車両・重機は日額÷8時間×使用時間で計算します。小型機械は登録した時間単価×使用時間×台数です。分単位の入力に対応します。時間欄のない過去の日報は従来の日額計算を残し、保存済み調整額を優先します。記録が競合する対象や時間未入力は要確認です。明建・朝日の通勤費・高速代は日報の専用欄から人件費内へ1回だけ加算します。市内は台数×登録単価、市外・特別料金は入力合計額です。半日でも通勤費は半額にしません。未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。回送は日報の専用欄に追加した重機1台・片道回数×現行登録単価で計算し、手入力の合計額（0円も含む）を優先します。運搬会社へ支払う回送費から自社燃料代を差し引きません。メモだけの金額、単価未登録の回送・小型機械や未入力のリース費は自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
-    html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind] + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
+    html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => {
+      const costs = ['labor', 'vehicle', 'equipment'].map(kind => {
+        const c = result.categories[kind];
+        const source = c.autoDates.includes(d.date) ? '［自動］' : c.savedDates.includes(d.date) ? '［保存額］' : '';
+        return names[kind] + '：' + (source ? yen(d[kind]) + source : '使用・費用記録なし') + (c.reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '');
+      }).join(' ／ ');
+      return '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + escape(costs) + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ アタッチメント ' + yen(d.attachments) + ' ／ 小型機械・工具 ' + yen(d.tools) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>';
+    }).join('') + '</details>';
     if (result.warnings.length) html += '<details><summary>要確認の記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
+    if (result.notes.length) html += '<details><summary>現場移動の記録（' + result.notes.length + '件）</summary><p class="sf-note">' + result.notes.map(escape).join('<br><br>') + '</p></details>';
     q('#sfResult').innerHTML = html;
     bindContractEditor(result, site);
     status(site.name + ' ／ ' + label + ' ／ 日報' + result.reportCount + '件を確認。更新 ' + new Date().toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}));

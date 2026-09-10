@@ -12,7 +12,18 @@ test('break calculation 8 hours',()=>assert.equal(H.workMinutes('08:00','17:00',
 test('minutes and invalid times',()=>{assert.equal(H.workMinutes('08:15','11:00',15),150);assert.equal(H.workMinutes('08:90','17:00',60),null);assert.equal(H.workMinutes('17:00','08:00',60),null);assert.equal(H.workMinutes('08:00','09:00',90),null);});
 test('8 hour labor and 2 hour vehicle',()=>{const r=analyze(data([report([entry('labor','検証者'),entry('vehicle','検証車',120)])]));assert.equal(r.categories.labor.value,18000);assert.equal(r.categories.vehicle.value,7000);assert.equal(r.subtotal,25000);});
 test('minute precision',()=>{const r=analyze(data([report([entry('labor','検証者',90),entry('vehicle','検証車',30)])]));assert.equal(r.subtotal,3375+1750);});
-test('different site allocation and fuel conservation',()=>{const d=data([report([split('labor','検証者'),split('vehicle','検証車')],{fuels:[{asset:'検証車',type:'軽油',amount:1001}],siteMoves:[{site:siteB.name,vehicle:'検証車'}]})]);const a=analyze(d),b=analyze(d,siteB);assert.equal(a.categories.labor.value,4500);assert.equal(b.categories.labor.value,13500);assert.equal(a.expenses.fuel.value+b.expenses.fuel.value,1001);assert.equal(a.subtotal+b.subtotal,47001);assert.equal(b.categories.vehicle.gross,21000);});
+test('complete site allocation conserves fuel and only adds movement information',()=>{const d=data([report([split('labor','検証者'),split('vehicle','検証車')],{fuels:[{asset:'検証車',type:'軽油',amount:1001}],siteMoves:[{site:siteB.name,vehicle:'検証車'}]})]);const a=analyze(d),b=analyze(d,siteB);assert.equal(a.categories.labor.value,4500);assert.equal(b.categories.labor.value,13500);assert.equal(a.expenses.fuel.value+b.expenses.fuel.value,1001);assert.equal(a.subtotal+b.subtotal,47001);assert.equal(b.categories.vehicle.gross,21000);for(const x of [a,b]){assert.equal(x.partial,false);assert.deepEqual(x.warnings,[]);assert.equal(x.notes.length,1);}});
+test('unallocated movement still requires labor and vehicle review at both sites',()=>{
+  const r=report([],{siteMoves:[{site:siteB.name,vehicle:'検証車'}]});delete r.report_data.usageHours;
+  const d=data([r]);
+  for(const s of [siteA,siteB]) {
+    const x=analyze(d,s);assert.equal(x.partial,true);assert.equal(x.notes.length,1);
+    assert.deepEqual(x.categories.labor.reviewDates,['2026-09-09']);
+    assert.deepEqual(x.categories.vehicle.reviewDates,['2026-09-09']);
+    assert.ok(x.warnings.some(t=>/人工配分|移動者/.test(t)));assert.ok(x.warnings.some(t=>/検証車|車両代/.test(t)));
+    assert.equal(x.subtotal,0);
+  }
+});
 test('3 sites do not duplicate day rate',()=>{const e=split('labor','検証者',120,120);e.allocations.push({site:siteC.name,minutes:240});const d=data([report([e],{vehicles:[]})]);assert.equal([siteA,siteB,siteC].reduce((n,s)=>n+analyze(d,s).subtotal,0),18000);});
 test('duplicate report ids not duplicate fuel',()=>{const r=report([entry('labor','検証者'),entry('vehicle','検証車',480)],{fuels:[{asset:'検証車',type:'軽油',amount:1000}]});assert.equal(analyze(data([r,r])).subtotal,47000);assert.equal(analyze(data([r,r])).expenses.fuel.count,1);});
 test('identical allocations across people reports count once',()=>{const r=report([entry('labor','検証者'),entry('vehicle','検証車',60)]),r2={...r,id:'r2'};assert.equal(analyze(data([r,r2])).subtotal,21500);});
