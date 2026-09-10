@@ -1,0 +1,15 @@
+def shared(s):
+ s=replace(s,"  if(admin)arr(local).filter(n=>!allKnown.has(norm(n))).forEach(n=>add(n,n+'（この端末のみ・未共有）'));", "  // Unshared local drafts stay in Registration Management, not ordinary choices.")
+ s=replace(s,"  if(!placeholder(current)){","  if(String(current||'').trim()){")
+ s=replace(s," if(typeof module==='object'&&module.exports){module.exports={norm,placeholder,validateName,options};return;}",pure+" if(typeof module==='object'&&module.exports){module.exports={norm,placeholder,validateName,options,browseOptions,historyNames};return;}")
+ s=replace(s," function setOptions(sel,exclude='',current=sel?.value||''){",browser+" function setOptions(sel,exclude='',current=sel?.value||''){")
+ s=replace(s,"  const before=[...sel.options].map(o=>({value:o.value,label:o.textContent}));\n  if(JSON.stringify(before)!==JSON.stringify(os))sel.replaceChildren(...os.map(o=>new Option(o.label,o.value)));\n  sel.value=placeholder(current)?'':current;", "  replaceOptions(sel,os,current);")
+ s=replace(s,"  document.querySelectorAll('.sm-site').forEach(sel=>setOptions(sel,q('#site')?.value||''));", "  document.querySelectorAll('.sm-site').forEach(sel=>setOptions(sel,q('#site')?.value||''));\n  Object.keys(selectSpecs).forEach(id=>syncBrowse(q('#'+id)));")
+ s=replace(s,"   rows=result;loaded=true;lastRead=Date.now();cloudSitesCache=result;", "   const changed=!loaded||JSON.stringify(rows)!==JSON.stringify(result);\n   rows=result;loaded=true;lastRead=Date.now();cloudSitesCache=result;\n   if(changed)document.dispatchEvent(new CustomEvent('toya-shared-sites-updated',{detail:{companyId:company,sites:result.map(s=>({...s}))}}));")
+ s=replace(s,"#ssEditor summary{font-weight:bold;padding:12px 0}","#ssEditor summary{font-weight:bold;padding:12px 0}.ss-history{margin:6px 0 10px;font-size:12px;color:#555}.ss-history label{display:flex;align-items:center;gap:7px;font-size:12px;min-height:36px;margin:0}.ss-history input[type=checkbox]{width:18px!important;height:18px!important;min-height:18px!important;flex:0 0 18px;margin:0}")
+ assert s.count("e.target.matches('#site,.sm-site')")==2
+ s=s.replace("e.target.matches('#site,.sm-site')","e.target.matches('#site,.sm-site,'+Object.keys(selectSpecs).map(id=>'#'+id).join(','))")
+ s=replace(s,"  if(q('#siteMoveEntries'))observer.observe(q('#siteMoveEntries'),{childList:true});", "  if(q('#siteMoveEntries'))observer.observe(q('#siteMoveEntries'),{childList:true});\n  const selectorQuery=Object.keys(selectSpecs).map(id=>'#'+id).join(',');\n  const browseObserver=new MutationObserver(changes=>{\n   if(changes.some(c=>c.target instanceof Element&&c.target.matches(selectorQuery)||[...c.addedNodes].some(n=>n instanceof Element&&(n.matches(selectorQuery)||n.querySelector(selectorQuery)))))queueSync();\n  });\n  if(q('main'))browseObserver.observe(q('main'),{childList:true,subtree:true});")
+ s=replace(s,"arr(rows).filter(r=>r.status==='active').forEach", "arr(rows).filter(r=>r.status==='active').sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach")
+ return s
+edit('shared-site-master.js',shared)
