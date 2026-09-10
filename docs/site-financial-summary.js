@@ -1,4 +1,4 @@
-/* TOYA One site cost summary v2. Automatic estimates + saved overrides; read-only admin view. */
+/* TOYA One site financial summary v3. Automatic costs + admin-only contract revenue. */
 (() => {
   'use strict';
   const hoursEngine = typeof module === 'object' && module.exports ? require('./usage-hours.js') : window.ToyaUsageHoursEngine;
@@ -279,8 +279,18 @@
     });
     const days = [...byDay.values()].sort((a, b) => a.date.localeCompare(b.date)).map(d => ({...d, subtotal: round(d.labor + d.vehicle + d.equipment + d.fuel + d.waste + d.transport + d.tools + d.attachments + d.other)}));
     const subtotal = round(categories.labor.value + categories.vehicle.value + categories.equipment.value + expenses.fuel.value + expenses.waste.value + expenses.transport.value + expenses.tools.value + expenses.attachments.value + expenses.other.value);
+    const contracts = list(data.revenues).filter(r => r.site_id === site.id && r.revenue_type === 'contract');
+    if (contracts.length > 1) throw new Error('この現場の請負金額が複数あります。合計は表示しません。');
+    const contract = contracts[0] || null;
+    const contractAmount = contract ? requiredAmount(contract.amount) : null;
+    if (contractAmount !== null && (contractAmount < 0 || contractAmount > 999999999999.99)) throw new Error('請負金額の範囲を確認してください。');
+    const outgoingRevenue = categories.labor.revenue;
+    const sales = contractAmount === null ? null : round(contractAmount + outgoingRevenue);
+    const profit = sales === null ? null : round(sales - subtotal);
+    const profitMargin = sales > 0 ? round(profit / sales * 100) : null;
     const partial = Object.values(categories).some(c => c.missingDates.length || c.staleDates.length) || Object.values(expenses).some(e => e.missing) || warnings.size > 0;
-    return {categories, expenses, days, subtotal, partial, warnings: [...warnings], reportCount: own.length, hasData: byDay.size > 0};
+    return {categories, expenses, days, subtotal, partial, warnings: [...warnings], reportCount: own.length, hasData: byDay.size > 0,
+      contract, contractAmount, outgoingRevenue, sales, profit, profitMargin};
   }
   const engine = Object.freeze({analyze, automaticSheet, periodBounds, amount, fuelAmount, signature: sig});
   if (typeof module === 'object' && module.exports) {module.exports = engine; return;}
@@ -294,11 +304,11 @@
   const identity = () => typeof cloudProfile !== 'undefined' && cloudProfile?.role === 'admin' && cloudProfile.active === true && cloudProfile.company_id && typeof cloudClient !== 'undefined' && cloudClient ? cloudProfile.id + ':' + cloudProfile.company_id : '';
   const visible = () => !!q('#homePage')?.classList.contains('active');
   const todayLocal = () => typeof today === 'function' ? today() : new Date().toLocaleDateString('sv-SE');
-  let owner = '', token = 0, runningKey = '', completedKey = '', pendingTimer, selectObserver;
+  let owner = '', token = 0, runningKey = '', completedKey = '', pendingTimer, selectObserver, contractEditing = false, contractSaving = false;
   const currentKey = () => [identity(), q('#siteSummarySelect')?.value, q('#sfMode')?.value, q('#sfMonth')?.value, q('#sfDay')?.value].join('|');
   const status = text => {if (q('#sfStatus')) q('#sfStatus').textContent = text;};
   function clear() {
-    token++; owner = ''; completedKey = ''; runningKey = '';
+    token++; owner = ''; completedKey = ''; runningKey = ''; contractEditing = false; contractSaving = false;
     q('#sfPanel')?.remove(); selectObserver?.disconnect(); selectObserver = null;
   }
   function mount() {
@@ -309,7 +319,7 @@
     if (!card) return false;
     if (!q('#sfStyle')) {
       const style = document.createElement('style'); style.id = 'sfStyle';
-      style.textContent = '#sfPanel{margin-top:14px;border-top:2px solid #eee;padding-top:14px}#sfPanel h3{font-size:18px;margin:0 0 10px}#sfPanel .sf-period{display:grid;grid-template-columns:1fr 1fr;gap:8px}#sfPanel input,#sfPanel select{width:100%;min-width:0;box-sizing:border-box;font-size:16px}#sfPanel input[type=month]{min-height:44px;border:1px solid #bbb;border-radius:9px;padding:10px;background:#fff;color:#111}#sfPanel [hidden]{display:none!important}#sfPanel .sf-total{background:#111;color:#fff;border-radius:12px;padding:16px;margin:12px 0}#sfPanel .sf-total strong{display:block;color:var(--lime,#b8ff00);font-size:30px;margin:5px 0}#sfPanel .sf-total small{display:block;line-height:1.7;color:#ddd}#sfPanel .sf-line{border-bottom:1px solid #e5e5e5;padding:12px 0}#sfPanel .sf-line-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:800}#sfPanel .sf-line-head span:last-child{font-size:18px}#sfPanel .sf-note{font-size:12px;line-height:1.7;color:#666;margin-top:4px}#sfPanel .sf-alert{padding:12px;background:#fff3d8;color:#714300;border-radius:10px;line-height:1.7}#sfPanel summary{cursor:pointer;font-weight:800;padding:12px 0}#sfPanel .sf-day{padding:10px;border:1px solid #ddd;border-radius:9px;margin:8px 0}#sfLegacyDetails>summary{cursor:pointer;font-weight:800;padding:14px 0;font-size:14px}#sfPanel .sf-button{width:100%;margin-top:10px}';
+      style.textContent = '#sfPanel{margin-top:14px;border-top:2px solid #eee;padding-top:14px}#sfPanel h3{font-size:18px;margin:0 0 10px}#sfPanel .sf-period{display:grid;grid-template-columns:1fr 1fr;gap:8px}#sfPanel input,#sfPanel select{width:100%;min-width:0;box-sizing:border-box;font-size:16px}#sfPanel input[type=month],#sfPanel input[type=date],#sfPanel input[type=number]{min-height:44px;border:1px solid #bbb;border-radius:9px;padding:10px;background:#fff;color:#111}#sfPanel [hidden]{display:none!important}#sfPanel .sf-contract{border:2px solid #111;border-radius:12px;padding:14px;margin:14px 0}#sfPanel .sf-contract h4{margin:0 0 6px;font-size:18px}#sfPanel .sf-total{background:#111;color:#fff;border-radius:12px;padding:16px;margin:12px 0}#sfPanel .sf-total strong{display:block;color:var(--lime,#b8ff00);font-size:30px;margin:5px 0}#sfPanel .sf-total strong.sf-negative{color:#ff8b8b}#sfPanel .sf-total small{display:block;line-height:1.7;color:#ddd}#sfPanel .sf-line{border-bottom:1px solid #e5e5e5;padding:12px 0}#sfPanel .sf-line-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:800}#sfPanel .sf-line-head span:last-child{font-size:18px}#sfPanel .sf-note{font-size:12px;line-height:1.7;color:#666;margin-top:4px}#sfPanel .sf-alert{padding:12px;background:#fff3d8;color:#714300;border-radius:10px;line-height:1.7}#sfPanel summary{cursor:pointer;font-weight:800;padding:12px 0}#sfPanel .sf-day{padding:10px;border:1px solid #ddd;border-radius:9px;margin:8px 0}#sfLegacyDetails>summary{cursor:pointer;font-weight:800;padding:14px 0;font-size:14px}#sfPanel .sf-button{width:100%;margin-top:10px}';
       document.head.appendChild(style);
     }
     if (!q('#sfPanel')) {
@@ -327,7 +337,7 @@
     }
     return true;
   }
-  function invalidate() {token++; completedKey = ''; runningKey = ''; if (q('#sfRefresh')) q('#sfRefresh').disabled = false; if (q('#sfResult')) q('#sfResult').innerHTML = ''; status('条件が変わりました。読み込みます。'); schedule();}
+  function invalidate() {token++; completedKey = ''; runningKey = ''; contractEditing = false; if (q('#sfRefresh')) q('#sfRefresh').disabled = false; if (q('#sfResult')) q('#sfResult').innerHTML = ''; status('条件が変わりました。読み込みます。'); schedule();}
   function schedule(force = false) {clearTimeout(pendingTimer); pendingTimer = setTimeout(() => {if (visible()) refresh(force);}, 220);}
   async function readAll(table, fields, company, bounds, dateField, siteId, ticket) {
     const out = [], pageSize = 500;
@@ -344,9 +354,59 @@
     throw new Error('集計件数が多いため、期間を短くしてください。途中の合計は表示しません。');
   }
   function line(label, value, note) {return '<div class="sf-line"><div class="sf-line-head"><span>' + escape(label) + '</span><span>' + escape(value) + '</span></div><div class="sf-note">' + escape(note) + '</div></div>';}
-  function render(result, site, label) {
-    if (!result.hasData) {status(site.name + ' ／ ' + label + ' ／ 記録なし'); q('#sfResult').innerHTML = '<div class="sf-alert">この期間の日報・保存済み費用はありません。実際に費用が0円だったという意味ではありません。</div>'; return;}
-    let html = '<div class="sf-total"><div>' + '自動計算の原価小計（概算）' + '</div><strong>' + yen(result.subtotal) + '</strong><small>' + (result.partial ? '入力済みの人数・使用車両・重機を自動計算済み。通勤台数や現場移動などの要確認分・未入力費用は含まれない場合があります。' : '日報×登録単価と入力済み費用の合計です。保存済みの調整額を優先しています。未記入の費用は含みません。') + '</small></div>';
+  function contractEditor(result) {
+    const value = result.contractAmount === null ? '' : String(result.contractAmount);
+    return '<div class="sf-contract"><h4>請負金額（税別）</h4><p class="sf-note">この現場全体の請負金額です。管理者だけが閲覧・変更できます。</p><label for="sfContractAmount">請負金額（円・税別）</label><input id="sfContractAmount" type="number" inputmode="numeric" min="0" max="999999999999.99" step="1" value="' + escape(value) + '" placeholder="例：5000000"><button id="sfContractSave" class="btn dark sf-button" type="button">請負金額を保存</button><p id="sfContractStatus" class="sf-note" role="status" aria-live="polite">' + (result.contract ? '保存済みです。金額を変えたときだけ保存してください。' : 'まだ登録されていません。') + '</p></div>';
+  }
+  function bindContractEditor(result, site) {
+    const input = q('#sfContractAmount'), button = q('#sfContractSave');
+    if (!input || !button) return;
+    input.addEventListener('input', () => {contractEditing = true;});
+    button.addEventListener('click', () => saveContract(result, site));
+  }
+  async function saveContract(result, site) {
+    if (contractSaving) return;
+    const input = q('#sfContractAmount'), button = q('#sfContractSave'), message = q('#sfContractStatus');
+    const raw = String(input?.value || '').trim(), n = amount(raw);
+    if (!raw || n === null || n < 0 || n > 999999999999.99) {if (message) message.textContent = '0円以上の請負金額を数字で入力してください。'; input?.focus(); return;}
+    const mine = owner, company = cloudProfile.company_id, savedAt = new Date().toISOString();
+    contractSaving = true; button.disabled = true; if (message) message.textContent = '請負金額を保存中…';
+    try {
+      let request;
+      if (result.contract) {
+        request = cloudClient.from('revenues').update({amount:n,description:'請負金額（税別）',updated_at:savedAt})
+          .eq('company_id',company).eq('site_id',site.id).eq('id',result.contract.id).eq('revenue_type','contract').eq('updated_at',result.contract.updated_at);
+      } else {
+        request = cloudClient.from('revenues').insert({company_id:company,site_id:site.id,revenue_date:todayLocal(),revenue_type:'contract',description:'請負金額（税別）',amount:n,updated_at:savedAt});
+      }
+      const response = await request.select('id,site_id,revenue_type,amount,updated_at');
+      if (response.error) throw response.error;
+      if (response.data?.length !== 1 || response.data[0].site_id !== site.id || response.data[0].revenue_type !== 'contract' || amount(response.data[0].amount) !== n) throw new Error('同時に変更された可能性があります。画面を更新して確認してください。');
+      if (identity() !== mine || owner !== mine) return;
+      contractEditing = false; completedKey = ''; if (message) message.textContent = '請負金額 ' + yen(n) + '（税別）を保存しました。';
+      await refresh(true);
+    } catch (e) {
+      if (identity() === mine && owner === mine && message) message.textContent = '保存できませんでした：' + e.message;
+    } finally {contractSaving = false; if (button?.isConnected) button.disabled = false;}
+  }
+  function render(result, site, label, mode) {
+    contractEditing = false;
+    let html = contractEditor(result);
+    if (!result.hasData) {
+      html += '<div class="sf-alert">この期間の日報・保存済み費用はありません。実際に費用が0円だったという意味ではないため、利益はまだ表示しません。</div>';
+      q('#sfResult').innerHTML = html; bindContractEditor(result, site); status(site.name + ' ／ ' + label + ' ／ 記録なし'); return;
+    }
+    if (mode === 'all' && result.contractAmount !== null) {
+      html += '<div class="sf-total"><div>概算利益（税別）</div><strong class="' + (result.profit < 0 ? 'sf-negative' : '') + '">' + yen(result.profit) + '</strong><small>売上合計 ' + yen(result.sales) + ' － 現場原価 ' + yen(result.subtotal) + (result.profitMargin === null ? '' : ' ／ 利益率 ' + result.profitMargin.toLocaleString('ja-JP', {maximumFractionDigits:2}) + '％') + '<br>' + (result.partial ? '要確認・未入力の費用があるため暫定値です。' : '登録した社内単価による概算で、会計上の確定利益ではありません。') + '</small></div>';
+      html += line('請負売上（税別）', yen(result.contractAmount), 'この現場に登録した請負金額です。');
+      html += line('常用に行く分の売上', result.outgoingRevenue ? yen(result.outgoingRevenue) : '記録なし', '全期間の保存済み常用売上です。');
+      html += line('売上合計', yen(result.sales), '請負売上＋常用に行く分の売上。');
+    } else if (mode === 'all') {
+      html += '<div class="sf-alert">請負金額を登録すると、売上・概算利益・利益率を表示します。</div>';
+    } else {
+      html += '<div class="sf-alert">請負金額は現場全体の金額です。月別・日別の原価とは比較せず、利益は「全期間」を選んだときだけ表示します。</div>';
+    }
+    html += '<div class="sf-total"><div>' + (mode === 'all' ? '現場原価 合計（概算）' : '期間原価 小計（概算）') + '</div><strong>' + yen(result.subtotal) + '</strong><small>' + (result.partial ? '入力済みの人数・使用車両・重機を自動計算済み。通勤台数や現場移動などの要確認分・未入力費用は含まれない場合があります。' : '日報×登録単価と入力済み費用の合計です。保存済みの調整額を優先しています。未記入の費用は含みません。') + '</small></div>';
     Object.entries(result.categories).forEach(([kind, c]) => {
       const value = !c.savedDays && !c.autoDates.length ? '使用・費用記録なし' : yen(c.value) + (c.reviewDates.length ? '［要確認］' : '');
       const note = ['自動計算 ' + c.autoDates.length + '日', '保存額を優先 ' + c.savedDays + '日', c.reviewDates.length ? '一部費用の要確認 ' + c.reviewDates.length + '日' : '', c.staleDates.length ? '保存後の日報変更 ' + c.staleDates.length + '日（保存額を保持）' : ''].filter(Boolean).join(' ／ ');
@@ -363,6 +423,7 @@
     html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind] + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
     if (result.warnings.length) html += '<details><summary>要確認の記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
     q('#sfResult').innerHTML = html;
+    bindContractEditor(result, site);
     status(site.name + ' ／ ' + label + ' ／ 日報' + result.reportCount + '件を確認。更新 ' + new Date().toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}));
   }
   async function refresh(force = false) {
@@ -389,13 +450,14 @@
         ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null, null],
         ['transportRates', 'equipment_transport_rate_master', 'id,carrier,machine_name,distance_label,unit_price,price_basis,active', null, null],
         ['toolRates', 'small_tool_rate_master', 'id,label,hourly_rate,fuel_included,active', null, null],
-        ['attachmentRates', 'attachment_rate_master', 'id,label,hourly_rate,active', null, null]
+        ['attachmentRates', 'attachment_rate_master', 'id,label,hourly_rate,active', null, null],
+        ['revenues', 'revenues', 'id,site_id,revenue_date,revenue_type,description,amount,updated_at', null, site.id]
       ];
       const values = await Promise.all(definitions.map(([, table, fields, df, sid]) => readAll(table, fields, company, bounds, df, sid, ticket)));
       if (ticket !== token || owner !== mine || identity() !== mine || currentKey() !== k) return;
       const data = Object.fromEntries(definitions.map(([name], i) => [name, values[i]]));
       data.sites = sites;
-      render(analyze(data, site), site, mode === 'all' ? '全期間' : mode === 'month' ? value + '月分' : value);
+      render(analyze(data, site), site, mode === 'all' ? '全期間' : mode === 'month' ? value + '月分' : value, mode);
       completedKey = k;
     } catch (e) {
       if (ticket === token && owner === mine && identity() === mine) {q('#sfResult').innerHTML = ''; status('集計できませんでした：' + e.message + '。0円としては表示していません。');}
@@ -408,8 +470,8 @@
     window.addEventListener('pageshow', () => {mount(); schedule(true);});
     document.addEventListener('visibilitychange', () => {if (!document.hidden) {mount(); schedule(true);}});
     let attempts = 0; const initial = setInterval(() => {if (mount()) schedule(); if (owner || ++attempts >= 30) clearInterval(initial);}, 1000);
-    // Refresh while the home is visible, at most once a minute. No auth/client or DB writes.
-    setInterval(() => {if (!document.hidden && visible() && identity() && !runningKey) schedule(true);}, 60000);
+    // Refresh while the home is visible, at most once a minute. Preserve an amount being typed.
+    setInterval(() => {if (!document.hidden && visible() && identity() && !runningKey && !contractEditing && !contractSaving) schedule(true);}, 60000);
     // Identity check only: never signs out or creates an auth client.
     setInterval(() => {if (owner && identity() !== owner) clear();}, 1000);
   }
