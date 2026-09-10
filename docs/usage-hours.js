@@ -117,16 +117,15 @@
     if(g.kind==='dispatch'&&norm(e.travelSite||g.report.report_data?.site)===norm(site.name)&&travelEngine){const t=travelEngine.resolve([g.report],r.code,r.city_per_vehicle);travel=t.travel;highway=t.highway;if(travel===null||highway===null)pending.push(g.label+'の交通費');t.issues.forEach(x=>issues.add(date+'：'+g.label+'／'+x));}
     s.entries.push({key:r.code,label:r.label,kind:r.kind,minutes:m,quantity:e.quantity,cost:round(gross+(travel||0)+(highway||0)),laborCost:gross,travel,highway});
    }else{
-    const fr=fuelRows(data,site,getAmount).filter(x=>x.report.report_date===date&&key(x.fuel.asset)===key(g.label)&&['軽油','ガソリン'].includes(x.fuel.type));
-    if(fr.some(x=>x.value===null))pending.push(g.label+'の燃料額');
-    const fuel=fr.reduce((n,x)=>round(n+(x.value??0)),0);
-    s.entries.push({code:r.code,label:r.label,used:m>0,minutes:m,quantity:e.quantity,dayRate:daily,manualGross:gross,manualFuel:fuel,recordedFuel:fuel,fuelCount:fr.length});
+    // Vehicle and equipment rates are usage charges. Fuel stays in the daily
+    // report and is added separately by the financial summary.
+    s.entries.push({code:r.code,label:r.label,used:m>0,minutes:m,quantity:e.quantity,dayRate:daily,manualGross:gross,manualFuel:null,recordedFuel:0,fuelCount:0});
    }
    if(m>480&&kind==='labor')issues.add(date+'：'+g.label+'は8時間を超えています。原価の時間換算のみで、残業割増は別確認です。');
   }
   if(kind==='labor')s.cost_total=round(arr(s.entries).reduce((n,e)=>n+(num(e.cost)??0),0));
-  else{s.gross_total=round(arr(s.entries).reduce((n,e)=>n+(e.used?(num(e.manualGross)??num(e.dayRate)??0):0),0));s.fuel_deduction_total=round(arr(s.entries).reduce((n,e)=>n+(e.used?(num(e.manualFuel)??num(e.recordedFuel)??0):0),0));s.net_total=round(s.gross_total-s.fuel_deduction_total);}
-  if(matched.length){for(const t of [...issues])if(/移動者と人工配分が未確認|移動先の車両代・燃料の配分が未確認/.test(t))issues.delete(t);}
+  else{s.gross_total=round(arr(s.entries).reduce((n,e)=>n+(e.used?(num(e.manualGross)??num(e.dayRate)??0):0),0));s.fuel_deduction_total=0;s.net_total=s.gross_total;}
+  if(matched.length){for(const t of [...issues])if(/移動者と人工配分が未確認|移動先の車両代(?:・燃料)?の配分が未確認/.test(t))issues.delete(t);}
   out.pendingResources=[...new Set(pending)];out.issues=[...issues];return out;
  }
  function tools(data,site,getAmount){
@@ -137,12 +136,8 @@
    const rates=arr(data.toolRates).filter(r=>r.active!==false&&key(r.label)===key(e.label));
    if(rates.length!==1||num(rates[0].hourly_rate)===null){out.push({date:g.date,label:e.label,value:null,issue:e.label+'は時間を記録済みですが、小型機械の単価が未登録です。'});continue;}
    const rate=num(rates[0].hourly_rate);if(!Number.isFinite(rate)||rate<0){out.push({date:g.date,label:e.label,value:null,issue:'小型機械の単価を確認してください。'});continue;}
-   const basis=rates[0].fuel_included;
-   if(typeof basis!=='boolean'){out.push({date:g.date,label:e.label,value:null,issue:e.label+'の時間単価が燃料込みか別か未設定です。'});continue;}
    const gross=round(rate*m*e.quantity/60);
-   const fr=basis?fuelRows(data,site,getAmount).filter(x=>x.report.report_date===g.date&&key(x.fuel.asset)===key(e.label)&&['軽油','ガソリン'].includes(x.fuel.type)):[];
-   const fuel=fr.reduce((n,x)=>round(n+(x.value??0)),0);
-   out.push({date:g.date,label:e.label,value:round(gross-fuel),issue:fr.some(x=>x.value===null)?e.label+'の燃料差引額が未入力です。':''});
+   out.push({date:g.date,label:e.label,value:gross,issue:''});
   }return out;
  }
  function attachments(data,site){

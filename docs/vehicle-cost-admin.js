@@ -15,8 +15,8 @@
   const arr=v=>Array.isArray(v)?v:[];
   function calculate(r){
     const gross=r.used?money(optional(r.manualGross)??(Number.isFinite(r.hourlyMinutes)?r.dayRate*r.hourlyMinutes*(r.hourlyQuantity||1)/480:r.dayRate)):0;
-    const fuel=r.used?money(optional(r.manualFuel)??r.recordedFuel):0;
-    return {gross,fuel,net:money(gross-fuel),manual:optional(r.manualGross)!==null||optional(r.manualFuel)!==null};
+    const fuel=r.used?money(r.recordedFuel):0;
+    return {gross,fuel,net:gross,manual:optional(r.manualGross)!==null};
   }
   function signature(reports){return arr(reports).map(r=>String(r.id)+':'+String(r.updated_at)).sort().join('|');}
   function derive(all,rates,site){
@@ -28,7 +28,7 @@
       const d=r.report_data||{};
       arr(d.vehicles).forEach(v=>{const k=key(typeof v==='string'?v:v?.name);used.add(k);if(!labels.has(k))warnings.push('単価未登録の車両：'+String(v));});
       arr(d.fuels).filter(f=>['軽油','ガソリン'].includes(f?.type)).forEach(f=>{
-        const k=key(f.asset);if(!labels.has(k))return; // Do not subtract excavator fuel or AdBlue/grease.
+        const k=key(f.asset);if(!labels.has(k))return; // Keep vehicle fuel visible; equipment fuel and oil stay in their own category.
         const amount=f.amount!==''&&f.amount!=null?num(f.amount):num(f.qty??f.liters)*num(f.unitPrice);
         if(!Number.isFinite(amount)||amount<0){warnings.push(String(f.asset)+'：燃料額の記録を確認してください。');return;}
         fuels.set(k,money((fuels.get(k)||0)+amount));fuelCounts.set(k,(fuelCounts.get(k)||0)+1);
@@ -36,7 +36,7 @@
         if(fuelSeen.has(fp)&&fuelSeen.get(fp)!==r.id)warnings.push(String(f.asset)+'：複数の日報に同じ給油内容があります。二重記録でないか確認してください。');
         fuelSeen.set(fp,r.id);
       });
-      if(arr(d.siteMoves).length)warnings.push('現場移動のある日報です。車両の日額と燃料を現場間で二重計上しないよう手入力で配分してください。');
+      if(arr(d.siteMoves).length)warnings.push('現場移動のある日報です。車両使用料を現場間で重複させないよう配分を確認してください。燃料費は日報から別に加算します。');
     });
     reports.forEach(r=>arr(r.report_data?.siteMoves).forEach(m=>{if(m?.site===site.name&&m.vehicle){moveUse.add(key(m.vehicle));warnings.push('移動先として使った車両があります。1日分を仮表示するため、必要な配分額に直してください。');}}));
     const counts=new Map();own.forEach(r=>{const k=r.recorder_name||r.report_data?.writer||'';counts.set(k,(counts.get(k)||0)+1);});
@@ -68,7 +68,7 @@
     if(q('#vcCard')||!q('#masterPage'))return;
     if(!q('#vcStyles')){const s=document.createElement('style');s.id='vcStyles';s.textContent=`#vcCard .vc-wide{width:100%}#vcCard .vc-head{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-weight:900}#vcCard .vc-use{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}#vcCard .vc-use button{min-height:44px;border:1px solid #bbb;border-radius:9px;background:#fff;font-weight:800;color:#111}#vcCard .vc-use [aria-pressed=true]{background:var(--lime,#b8ff00);border:2px solid #678f00}#vcCard summary{cursor:pointer;font-weight:800;padding:10px 0}#vcCard .vc-total{font-size:19px;font-weight:900}#vcCard .vc-warn{color:#853900;background:#fff3d8;padding:10px;border-radius:9px;margin:10px 0}#vcCard input{font-size:16px}#vcCard .vc-note{font-size:12px;color:#555;line-height:1.6}`;document.head.appendChild(s);}
     const c=document.createElement('div');c.id='vcCard';c.className='card';
-    c.innerHTML=`<h2>車両費・燃料差引（管理者用）</h2><p class="note">車両の日額 − その車の記録済み燃料費。人工は別計算です。社員の操作は不要です。</p>
+    c.innerHTML=`<h2>車両使用料（管理者用）</h2><p class="note">車両の日額・時間換算額を計算します。燃料費は差し引かず、日報の燃料欄から別に加算します。人工は別計算です。</p>
       <div class="grid2"><div><label for="vcDate">作業日</label><input id="vcDate" type="date"></div><div><label for="vcSite">現場</label><select id="vcSite"><option value="">現場を選択</option></select></div></div>
       <button id="vcOpen" type="button" class="btn dark vc-wide" style="margin-top:10px">この日の車両費を開く</button>
       <p id="vcStatus" class="note" role="status" aria-live="polite">単価を読み込み中…</p><div id="vcBody"></div><div id="vcTotals" hidden class="row"></div><div id="vcWarnings" hidden class="vc-warn"></div>
@@ -101,31 +101,30 @@
     if(!same(owner))return;
     q('#vcBody').innerHTML=rows.map((r,i)=>`<div class="row" data-vc-index="${i}"><div class="vc-head"><span>${esc(r.label)}</span><span data-vc-net></span></div>
       <div class="vc-use" role="group" aria-label="${esc(r.label)}の使用"><button type="button" data-vc-use="no" aria-pressed="false">使用なし</button><button type="button" data-vc-use="yes" aria-pressed="false">${Number.isFinite(r.hourlyMinutes)?(r.hourlyMinutes/60)+'時間使用':'1日使用'}</button></div>
-      <div data-vc-calc class="vc-note"></div><details data-vc-adjust ${optional(r.manualGross)!==null||optional(r.manualFuel)!==null||r.memo?'open':''}><summary>金額を直す（必要なときだけ）</summary>
+      <div data-vc-calc class="vc-note"></div><details data-vc-adjust ${optional(r.manualGross)!==null||r.memo?'open':''}><summary>金額を直す（必要なときだけ）</summary>
       <p class="note">空欄＝自動、0円も指定可能。短時間・現場移動の配分額はここで調整します。勤務や単価の変更で手入力は消えません。</p>
-      <div class="grid2">${field(i,'manualGross','差引前の車両代（円）',r.manualGross,'自動：'+yen(Number.isFinite(r.hourlyMinutes)?r.dayRate*r.hourlyMinutes*(r.hourlyQuantity||1)/480:r.dayRate))}${field(i,'manualFuel','差し引く燃料代（円）',r.manualFuel,'自動：'+yen(r.recordedFuel))}</div>
-      <div class="grid2" style="margin-top:8px"><button type="button" class="btn light" data-vc-auto="manualGross">車両代を自動に戻す</button><button type="button" class="btn light" data-vc-auto="manualFuel">燃料差引を自動に戻す</button></div>
+      <div>${field(i,'manualGross','車両使用料（円）',r.manualGross,'自動：'+yen(Number.isFinite(r.hourlyMinutes)?r.dayRate*r.hourlyMinutes*(r.hourlyQuantity||1)/480:r.dayRate))}</div>
+      <button type="button" class="btn light vc-wide" style="margin-top:8px" data-vc-auto="manualGross">車両使用料を自動に戻す</button>
       <label for="vc-${i}-memo">配分・調整のメモ</label><input id="vc-${i}-memo" type="text" data-vc-key="memo" value="${esc(r.memo)}" placeholder="まとめ給油・別現場への配分など">
       <div class="note">燃料の元の日報は変更しません。給油日に記録した金額であり、その日の消費額とは限りません。</div></details></div>`).join('');
     q('#vcTotals').hidden=false;q('#vcSave').hidden=false;renderTotals();
   }
   function totals(){return rows.reduce((t,r)=>{const c=calculate(r);t.gross=money(t.gross+c.gross);t.fuel=money(t.fuel+c.fuel);t.net=money(t.net+c.net);return t;},{gross:0,fuel:0,net:0});}
   function renderTotals(){
-    const extra=[];rows.forEach((r,i)=>{const el=q(`[data-vc-index="${i}"]`);if(!el)return;const c=calculate(r);
+    rows.forEach((r,i)=>{const el=q(`[data-vc-index="${i}"]`);if(!el)return;const c=calculate(r);
       q('[data-vc-net]',el).textContent=yen(c.net)+(r.used&&c.manual?'［手入力］':'');
       el.querySelectorAll('[data-vc-use]').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.vcUse==='yes')===r.used)));
-      q('[data-vc-calc]',el).textContent=r.used?`${yen(c.gross)} − 燃料 ${yen(c.fuel)} ＝ ${yen(c.net)}${!r.fuelCount&&optional(r.manualFuel)===null?'（燃料欄の記録なし・暫定0円）':''}`:'使用なし。手入力した調整値は保持しています。';
-      if(c.net<0)extra.push(r.label+'：燃料代が日額を超えています。まとめ給油・配分額を確認してください。マイナスを勝手に0円にはしません。');
+      q('[data-vc-calc]',el).textContent=r.used?`${yen(c.gross)}（燃料 ${yen(c.fuel)} は燃料費へ別加算）`:'使用なし。手入力した調整値は保持しています。';
     });
-    const t=totals();q('#vcTotals').innerHTML=`<div>差引前の車両代：${yen(t.gross)}</div><div>差し引く燃料代：${yen(t.fuel)}</div><div class="vc-total">車両費（燃料差引後）：${yen(t.net)}</div><p class="note">人工・高速代・重機費は含みません。燃料費を別途合算する際は「差引後の車両費＋燃料費」にします。日額に燃料代を重ねて足しません。保存分はホームの現場原価に反映します。未確定の費用は別表示です。消費税は自動加算しません。</p>`;
-    const list=[...new Set([...warnings,...extra])],box=q('#vcWarnings');
+    const t=totals();q('#vcTotals').innerHTML=`<div class="vc-total">車両使用料：${yen(t.gross)}</div><div>記録済み燃料費（別加算）：${yen(t.fuel)}</div><p class="note">人工・高速代・重機費は含みません。ホームの現場原価では、車両使用料に日報の燃料費を別途加算します。保存済みの旧計算値は使用しません。未確定の費用は別表示です。消費税は自動加算しません。</p>`;
+    const list=[...new Set(warnings)],box=q('#vcWarnings');
     const was=q('#vcReviewed')?.checked||false;box.hidden=!list.length;
     box.innerHTML=list.map(w=>`<p>${esc(w)}</p>`).join('')+(list.length?`<label class="choice"><input type="checkbox" id="vcReviewed" ${was?'checked':''}>記録と金額の配分を確認した</label>`:'');
   }
-  function edit(e){if(!same(owner)||busy)return;const el=e.target.closest('[data-vc-index]'),k=e.target.dataset.vcKey;if(!el||!['manualGross','manualFuel','memo'].includes(k))return;
+  function edit(e){if(!same(owner)||busy)return;const el=e.target.closest('[data-vc-index]'),k=e.target.dataset.vcKey;if(!el||!['manualGross','memo'].includes(k))return;
     rows[Number(el.dataset.vcIndex)][k]=k==='memo'?e.target.value:optional(e.target.value);dirty=true;if(q('#vcReviewed'))q('#vcReviewed').checked=false;renderTotals();msg('変更は未保存です。手入力した金額を優先しています。');}
   function tap(e){if(!same(owner)||busy)return;const b=e.target.closest('button'),el=b?.closest('[data-vc-index]');if(!el)return;const r=rows[Number(el.dataset.vcIndex)];
-    if(b.hasAttribute('data-vc-use'))r.used=b.dataset.vcUse==='yes';else if(['manualGross','manualFuel'].includes(b.dataset.vcAuto)){r[b.dataset.vcAuto]=null;q(`[data-vc-key="${b.dataset.vcAuto}"]`,el).value='';}else return;
+    if(b.hasAttribute('data-vc-use'))r.used=b.dataset.vcUse==='yes';else if(b.dataset.vcAuto==='manualGross'){r.manualGross=null;q('[data-vc-key="manualGross"]',el).value='';}else return;
     dirty=true;if(q('#vcReviewed'))q('#vcReviewed').checked=false;renderTotals();msg('使用・計算方法を変更しました。まだ保存していません。');}
   async function fetchDay(day){const result=await cloudClient.from('daily_reports').select('id,site_id,report_date,recorder_name,report_data,updated_at').eq('company_id',cloudProfile.company_id).eq('report_date',day).limit(1001);if(result.error)throw result.error;if((result.data||[]).length>1000)throw new Error('日報件数が多いため一括処理を中止しました。');return result.data||[];}
   async function openSheet(rebuild){
@@ -138,7 +137,7 @@
       const result=derive(all,rates,site);sheet=saved.data;date=day;siteId=site.id;
       if(sheet&&!rebuild){hoursImportBlocked='';rows=structuredClone(sheet.entries);sources=sheet.source_reports||[];warnings=[...arr(sheet.review_warnings),...result.warnings];stale=signature(sources)!==signature(all);dirty=false;
         msg(stale?'保存後に日報が変わっています。保存済み金額は保持しています。「日報・燃料から計算し直す」で確認してください。':'保存済みの車両費を開きました。手入力と当時の単価を保持しています。',stale);
-      }else{rows=result.entries;sources=result.sourceReports;warnings=result.warnings;stale=false;dirty=true;msg(`日報${result.count}件から仮計算しました。同じ車両は日額1回。燃料はその車の記録分だけ差し引いています。`);}
+      }else{rows=result.entries;sources=result.sourceReports;warnings=result.warnings;stale=false;dirty=true;msg(`日報${result.count}件から仮計算しました。同じ車両は日額1回。燃料費は別に加算します。`);}
       render();
     }catch(e){if(same(mine))msg('読込エラー：'+e.message,true);}finally{if(same(mine))setBusy(false);}
   }
@@ -147,19 +146,19 @@
     if(date!==q('#vcDate').value||siteId!==q('#vcSite').value)return msg('日付・現場が変わっています。車両費を開き直してください。',true);
     if(hoursImportBlocked)return msg('時間・単価等が未確認：'+hoursImportBlocked+'。日報の時間欄で確認するまで確定保存しません。',true);
     if(stale)return msg('日報が更新されています。計算し直してから保存してください。',true);
-    for(const r of rows)for(const k of ['dayRate','recordedFuel','manualGross','manualFuel']){const v=r[k];if(v!=null&&(!Number.isFinite(num(v))||num(v)<0||num(v)>1e9))return msg('金額は0以上の有効な数値にしてください。',true);}
+    for(const r of rows)for(const k of ['dayRate','recordedFuel','manualGross']){const v=r[k];if(v!=null&&(!Number.isFinite(num(v))||num(v)<0||num(v)>1e9))return msg('金額は0以上の有効な数値にしてください。',true);}
     if(q('#vcReviewed')&&!q('#vcReviewed').checked)return msg('重複・金額配分の注意を確認し、チェックしてください。',true);
     const mine=owner;setBusy(true);
     try{
       const latest=await fetchDay(date);if(!same(mine))return;
       if(signature(latest)!==signature(sources)){stale=true;throw new Error('日報が更新されました。入力は残しています。計算し直して確認してください。');}
-      const t=totals(),payload={company_id:cloudProfile.company_id,site_id:siteId,work_date:date,entries:structuredClone(rows).map(r=>Number.isFinite(r.hourlyMinutes)&&optional(r.manualGross)===null?{...r,manualGross:calculate(r).gross}:r),source_reports:sources,review_warnings:warnings,gross_total:t.gross,fuel_deduction_total:t.fuel,net_total:t.net};
+      const t=totals(),payload={company_id:cloudProfile.company_id,site_id:siteId,work_date:date,entries:structuredClone(rows).map(r=>{const x=Number.isFinite(r.hourlyMinutes)&&optional(r.manualGross)===null?{...r,manualGross:calculate(r).gross}:{...r};return {...x,manualFuel:null};}),source_reports:sources,review_warnings:warnings,gross_total:t.gross,fuel_deduction_total:0,net_total:t.gross};
       const response=sheet?await cloudClient.from('vehicle_cost_sheets').update(payload).eq('id',sheet.id).eq('company_id',cloudProfile.company_id).eq('updated_at',sheet.updated_at).select('*'):await cloudClient.from('vehicle_cost_sheets').insert(payload).select('*');
       if(!same(mine))return;if(response.error)throw response.error;if(!response.data?.length)throw new Error('別端末で保存されています。開き直して確認してください。');
-      sheet=response.data[0];dirty=false;msg('車両費をクラウド保存しました。差引額・手入力も保存済みです。');
+      sheet=response.data[0];dirty=false;msg('車両使用料をクラウド保存しました。燃料費は別に加算します。');
     }catch(e){if(same(mine))msg('車両費は未保存です：'+e.message,true);}finally{if(same(mine))setBusy(false);}
   }
-  function renderRates(){q('#vcRates').innerHTML=rates.map((r,i)=>`<div class="row" data-vc-rate="${i}"><b>${esc(r.label)}</b><label>1台1日の金額（人工別・燃料差引前）</label><input type="number" min="0" step="0.01" inputmode="decimal" value="${num(r.daily_rate)}"><button type="button" data-vc-rate-save="${i}" class="btn light vc-wide" style="margin-top:8px">この車両の単価を保存</button></div>`).join('');}
+  function renderRates(){q('#vcRates').innerHTML=rates.map((r,i)=>`<div class="row" data-vc-rate="${i}"><b>${esc(r.label)}</b><label>1台1日の車両使用料（人工・燃料別）</label><input type="number" min="0" step="0.01" inputmode="decimal" value="${num(r.daily_rate)}"><button type="button" data-vc-rate-save="${i}" class="btn light vc-wide" style="margin-top:8px">この車両の単価を保存</button></div>`).join('');}
   async function saveRate(i){if(!same(owner)||busy)return;const r=rates[i],v=Number(q(`[data-vc-rate="${i}"] input`).value);if(!Number.isFinite(v)||v<0||v>1e9)return msg('単価は0以上の数値で入力してください。',true);
     const mine=owner;setBusy(true);try{const result=await cloudClient.from('vehicle_rate_master').update({daily_rate:v,updated_at:new Date().toISOString()}).eq('id',r.id).eq('company_id',cloudProfile.company_id).eq('updated_at',r.updated_at).select('*');if(!same(mine))return;if(result.error)throw result.error;if(!result.data?.length)throw new Error('別端末で変更されています。再読み込みしてください。');rates[i]=result.data[0];msg('単価を保存しました。次の新規計算から反映します。開いている計算・保存済み金額は変えません。');}catch(e){if(same(mine))msg('単価は未保存です：'+e.message,true);}finally{if(same(mine))setBusy(false);}}
   function start(){

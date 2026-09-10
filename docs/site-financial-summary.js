@@ -148,23 +148,16 @@
         if (moved || otherUse) {note(label + 'は同日に複数現場の使用・移動があります。日額を重複加算せず、配分するまで自動加算を保留しています。'); return;}
         const rate = findRate(rates, r => assetKey(r.label) === k, label); if (!rate) return;
         const gross = rateValue(rate, 'daily_rate', label); if (gross === null) return;
-        let fuel = 0, fuelCount = 0;
-        own.forEach(r => list(raw(r).fuels).filter(f => ['軽油', 'ガソリン'].includes(f.type) && assetKey(f.asset) === k).forEach(f => {
-          const n = fuelAmount(f);
-          if (n === null || n < 0) {note(label + 'の給油額が未入力です。該当する燃料差引額は未計上です。'); return;}
-          fuel = round(fuel + n); fuelCount++;
-        }));
         entries.push({code: rate.code, label: rate.label, used: true, dayRate: gross,
-          recordedFuel: fuel, fuelCount, manualGross: null, manualFuel: null, memo: ''});
+          recordedFuel: 0, fuelCount: 0, manualGross: null, manualFuel: null, memo: ''});
         sheet.gross_total = round(sheet.gross_total + gross);
-        sheet.fuel_deduction_total = round(sheet.fuel_deduction_total + fuel);
-        if (fuel > gross) note(label + 'は記録した給油額が日額を上回ります。差引額はマイナスのまま計算し、燃料費を1回だけ別計上しています。まとめ給油の配分は必要時に調整してください。');
       });
       own.forEach(r => list(raw(r).fuels).forEach(f => {
         if (!used.has(assetKey(f.asset)) && list(rates).some(rate => assetKey(rate.label) === assetKey(f.asset))) note(String(f.asset) + 'は給油記録だけで使用記録がありません。日額は追加せず、燃料欄だけ反映しています。');
       }));
-      if (kind === 'vehicle' && incoming.some(m => m.vehicle)) note('移動先の車両代・燃料の配分が未確認です。移動元と重複しないよう、移動分だけ自動加算を保留しています。');
-      sheet.net_total = round(sheet.gross_total - sheet.fuel_deduction_total);
+      if (kind === 'vehicle' && incoming.some(m => m.vehicle)) note('移動先の車両代の配分が未確認です。移動元と重複しないよう、移動分だけ自動加算を保留しています。');
+      sheet.fuel_deduction_total = 0;
+      sheet.net_total = sheet.gross_total;
     }
     if (!hoursEngine) throw new Error('時間計算を読み込めませんでした。再読み込みしてください。');
     return hoursEngine.adjust(kind, date, data, site, {sheet, issues: [...issues]}, fuelAmount, travelEngine);
@@ -269,16 +262,10 @@
       saved.forEach(s => {
         if (dateMap.has(s.work_date)) throw new Error('同じ日・現場の費用保存が複数あります。合計は表示しません。');
         dateMap.set(s.work_date, s);
-        const n = requiredAmount(kind === 'labor' ? s.cost_total : s.net_total);
+        const n = requiredAmount(kind === 'labor' ? s.cost_total : s.gross_total);
         if (kind !== 'labor') {
-          const g = requiredAmount(s.gross_total), f = requiredAmount(s.fuel_deduction_total);
-          if (Math.abs(round(g - f) - n) > 0.005) throw new Error('保存済みの燃料差引計算が一致しません。');
-          gross = round(gross + g); deduction = round(deduction + f);
-          const matchingKeys = new Set(list(s.entries).filter(e => e.used).map(e => assetKey(e.label)));
-          const recorded = hoursEngine.fuelRows(data, site, fuelAmount)
-            .filter(x => x.report.report_date === s.work_date && ['軽油','ガソリン'].includes(x.fuel.type) && matchingKeys.has(assetKey(x.fuel.asset)))
-            .reduce((total, x) => round(total + (x.value ?? 0)), 0);
-          if (Math.abs(recorded - f) > 0.005) warnings.add(s.work_date + '：保存した燃料差引額と日報の給油額が違います。手入力の配分・二重控除を確認してください。');
+          const g = requiredAmount(s.gross_total);
+          gross = round(gross + g);
         } else {const v = requiredAmount(s.revenue_total); revenue = round(revenue + v); day(s.work_date).revenue = v;}
         sum = round(sum + n); day(s.work_date)[kind] = n;
         const current = (kind === 'labor' && !list(s.entries).some(e => Number.isFinite(e.hourlyMinutes)) ? own : reports).filter(r => r.report_date === s.work_date);
@@ -303,7 +290,7 @@
   const q = selector => document.querySelector(selector);
   const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const yen = n => Number(n).toLocaleString('ja-JP', {maximumFractionDigits: 2}) + '円';
-  const names = {labor: '人件費・常用費（交通費込）', vehicle: '車両費（燃料差引後）', equipment: '重機費（燃料差引後）'};
+  const names = {labor: '人件費・常用費（交通費込）', vehicle: '車両使用料', equipment: '重機使用料'};
   const identity = () => typeof cloudProfile !== 'undefined' && cloudProfile?.role === 'admin' && cloudProfile.active === true && cloudProfile.company_id && typeof cloudClient !== 'undefined' && cloudClient ? cloudProfile.id + ':' + cloudProfile.company_id : '';
   const visible = () => !!q('#homePage')?.classList.contains('active');
   const todayLocal = () => typeof today === 'function' ? today() : new Date().toLocaleDateString('sv-SE');
@@ -369,11 +356,11 @@
       const e = result.expenses[kind];
       html += line(label, e.missing === e.count && e.count ? '金額未入力' : e.count ? yen(e.value) : '記録なし', e.count + '件' + (e.missing ? ' ／ 金額未入力 ' + e.missing + '件は小計に含めていません。' : ''));
     });
-    const pending = Object.entries(result.categories).filter(([, c]) => c.reviewDates.length).map(([kind, c]) => names[kind].replace('（燃料差引後）', '') + c.reviewDates.length + '日');
+    const pending = Object.entries(result.categories).filter(([, c]) => c.reviewDates.length).map(([kind, c]) => names[kind] + c.reviewDates.length + '日');
     if (pending.length) html += '<p class="sf-alert">一部費用の要確認：' + escape(pending.join('・')) + '。計算できる分はすでに小計へ反映済みです。通勤台数や現場間の配分など、不明な分だけ確認・調整してください。通常の日は費用保存なしで表示します。</p>';
     if (result.categories.labor.revenue) html += line('常用に行く分の売上（原価と別）', yen(result.categories.labor.revenue), 'この売上は上の原価小計へ加算・相殺していません。');
-    html += '<details><summary>計算方法・燃料の二重計上防止</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両費の燃料差引後＋重機費の燃料差引後＋日報の燃料・油脂＋処分費＋重機回送費＋小型機械費＋その他経費。差引前の日額に燃料を重ねて足しません。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両：差引前 ' + yen(result.categories.vehicle.gross) + ' − 差引燃料 ' + yen(result.categories.vehicle.deduction) + '。重機：差引前 ' + yen(result.categories.equipment.gross) + ' − 差引燃料 ' + yen(result.categories.equipment.deduction) + '。</p><p class="sf-note">現場別の時間を入力した人工・車両・重機は日額÷8時間×使用時間で計算します。小型機械は登録した時間単価×使用時間×台数です。分単位の入力に対応します。時間欄のない過去の日報は従来の日額計算を残し、保存済み調整額を優先します。記録が競合する対象や時間未入力は要確認です。明建・朝日の通勤費・高速代は日報の専用欄から人件費内へ1回だけ加算します。市内は台数×登録単価、市外・特別料金は入力合計額です。半日でも通勤費は半額にしません。未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。回送は日報の専用欄に追加した重機1台・片道回数×現行登録単価で計算し、手入力の合計額（0円も含む）を優先します。運搬会社へ支払う回送費から自社燃料代を差し引きません。メモだけの金額、単価未登録の回送・小型機械や未入力のリース費は自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
-    html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind].replace('（燃料差引後）', '') + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
+    html += '<details><summary>計算方法</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両使用料＋重機使用料＋日報の燃料・油脂＋処分費＋重機回送費＋小型機械費＋その他経費。車両・重機・小型機械の使用料から燃料代は差し引かず、燃料費として別に1回加算します。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両使用料 ' + yen(result.categories.vehicle.gross) + ' ＋ 重機使用料 ' + yen(result.categories.equipment.gross) + '。燃料・油脂は上の専用欄に別表示しています。</p><p class="sf-note">現場別の時間を入力した人工・車両・重機は日額÷8時間×使用時間で計算します。小型機械は登録した時間単価×使用時間×台数です。分単位の入力に対応します。時間欄のない過去の日報は従来の日額計算を残し、保存済み調整額を優先します。記録が競合する対象や時間未入力は要確認です。明建・朝日の通勤費・高速代は日報の専用欄から人件費内へ1回だけ加算します。市内は台数×登録単価、市外・特別料金は入力合計額です。半日でも通勤費は半額にしません。未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。回送は日報の専用欄に追加した重機1台・片道回数×現行登録単価で計算し、手入力の合計額（0円も含む）を優先します。運搬会社へ支払う回送費から自社燃料代を差し引きません。メモだけの金額、単価未登録の回送・小型機械や未入力のリース費は自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
+    html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + ['labor', 'vehicle', 'equipment'].map(kind => names[kind] + '：' + yen(d[kind]) + (result.categories[kind].autoDates.includes(d.date) ? '［自動］' : '［保存額］') + (result.categories[kind].reviewDates.includes(d.date) ? '［一部要確認］' : '') + (d.stale.includes(kind) ? '［日報変更・要確認］' : '')).join(' ／ ') + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>').join('') + '</details>';
     if (result.warnings.length) html += '<details><summary>要確認の記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
     q('#sfResult').innerHTML = html;
     status(site.name + ' ／ ' + label + ' ／ 日報' + result.reportCount + '件を確認。更新 ' + new Date().toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit'}));
@@ -398,8 +385,8 @@
         ['vehicleSheets', 'vehicle_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', null],
         ['equipmentSheets', 'equipment_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', null],
         ['laborRates', 'labor_rate_master', 'id,code,label,kind,day_rate,half_rate,city_per_vehicle,active', null, null],
-        ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,active', null, null],
-        ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,active', null, null],
+        ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null, null],
+        ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null, null],
         ['transportRates', 'equipment_transport_rate_master', 'id,carrier,machine_name,distance_label,unit_price,price_basis,active', null, null],
         ['toolRates', 'small_tool_rate_master', 'id,label,hourly_rate,fuel_included,active', null, null],
         ['attachmentRates', 'attachment_rate_master', 'id,label,hourly_rate,active', null, null]

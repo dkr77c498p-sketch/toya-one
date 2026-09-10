@@ -219,7 +219,7 @@ textarea{min-height:105px;resize:vertical}
 </div>
 
 <div class="card"><h2>産業廃棄物（タップ入力）</h2><div class="muted-small">品目をタップすると「材料・処分・経費」に産廃行を追加します。数量と単位をタップで調整できます。</div><div class="waste-preset"><button type="button" class="preset-chip" onclick="addWasteItem('コンクリートがら','t')">コンクリートがら</button><button type="button" class="preset-chip" onclick="addWasteItem('アスファルトがら','t')">アスファルトがら</button><button type="button" class="preset-chip" onclick="addWasteItem('木くず','m³')">木くず</button><button type="button" class="preset-chip" onclick="addWasteItem('混合廃棄物','m³')">混合廃棄物</button><button type="button" class="preset-chip" onclick="addWasteItem('廃プラスチック類','m³')">廃プラスチック類</button><button type="button" class="preset-chip" onclick="addWasteItem('金属くず','t')">金属くず</button><button type="button" class="preset-chip" onclick="addWasteItem('ガラス・陶磁器くず','t')">ガラス・陶磁器くず</button><button type="button" class="preset-chip" onclick="addWasteItem('石膏ボード','m³')">石膏ボード</button></div></div>
-<div class="card"><h2>燃料費</h2><div class="note">給油した分だけ入力してください。車両・重機ごとに月間集計します。</div><div id="fuelRows"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addFuelRow()">＋ 給油を追加</button></div>
+<div class="card"><h2>燃料費</h2><div class="note">給油した分だけ入力してください。車両・重機・小型機械ごとに月間集計します。</div><div id="fuelRows"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addFuelRow()">＋ 給油を追加</button></div>
 <div class="card"><h2>材料・処分・経費</h2><div id="items"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addItem()">＋ 品目を追加</button></div>
 
 <div class="card" id="photoSection"><h2>現場写真</h2>
@@ -1202,7 +1202,7 @@ function closePhotoViewer(){
 function addFuelRow(d={}){
   const r=document.createElement('div');
   r.className='row fuel-row';
-  const assets=['10tダンプ','4tダンプ','4tアームロール','3tダンプ','軽トラ','ハイエース','SK135（1号機）','SK135（2号機）','SK55','その他'];
+  const assets=['10tダンプ','4tダンプ','4tアームロール','3tダンプ','軽トラ','ハイエース','SK135（1号機）','SK135（2号機）','SK55','インバーター発電機','その他'];
   const source=d.source||d.company||'スタンド';
   const outlet=d.outlet||((d.note||'').includes('IDEX')?'IDEX':(d.note||'').includes('ENEOS')?'ENEOS':'ENEOS');
   const type=d.type||'軽油';
@@ -1211,7 +1211,7 @@ function addFuelRow(d={}){
   r.innerHTML=`<div class="rowhead"><b>給油・油脂</b><button class="btn danger" type="button" onclick="this.closest('.fuel-row').remove()">削除</button></div>
   <label>給油先</label><div class="manifest-chips fuel-source-chips"><button type="button" class="manifest-chip ${source==='スタンド'?'active':''}" data-source="スタンド" onclick="setFuelSource(this,'スタンド')">スタンド</button><button type="button" class="manifest-chip ${source==='マルマサ'?'active':''}" data-source="マルマサ" onclick="setFuelSource(this,'マルマサ')">マルマサ</button><button type="button" class="manifest-chip ${source==='川崎建機'?'active':''}" data-source="川崎建機" onclick="setFuelSource(this,'川崎建機')">川崎建機</button></div><input type="hidden" class="f-source" value="${source}">
   <div class="f-outlet-wrap" style="${source==='スタンド'?'':'display:none'}"><label>スタンド</label><div class="manifest-chips fuel-outlet-chips"><button type="button" class="manifest-chip ${outlet==='ENEOS'?'active':''}" data-outlet="ENEOS" onclick="setFuelOutlet(this,'ENEOS')">ENEOS</button><button type="button" class="manifest-chip ${outlet==='IDEX'?'active':''}" data-outlet="IDEX" onclick="setFuelOutlet(this,'IDEX')">IDEX</button></div><input type="hidden" class="f-outlet" value="${outlet}"></div>
-  <div class="grid2"><div><label>車両・重機</label><select class="f-asset">${assets.map(x=>`<option ${x===(d.asset||'')?'selected':''}>${x}</option>`).join('')}</select></div><div><label>種類</label><select class="f-type"></select></div></div>
+  <div class="grid2"><div><label>車両・重機・小型機械</label><select class="f-asset">${assets.map(x=>`<option ${x===(d.asset||'')?'selected':''}>${x}</option>`).join('')}</select></div><div><label>種類</label><select class="f-type"></select></div></div>
   <div class="grid3"><div><label class="f-qty-label">数量（${unit}）</label><input class="f-qty f-liters" type="number" min="0" step="0.1" value="${qty}"></div><div><label class="f-unit-label">単価（円/${unit}）</label><input class="f-unit" type="number" min="0" step="0.1" value="${d.unitPrice||''}" readonly></div><div><label>金額（円）</label><input class="f-amount" type="number" min="0" step="1" value="${d.amount||''}" readonly></div></div>
   <div class="note f-price-note" style="margin-top:8px"></div><label>メモ</label><input class="f-note" value="${d.note||''}" placeholder="任意">`;
   $('#fuelRows').appendChild(r);
@@ -1917,13 +1917,13 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 <script src="site-waste-cost-summary.js?v=20260910-sites-v3"></script>
 <script src="dispatch-travel.js?v=20260909-travel-v1"></script>
 <script src="labor-cost-admin.js?v=20260910-sites-v3"></script>
-<script src="vehicle-cost-admin.js?v=20260910-sites-v3"></script>
-<script src="equipment-cost-admin.js?v=20260910-sites-v3"></script>
+<script src="vehicle-cost-admin.js?v=20260910-fuel-separate-v1"></script>
+<script src="equipment-cost-admin.js?v=20260910-fuel-separate-v1"></script>
 <script src="equipment-transport.js?v=20260909-transport-v1"></script>
-<script src="usage-hours.js?v=20260909-travel-site-v4"></script>
+<script src="usage-hours.js?v=20260910-fuel-separate-v1"></script>
 <script src="attachment-rate-admin.js?v=20260909-inline-v3"></script>
-<script src="pending-transport-tools.js?v=20260909-hours-v1"></script>
-<script src="site-financial-summary.js?v=20260910-sites-v3"></script>
+<script src="pending-transport-tools.js?v=20260910-fuel-separate-v1"></script>
+<script src="site-financial-summary.js?v=20260910-fuel-separate-v1"></script>
 <script src="employee-activity-summary.js?v=20260910-sites-v3"></script>
 <script src="shared-site-master.js?v=20260910-sites-v3"></script>
 <script src="report-draft-recovery.js?v=20260909-travel-site-v4"></script>
