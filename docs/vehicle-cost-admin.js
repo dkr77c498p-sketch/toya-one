@@ -175,4 +175,8 @@
     sites=(Array.isArray(event.detail.sites)?event.detail.sites:[]).map(s=>({...s}));
     window.ToyaSharedSiteUI?.syncBrowse(q('#vcSite'));
   });
+  document.addEventListener('toya-daily-rate-updated',event=>{
+    if(event.detail?.kind!=='vehicle'||!same(owner)||!event.detail.row)return;
+    rates=rates.filter(r=>r.id!==event.detail.row.id).concat(event.detail.row);renderRates();
+  });
 })();

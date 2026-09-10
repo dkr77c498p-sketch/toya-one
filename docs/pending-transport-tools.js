@@ -73,5 +73,6 @@
  function start(){if(!q('#ptStyle')){const s=document.createElement('style');s.id='ptStyle';s.textContent='#ptOther summary{font-weight:900;padding:14px 0}#ptOther input,#ptPending input,#ptRates input,#ptRates select{width:100%;box-sizing:border-box;font-size:16px;min-height:44px}#ptOther .btn,#ptPending .btn,#ptRates .btn{width:100%;margin-top:10px}.pt-entry{padding:12px;border:1px solid #dcaa4a;border-radius:12px;margin:10px 0;overflow-wrap:anywhere}';document.head.appendChild(s);}customUI();mountAdmin();load();}
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(start,250),{once:true});else setTimeout(start,250);
  document.addEventListener('click',e=>{if(e.target.closest?.('nav [data-page]')){customUI();mountAdmin();if(e.target.closest('[data-page="homePage"]')&&!editingAmount)load(true);}});
+ document.addEventListener('toya-daily-rate-updated',e=>{if(e.detail?.kind==='tool'&&e.detail.row){toolRows=toolRows.filter(r=>r.id!==e.detail.row.id).concat(e.detail.row);lastRead=0;}});
  setInterval(()=>{customUI();if(owner&&owner!==ident()){q('#ptPending')?.remove();q('#ptRates')?.remove();owner='';lastRead=0;missing=[];toolRows=[];editingAmount=false;}if(!document.hidden&&q('#homePage')?.classList.contains('active'))load();},3000);
 })();
