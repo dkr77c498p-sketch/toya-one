@@ -9,6 +9,8 @@ assert(source.includes('重機アタッチメント使用料（管理者用）')
 assert(source.includes('<details id="arSettings"><summary>単価設定（普段は変更不要）</summary>'));
 assert(source.includes('</details>'));
 assert(!source.includes('<details id="arSettings" open>'));
+assert(source.includes('id="arAdd"'));
+assert(source.includes('id="arNewName" type="text"'));
 assert(source.includes('id="arDaily"'));
 assert(source.includes('1台・1日あたり（円）'));
 assert(source.includes('1台・1時間あたり（自動計算）'));
