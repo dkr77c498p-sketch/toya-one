@@ -13,7 +13,7 @@
   const optional = v => v === '' || v == null ? null : Number(v);
   const round = n => Math.round((n + Number.EPSILON) * 100) / 100;
   function calculate(r) {
-    const autoLabor = round(Number.isFinite(r.hourlyMinutes)?r.hourlyMinutes*(r.hourlyQuantity||1)*num(r.dayRate)/480:num(r.full) * num(r.dayRate) + num(r.half) * num(r.halfRate));
+    const autoLabor = round(Array.isArray(r.hourlyCrews)&&r.hourlyCrews.length?r.hourlyCrews.reduce((n,e)=>n+e.minutes*e.quantity*num(r.dayRate)/480,0):Number.isFinite(r.hourlyMinutes)?r.hourlyMinutes*(r.hourlyQuantity||1)*num(r.dayRate)/480:num(r.full) * num(r.dayRate) + num(r.half) * num(r.halfRate));
     const manualLabor = optional(r.manualLabor), manualTravel = optional(r.manualTravel);
     const autoTravel = r.area === 'outside' ? null : round(num(r.vehicles) * num(r.cityRate));
     const labor = manualLabor === null ? autoLabor : manualLabor;
@@ -50,23 +50,26 @@
     });
   }
   let hoursImportBlocked='';
-  function fromTimedReports(all,rates,site){
+  function fromTimedReports(all,rates,site,dispatchCrews=[]){
     hoursImportBlocked='';const own=all.filter(r=>r.site_id===site.id),base=fromReports(own,rates);
     if(!window.ToyaUsageHoursEngine||!all.some(r=>r.report_data?.usageHours?.version===1))return base;
     const legacy={sheet:{entries:base.map(r=>({...r,cost:calculate(r).total}))},issues:[]};
-    const data={reports:all,sites:sites,laborRates:rates,laborSheets:[],vehicleSheets:[],equipmentSheets:[]};
+    const data={reports:all,sites:sites,laborRates:rates,dispatchCrews,laborSheets:[],vehicleSheets:[],equipmentSheets:[]};
     const result=window.ToyaUsageHoursEngine.adjust('labor',all[0]?.report_date,data,site,legacy,()=>0,travelEngine);
     hoursImportBlocked=(result.pendingResources||[]).join('・');
     const mapped=base.map(r=>{
-      const e=result.sheet.entries.find(e=>e.key===r.key);
+      const matches=result.sheet.entries.filter(e=>e.key===r.key),e=matches[0];
       if(!e)return {...r,full:0,half:0,manualLabor:0,manualTravel:0,highway:0,travelImportNote:result.issues.join(' ')};
+      if(matches.length>1&&matches.every(e=>Number.isFinite(e.minutes)))return {...r,full:matches.reduce((n,e)=>n+(e.minutes>0?e.quantity:0),0),half:0,
+        hourlyCrews:matches.map(e=>({minutes:e.minutes,quantity:e.quantity})),
+        manualLabor:round(matches.reduce((n,e)=>n+e.laborCost,0)),manualTravel:round(matches.reduce((n,e)=>n+(e.travel||0),0)),highway:round(matches.reduce((n,e)=>n+(e.highway||0),0)),travelImportNote:result.issues.join(' ')};
       if(!Number.isFinite(e.minutes))return r;
       return {...r,full:e.minutes>0?(e.quantity||1):0,half:0,hourlyMinutes:e.minutes,hourlyQuantity:e.quantity||1,
         manualLabor:e.laborCost,manualTravel:e.travel??0,highway:e.highway??0,travelImportNote:result.issues.join(' ')};
     });return mapped;
   }
   // Pure calculations exposed for regression tests; no account or rate data is exposed here.
-  window.ToyaLaborEngine = Object.freeze({calculate,newEntry,fromReports});
+  window.ToyaLaborEngine = Object.freeze({calculate,newEntry,fromReports,fromTimedReports});
   let owner = '', rates = [], sites = [], rows = [], sources = [], sheet = null, dirty = false, busy = false, initialized = false;
   let selectedDate = '', selectedSite = '', request = 0;
   const admin = () => typeof cloudProfile !== 'undefined' && cloudProfile?.role === 'admin' && cloudProfile.active === true && cloudProfile.company_id && typeof cloudClient !== 'undefined' && !!cloudClient;
@@ -177,7 +180,7 @@
     return `<details class="row lc-entry lc-company" data-lc-index="${i}" ${calculate(r).active?'open':''}>
       <summary>${esc(r.label)} <span data-lc-row-total></span></summary>
       <div class="lc-mini-note">1日 ${yen(r.dayRate)}／半日 ${yen(r.halfRate)}${r.kind==='outgoing'?'（売上）':''}</div>
-      <p class="note">${Number.isFinite(r.hourlyMinutes)?`日報の実働：1人${r.hourlyMinutes/60}時間 × ${r.hourlyQuantity||1}人`:""}</p><div class="lc-count-grid" style="${Number.isFinite(r.hourlyMinutes)?"display:none":""}">${counter(i,'full',r.full,'1日の人数（人）')}${counter(i,'half',r.half,'半日の人数（人）')}</div>
+      <p class="note">${r.hourlyCrews?.length?r.hourlyCrews.map((e,i)=>`班${i+1}：1人${e.minutes/60}時間 × ${e.quantity}人`).join(' ／ '):Number.isFinite(r.hourlyMinutes)?`日報の実働：1人${r.hourlyMinutes/60}時間 × ${r.hourlyQuantity||1}人`:""}</p><div class="lc-count-grid" style="${Number.isFinite(r.hourlyMinutes)||r.hourlyCrews?.length?"display:none":""}">${counter(i,'full',r.full,'1日の人数（人）')}${counter(i,'half',r.half,'半日の人数（人）')}</div>
       <div class="grid2">${counter(i,'vehicles',r.vehicles,'通勤台数（台）')}${travelArea(r)}</div>
       ${r.kind==='dispatch'?`<div class="lc-mini-note">市内通勤：1台 ${yen(r.cityRate)}。半日も同額。</div>`:'<div class="lc-mini-note">市外交通費・高速代は別途入力。</div>'}
       ${adjustment(i,r)}</details>`;
@@ -186,7 +189,7 @@
     if(!sameOwner())return;
     const section=(list,title)=>list.length?`<h3 class="lc-group-title">${title}</h3>`+list.map(({r,i})=>entryHTML(r,i)).join(''):'';
     const all=rows.map((r,i)=>({r,i}));
-    hoursImportBlocked='';const own=all.filter(x=>x.r.kind==='own'),dispatch=all.filter(x=>x.r.kind==='dispatch'),support=all.filter(x=>!['own','dispatch'].includes(x.r.kind));
+    const own=all.filter(x=>x.r.kind==='own'),dispatch=all.filter(x=>x.r.kind==='dispatch'),support=all.filter(x=>!['own','dispatch'].includes(x.r.kind));
     q('#lcBody').innerHTML=section(own,'自社：勤務を選ぶだけ')+section(dispatch,'明建・朝日など：人数と通勤台数')+
       (support.length?`<details class="lc-support" ${support.some(x=>calculate(x.r).active)?'open':''}><summary>常用・応援（必要な日だけ）</summary><p class="note">来てもらう分は費用、応援に行く分は売上。自社の人件費は上の自社欄に残します。</p>${support.map(({r,i})=>entryHTML(r,i)).join('')}</details>`:'');
     q('#lcTotals').hidden=false;q('#lcSave').hidden=false;renderTotals();
@@ -264,12 +267,17 @@
     const token=++request, mine=owner;setBusy(true);msg('人件費を読み込み中…');
     try{
       const saved=await cloudClient.from('labor_cost_sheets').select('*').eq('company_id',cloudProfile.company_id).eq('work_date',date).eq('site_id',site).maybeSingle();if(saved.error)throw saved.error;
-      let reports=[];
-      if(rebuild||!saved.data){const rs=await cloudClient.from('daily_reports').select('id,site_id,report_date,report_data,updated_at,recorder_name').eq('company_id',cloudProfile.company_id).eq('report_date',date);if(rs.error)throw rs.error;reports=rs.data||[];}
+      let reports=[],dispatchCrews=[];
+      if(rebuild||!saved.data){
+        const [rs,cs]=await Promise.all([
+          cloudClient.from('daily_reports').select('id,site_id,report_date,report_data,updated_at,recorder_name').eq('company_id',cloudProfile.company_id).eq('report_date',date),
+          cloudClient.from('dispatch_crew_confirmations').select('id,site_id,report_id,work_date,dispatch_code,crew_key,report_updated_at').eq('company_id',cloudProfile.company_id).eq('work_date',date)
+        ]);if(rs.error)throw rs.error;if(cs.error)throw cs.error;reports=rs.data||[];dispatchCrews=cs.data||[];
+      }
       if(token!==request||mine!==owner||!sameOwner())return;
       sheet=saved.data;selectedDate=date;selectedSite=site;
       if(sheet&&!rebuild){hoursImportBlocked='';rows=structuredClone(sheet.entries);sources=sheet.source_reports||[];dirty=false;msg('保存済みの金額を読み込みました。手入力と当時の単価を保持しています。');}
-      else{rows=fromTimedReports(reports,rates,sites.find(s=>s.id===site));sources=(rows.some(r=>Number.isFinite(r.hourlyMinutes))?reports:reports.filter(r=>r.site_id===site)).map(r=>({id:r.id,updated_at:r.updated_at}));dirty=true;
+      else{rows=fromTimedReports(reports,rates,sites.find(s=>s.id===site),dispatchCrews);sources=(rows.some(r=>Number.isFinite(r.hourlyMinutes)||r.hourlyCrews?.length)?reports:reports.filter(r=>r.site_id===site)).map(r=>({id:r.id,updated_at:r.updated_at}));dirty=true;
         msg(`日報${reports.length}件から人数・記録済みの通勤台数・交通費を読み込みました。${rows.filter(r=>r.travelImportNote).map(r=>r.label+'：'+r.travelImportNote).join(' ')} 全日・半日、通勤台数、市外交通費、高速代を確認してください。${reports.length>1?' 同じ人は1人、明建・朝日は最大人数で仮入力しています。別班の場合は人数を修正してください。':''}${reports.some(r=>r.report_data?.siteMoves?.length)?' 現場移動あり：各現場の人工配分と交通費の重複を確認してください。':''}${reports.some(r=>r.report_data?.otherWorker)?' その他の作業者は自動算入していません。単価設定から追加してください。':''}`);
       }
       renderEntries();

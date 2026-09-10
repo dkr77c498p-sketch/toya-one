@@ -114,7 +114,7 @@
         const observed = own.map(r => ({r, n: amount(raw(r)[field])}));
         if (observed.some(x => x.n !== null && (!Number.isInteger(x.n) || x.n < 0))) {note(label + 'の人数を確認してください。'); return;}
         const working = observed.filter(x => x.n > 0); if (!working.length) return;
-        if (working.some(x => hasMoves(x.r)) || others.some(r => amount(raw(r)[field]) > 0)) {
+        if (working.some(x => hasMoves(x.r) && !hoursEngine.dispatchCrew(data, x.r, label)) || others.some(r => amount(raw(r)[field]) > 0 && working.some(x => hoursEngine.sameDispatchCrew(data, x.r, r, label)))) {
           note(label + 'が同日に複数現場へ記録されています。別班か現場移動か不明のため、この会社の人工・交通費は自動加算を保留しています。'); return;
         }
         const counts = [...new Set(working.map(x => x.n))];
@@ -273,7 +273,7 @@
           gross = round(gross + g);
         } else {const v = requiredAmount(s.revenue_total); revenue = round(revenue + v); day(s.work_date).revenue = v;}
         sum = round(sum + n); day(s.work_date)[kind] = n;
-        const current = (kind === 'labor' && !list(s.entries).some(e => Number.isFinite(e.hourlyMinutes)) ? own : reports).filter(r => r.report_date === s.work_date);
+        const current = (kind === 'labor' && !list(s.entries).some(e => Number.isFinite(e.hourlyMinutes) || list(e.hourlyCrews).length) ? own : reports).filter(r => r.report_date === s.work_date);
         if (sig(s.source_reports) !== sig(current)) {
           staleDates.push(s.work_date); day(s.work_date).stale.push(kind);
           warnings.add(s.work_date + '：' + names[kind] + 'は、保存時と最新の日報の情報が一致していません。保存額を表示しています。登録管理でこの日・現場の費用を開き、日報を読み直して内容を確認・保存してください。');
@@ -461,6 +461,7 @@
         ['vehicleSheets', 'vehicle_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', null],
         ['equipmentSheets', 'equipment_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', null],
         ['laborRates', 'labor_rate_master', 'id,code,label,kind,day_rate,half_rate,city_per_vehicle,active', null, null],
+        ['dispatchCrews', 'dispatch_crew_confirmations', 'id,site_id,report_id,work_date,dispatch_code,crew_key,report_updated_at', 'work_date', null],
         ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null, null],
         ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null, null],
         ['transportRates', 'equipment_transport_rate_master', 'id,carrier,machine_name,distance_label,unit_price,price_basis,active', null, null],

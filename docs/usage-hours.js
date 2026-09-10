@@ -58,11 +58,22 @@
   if(kind==='dispatch')return Number(d[norm(name)==='明建'?'meikenCount':'asahiCount'])>0;
   return arr(d[fields[kind]]).some(v=>key(label(v).replace(/\s*[×x]\s*\d+\s*[台本個]$/,''))===key(name));
  }
+ // A company name is not a crew identity. Only current administrator
+ // confirmations may distinguish separate crews; unconfirmed reports remain ambiguous.
+ function dispatchCrew(data,r,name){
+  const code=norm(name)==='明建'?'meiken':norm(name)==='朝日'?'asahi':'';
+  const stamp=v=>{const t=Date.parse(v);return Number.isFinite(t)?t+':'+(String(v).match(/\.(\d+)/)?.[1]?.padEnd(6,'0').slice(3,6)||'000'):'';};
+  const time=stamp(r.updated_at);
+  const rows=arr(data.dispatchCrews).filter(c=>c.report_id===r.id&&c.site_id===r.site_id&&c.work_date===r.report_date&&c.dispatch_code===code&&time&&stamp(c.report_updated_at)===time);
+  return rows.length===1&&typeof rows[0].crew_key==='string'?rows[0].crew_key:'';
+ }
+ function sameDispatchCrew(data,a,b,name){const x=dispatchCrew(data,a,name),y=dispatchCrew(data,b,name);return !x||!y||x===y;}
  function build(data){
   const reports=unique(data.reports),groups=new Map();
   for(const r of reports){const h=r.report_data?.usageHours;if(!h||h.version!==1)continue;
    for(const e of arr(h.entries)){
-    const id=[r.report_date,e.kind,key(e.label)].join('|');
+    const crew=e.kind==='dispatch'?dispatchCrew(data,r,e.label):'';
+    const id=[r.report_date,e.kind,key(e.label),...(crew?[crew]:[])].join('|');
     if(!groups.has(id))groups.set(id,{date:r.report_date,kind:e.kind,label:e.label,claims:[],errors:[],valid:false});
     const g=groups.get(id);g.claims.push({e,r});const error=validateEntry(e);if(error)g.errors.push(error);
    }
@@ -75,6 +86,7 @@
    if(!arr(c.e.allocations).some(a=>norm(a.site)===norm(c.r.report_data?.site)))g.errors.push('日報の元の現場が時間配分から抜けています。');
    g.entry=c.e;g.report=c.r;g.sites=arr(c.e.allocations).map(a=>norm(a.site));
    for(const r of reports.filter(r=>r.report_date===g.date&&used(r,g.kind,g.label))){
+    if(g.kind==='dispatch'&&!sameDispatchCrew(data,c.r,r,g.label))continue;
     if(!g.sites.includes(norm(r.report_data?.site)))g.errors.push('時間を指定した現場以外にも使用記録があります。配分を確認してください。');
    }
    if(!['tool','attachment'].includes(g.kind)&&g.sites.length>1&&arr(data[sheetKey(g.kind)]).some(s=>s.work_date===g.date&&arr(data.sites).some(t=>t.id===s.site_id&&g.sites.includes(norm(t.name)))))g.errors.push('配分先に保存済みの費用があります。保存額を残すため、この時間配分は保留しています。');
@@ -99,9 +111,10 @@
  function adjust(kind,date,data,site,legacy,getAmount,travelEngine){
   const out=structuredClone(legacy),s=out.sheet,issues=new Set(out.issues),groups=build(data),names=new Set(),pending=[];
   const matched=[...groups.values()].filter(g=>g.date===date&&(g.kind===kind||(kind==='labor'&&g.kind==='dispatch'))&&g.sites.includes(norm(site.name)));
+  const replaced=new Set(matched.map(g=>key(g.label)));
+  s.entries=arr(s.entries).filter(e=>!replaced.has(key(e.label)));
   for(const g of matched){
    names.add(key(g.label));
-   s.entries=arr(s.entries).filter(e=>key(e.label)!==key(g.label));
    if(!g.valid){pending.push(g.label);g.errors.forEach(t=>issues.add(date+'：'+g.label+'／'+t));continue;}
    // Remove obsolete per-resource ambiguity warnings only after a valid explicit allocation.
    for(const t of [...issues])if(t.includes(g.label)&&/現場間の人工配分|同日に複数現場|短時間または勤務時間|会社の人工/.test(t))issues.delete(t);
@@ -154,7 +167,7 @@
   }
   return out;
  }
- const engine=Object.freeze({workMinutes,validateEntry,syncEntrySites,build,fuelRows,adjust,tools,attachments,key});
+ const engine=Object.freeze({workMinutes,validateEntry,syncEntrySites,dispatchCrew,sameDispatchCrew,build,fuelRows,adjust,tools,attachments,key});
  if(typeof module==='object'&&module.exports){module.exports=engine;return;}
  if(window.ToyaUsageHoursEngine)return;window.ToyaUsageHoursEngine=engine;
  const q=(s,r=document)=>r.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
