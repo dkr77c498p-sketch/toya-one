@@ -839,13 +839,44 @@ attachments:[
  {name:'古河 VS15',category:'マグネット',location:'',mountedOn:'',memo:''},
  {name:'ASG-130R',category:'0.45用フォーク',location:'',mountedOn:'',memo:''},
  {name:'ASG-35R',category:'0.2用フォーク',location:'',mountedOn:'',memo:''},
- {name:'スケルトンバケット',category:'バケット',location:'',mountedOn:'',memo:''}
+ {name:'スケルトンバケット',category:'バケット',location:'',mountedOn:'',memo:''},
+ {name:'スケルトンバケット1号機用',category:'MAC',location:'',mountedOn:'',memo:''},
+ {name:'スケルトンバケット2号機用',category:'MAC',location:'',mountedOn:'',memo:''}
 ]};
 function get(k,d=[]){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(e){return d}}
 function set(k,v){localStorage.setItem(k,JSON.stringify(v))}
 function today(){const d=new Date(),z=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`}
 $('#date').value=today();
 Object.entries({sites:LS.sites,vehicles:LS.vehicles,machines:LS.machines,attachments:LS.attachments}).forEach(([n,k])=>{if(!localStorage.getItem(k))set(k,defaults[n])});
+// Keep the two MAC buckets distinct: these names also identify their private hourly rates.
+function isLegacyMacBucket(x){
+ const norm=v=>String(v||'').normalize('NFKC').replace(/[\s　]/g,'').toUpperCase();
+ const name=norm(typeof x==='string'?x:x?.name),cat=norm(x?.category);
+ return (name==='MAC'&&/^スケルトンバケット[12]号機用$/.test(cat))||
+  /^スケルトンバケット[12]号機用[|｜]MAC$/.test(name)||
+  name==='スケルトンバケット2号機用|KGSP'||name==='スケルトンバケット2号機用｜KGSP';
+}
+function ensureMacBucketCatalog(){
+ const a=get(LS.attachments,defaults.attachments);let changed=false;
+ for(const number of [1,2]){
+  const name=`スケルトンバケット${number}号機用`,existing=a.find(x=>x?.name===name);
+  if(existing){if(existing.category!=='MAC'){existing.category='MAC';changed=true;}}
+  else{a.push({name,category:'MAC',location:'',mountedOn:'',memo:''});changed=true;}
+ }
+ // Preserve legacy rows and their location/maintenance notes; do not assign an ambiguous MAC row to either machine.
+ if(changed)set(LS.attachments,a);
+}
+function restoreAttachmentChoices(names=[]){
+ const existing=new Set($$('input[name="attachment"]').map(x=>x.value));
+ for(const name of names){
+  if(!name||existing.has(name))continue;
+  const label=document.createElement('label');label.className='choice';label.dataset.savedAttachment='1';
+  const input=document.createElement('input');input.type='checkbox';input.name='attachment';input.value=name;
+  const span=document.createElement('span');span.className='toya-asset-label';span.textContent=name;
+  label.append(input,span);$('#machineAttachmentChoices').appendChild(label);existing.add(name);
+ }
+}
+ensureMacBucketCatalog();
 
 $$('nav button').forEach(b=>b.onclick=()=>{ $$('nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');$$('.page').forEach(x=>x.classList.remove('active'));$('#'+b.dataset.page).classList.add('active');$('#actions').style.display=b.dataset.page==='reportPage'?'grid':'none';if(b.dataset.page==='homePage')renderHome();if(b.dataset.page==='recordsPage')renderRecords();if(b.dataset.page==='attachmentPage')renderAttachments();if(b.dataset.page==='masterPage')renderMasters()});
 
@@ -955,13 +986,16 @@ function checked(n){return $$(`input[name="${n}"]:checked`).map(x=>x.value)}
 function esc(s){return (s||'').trim()}
 function showStatus(m){const s=$('#status');s.textContent=m;s.style.display='block';setTimeout(()=>s.style.display='none',2500)}
 function renderSelectors(){
+ const selectedAttachments=checked('attachment');
  const localSites=get(LS.sites,defaults.sites);
  const sites=cloudProfile&&cloudSitesCache.length?[...new Set([...cloudSitesCache.filter(x=>x.status!=='inactive').map(x=>x.name),...localSites])]:localSites;
- const vs=get(LS.vehicles,defaults.vehicles),ms=get(LS.machines,defaults.machines),ats=get(LS.attachments,defaults.attachments);
+ const vs=get(LS.vehicles,defaults.vehicles),ms=get(LS.machines,defaults.machines),ats=get(LS.attachments,defaults.attachments).filter(x=>!isLegacyMacBucket(x));
  $('#site').innerHTML=sites.map(x=>`<option>${x}</option>`).join('');
  $('#vehicleChoices').innerHTML=vs.map(x=>`<label class="choice"><input type="checkbox" name="vehicle" value="${x}">${x}</label>`).join('');
  $('#machineChoices').innerHTML=ms.map(x=>`<label class="choice"><input type="checkbox" name="machine" value="${x}">${x}</label>`).join('');
  const smallCats=new Set(['小型機械','発電機','エア工具']); const machineAts=ats.filter(x=>!smallCats.has(x.category)); const smallAts=ats.filter(x=>smallCats.has(x.category)); $('#machineAttachmentChoices').innerHTML=machineAts.map(x=>`<label class="choice"><input type="checkbox" name="attachment" value="${x.name}">${x.category||'アタッチメント'}｜${x.name}</label>`).join(''); $('#smallToolChoices').innerHTML=smallAts.map(x=>`<label class="choice"><input type="checkbox" name="attachment" value="${x.name}">${x.name}</label>`).join('');
+ restoreAttachmentChoices(selectedAttachments);
+ $$('input[name="attachment"]').forEach(c=>c.checked=selectedAttachments.includes(c.value));
  $$('input[name="machine"]').forEach(c=>c.onchange=renderMachineHours)
 }
 function renderMachineHours(){const old={};$$('#machineHours .mh').forEach(x=>old[x.dataset.name]=x.querySelector('input[type=number]').value);$('#machineHours').innerHTML='';checked('machine').forEach(name=>{const r=document.createElement('div');r.className='row mh';r.dataset.name=name;r.innerHTML=`<div class="grid2"><div><label>自社重機</label><input value="${name}" readonly></div><div><label>稼働時間</label><input type="number" min="0" step="0.5" value="${old[name]||''}"></div></div>`;$('#machineHours').appendChild(r);enhanceNumericInputs(r)})}
@@ -1733,11 +1767,13 @@ function clearReportEditState(){editingReport=null;$('#editBanner')?.classList.r
 function cancelReportEdit(){if(confirm('編集をやめますか？入力中の変更は保存されません。'))clearReportEditState()}
 function ensureSiteOption(name){if(!name)return;const sel=$('#site');if([...sel.options].some(o=>o.value===name))return;const sites=get(LS.sites,[]);if(!sites.includes(name)){sites.push(name);set(LS.sites,sites)}renderSelectors()}
 function clearReportFormDynamic(){
+ $$('[data-saved-attachment]').forEach(x=>x.remove());
   $$('input[name="worker"],input[name="workType"],input[name="vehicle"],input[name="machine"],input[name="attachment"]').forEach(x=>x.checked=false);
   $('#leaseVehicles').innerHTML='';$('#leaseMachines').innerHTML='';$('#leaseAttachments').innerHTML='';$('#fuelRows').innerHTML='';$('#items').innerHTML='';$('#machineHours').innerHTML='';stagedPhotos=[];renderStagedPhotos();
 }
 function fillReportForm(d,mode='edit'){
   clearReportFormDynamic();ensureSiteOption(d.site||'');
+  restoreAttachmentChoices(d.attachments||[]);
   $('#date').value=d.date||today();$('#weather').value=d.weather||'晴れ';$('#site').value=d.site||'';$('#writer').value=d.writer||'';$('#meikenCount').value=Number(d.meikenCount||0);$('#asahiCount').value=Number(d.asahiCount||0);$('#otherWorker').value=d.otherWorker||'';$('#start').value=d.start||'08:00';$('#end').value=d.end||'17:00';$('#overtime').value=d.overtime||0;$('#details').value=d.details||'';$('#memo').value=d.memo||'';
   const cv=(name,vals)=>$$(`input[name="${name}"]`).forEach(x=>x.checked=(vals||[]).includes(x.value));cv('worker',d.workers);cv('workType',d.workTypes);cv('vehicle',d.vehicles);cv('machine',(d.machines||[]).map(x=>x.name));cv('attachment',d.attachments);renderMachineHours();
   (d.machines||[]).forEach(x=>{const row=$$('#machineHours .mh').find(r=>r.dataset.name===x.name);if(row)row.querySelector('input[type=number]').value=x.hours||''});
@@ -1883,13 +1919,14 @@ function renderAttachmentMaster(){
  const a=get(LS.attachments,defaults.attachments);
  $('#attachmentMaster').innerHTML=a.map((x,i)=>`<div class="row">
  <div class="rowhead"><b>${x.category||'アタッチメント'}</b><button class="btn danger" onclick="deleteAttachment(${i})">削除</button></div>
+ ${isLegacyMacBucket(x)?'<p class="note">旧登録です。新しい日報では、MACの1号機用・2号機用を選んでください。</p>':''}
  <div class="grid2"><div><label>名称・型式</label><input value="${x.name||''}" onchange="updateAttachment(${i},'name',this.value)"></div><div><label>種類</label><input value="${x.category||''}" onchange="updateAttachment(${i},'category',this.value)"></div></div>
  <div class="grid2"><div><label>保管場所</label><input value="${x.location||''}" placeholder="第1ヤード・現場など" onchange="updateAttachment(${i},'location',this.value)"></div><div><label>装着中の重機</label><input value="${x.mountedOn||''}" placeholder="SK135（1号機）など" onchange="updateAttachment(${i},'mountedOn',this.value)"></div></div>
  <label>メモ・整備内容</label><input value="${x.memo||''}" onchange="updateAttachment(${i},'memo',this.value)">
  </div>`).join('');
 }
 function renderAttachments(){
- const a=get(LS.attachments,defaults.attachments);
+ const a=get(LS.attachments,defaults.attachments).filter(x=>!isLegacyMacBucket(x));
  $('#attachmentCount').textContent=a.length;
  const reports=get(LS.reports,[]);
  const latest=reports[0]||{};
@@ -1910,7 +1947,7 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 
 </script>
 <script src="midway.js?v=20260910-sites-v3"></script>
-<script src="site-move-filter-fix.js?v=20260910-sites-v3"></script>
+<script src="site-move-filter-fix.js?v=20260910-mac-buckets-v1"></script>
 <script src="attachment-separation-stable.js?v=20260908-1705"></script>
 <script src="waste-price-master.js?v=20260908-shori-v1"></script>
 <script src="waste-price-admin.js?v=20260908-shori-v1"></script>
