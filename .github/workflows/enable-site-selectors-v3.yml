@@ -1,0 +1,35 @@
+name: Enable unified site selectors v3
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/enable-site-selectors-v3.yml
+      - scripts/enable-site-selectors-v3.py
+      - scripts/selector-helpers-v3.js
+      - scripts/selector-apply-shared-v3.py
+      - scripts/selector-apply-views-v3.py
+      - scripts/test-site-selectors-v3.cjs
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: toya-unified-site-selectors-v3
+  cancel-in-progress: false
+jobs:
+  enable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Match browser-tested files and verify all regressions
+        run: python3 scripts/enable-site-selectors-v3.py
+      - name: Publish verified selectors atomically
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/shared-site-master.js docs/midway.js docs/site-move-filter-fix.js docs/site-waste-cost-summary.js docs/labor-cost-admin.js docs/vehicle-cost-admin.js docs/equipment-cost-admin.js docs/employee-activity-summary.js docs/site-financial-summary.js tests/shared-site-master.cjs tests/site-selector-unified.cjs
+          if git diff --cached --quiet; then echo 'Already enabled'; exit 0; fi
+          git diff --cached --stat
+          git commit -m 'Unify shared site selectors across reports, home and cost editors while preserving history and verified saves'
+          git push origin HEAD:main
