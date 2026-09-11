@@ -8,8 +8,8 @@ assert.equal(built.input.area_m2,'99.17');
 assert.equal(built.groups[0].quote_lines.find(r=>r.label==='アスベスト含有調査').quote_price,'35000');
 assert.equal(built.groups[0].quote_lines.find(r=>r.label==='養生足場').quote_price,'800');
 assert.ok(built.groups[2].quote_lines.length>=10,'建物面積から産廃処分・運搬数量を作る');
-const woodWaste=Object.fromEntries(built.groups[2].quote_lines.filter(r=>r.label==='産業廃棄物処分費').map(r=>[r.spec.split('／')[0],Number(r.quantity)]));
-assert.equal(woodWaste['木くず'],17.289,'300㎡標準表52.3㎥を面積比例');
+const woodWaste=Object.fromEntries(built.groups[2].quote_lines.map(r=>[r.label,Number(r.quantity)]));
+assert.equal(woodWaste['木くず処分費'],17.289,'300㎡標準表52.3㎥を面積比例');
 assert.equal(A.autoFoundation('wood',300,1),'45','木造平屋は延床面積×平均0.15㎥');
 assert.equal(A.autoFoundation('wood',300,2),'28.5','階数から建築面積を計算して木造2階平均を適用');
 assert.equal(A.autoFoundation('steel',300,1),'69','鉄骨造平屋の平均を適用');
@@ -18,7 +18,7 @@ const other=A.build({kind:'wood',grading_m2:'10',sandbag_m:'20'}).groups[3].quot
 assert.equal(other.find(r=>r.label==='解体跡整地').quote_price,'500');
 assert.equal(other.find(r=>r.label==='土嚢積み').quote_price,'1000');
 for(const kind of ['wood','lightSteel','steel','rc']){
- const metal=A.build({kind,area_m2:'300'}).groups[2].quote_lines.find(r=>r.spec.startsWith('金属'));
+ const metal=A.build({kind,area_m2:'300'}).groups[2].quote_lines.find(r=>r.label==='金属くず買取控除');
  assert.equal(metal.unit,'t');
  assert.equal(metal.quote_price,'-37000',kind+'の金属くずは37円/kgの買取控除');
 }
@@ -41,4 +41,6 @@ assert.ok((html.match(/class="te2-page/g)||[]).length>=6,'TOYA書式を複数ペ
 assert.ok(html.includes('width=device-width,initial-scale=1'),'スマホ画面幅で見積書を表示');
 assert.ok(html.includes('@page{size:A4;margin:0}'),'PDFは余白を含めてA4固定');
 assert.ok(html.includes('class="te2-frame"'),'御社書式の見積書枠を使用');
+assert.ok(html.includes('body{width:794px;min-width:794px'),'スマホプレビューはA4比率を崩さない');
+assert.ok(html.includes('@media print{html,body{zoom:1!important}}'),'PDF保存時は原寸A4に戻す');
 console.log('estimate auto builder tests passed');
