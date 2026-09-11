@@ -33,7 +33,7 @@
   const duplicates=new Map();list.forEach(r=>duplicates.set(norm(r.name),(duplicates.get(norm(r.name))||0)+1));
   function add(r,historical=false){
    const id=byId?String(r.id):norm(r.name);if(seen.has(id))return;
-   seen.add(id);out.push({value:byId?String(r.id):r.name,label:r.name+(historical?'（過去・未整理）':'')+(byId&&duplicates.get(norm(r.name))>1?'［ID末尾 '+String(r.id).slice(-6)+'］':'')});
+   seen.add(id);out.push({value:byId?String(r.id):r.name,label:r.name+(historical?(r.completed_on?'（完工）':'（過去・未整理）'):'')+(byId&&duplicates.get(norm(r.name))>1?'［ID末尾 '+String(r.id).slice(-6)+'］':'')});
   }
   list.filter(ordinary).sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(r=>add(r));
   if(showHistory){
@@ -126,7 +126,7 @@
  }
  async function readRows(company){
   const out=[];for(let offset=0;offset<100000;offset+=500){
-   const r=await cloudClient.from('sites').select('id,name,status').eq('company_id',company).order('name').order('id').range(offset,offset+499);
+   const r=await cloudClient.from('sites').select('id,name,status,completed_on').eq('company_id',company).order('name').order('id').range(offset,offset+499);
    if(r.error)throw r.error;out.push(...arr(r.data));if(arr(r.data).length<500)return out;
   }throw new Error('現場が多いため一覧を最後まで確認できませんでした。');
  }
@@ -195,6 +195,7 @@
   document.addEventListener('focusout',e=>{if(e.target.matches('#site,.sm-site,'+Object.keys(selectSpecs).map(id=>'#'+id).join(',')))queueSync();});
   document.addEventListener('change',e=>{if(e.target.matches('#site,.sm-site,'+Object.keys(selectSpecs).map(id=>'#'+id).join(',')))queueSync();});
   document.addEventListener('click',e=>{if(e.target.closest('nav [data-page]')){adoptIdentity();mountHint();refresh();}});
+  document.addEventListener('toya-site-lifecycle-changed',()=>refresh(true));
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh(true);});
   window.addEventListener('focus',()=>refresh());window.addEventListener('online',()=>refresh(true));
   setInterval(()=>{if(!document.hidden)refresh();},30000);
