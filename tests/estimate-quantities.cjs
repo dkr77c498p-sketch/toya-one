@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),Q=require('../docs/estimate-quantities.js'),C=require('../docs/estimate-plan-engine.js'),fixture=require('./estimate-quantities-fixture.cjs');
+const source=fixture(),original=JSON.stringify(source),p=Q.fromSheet(source,{id:'target-site',name:'今回の工事'}),rows=p.groups.flatMap(g=>g.lines);
+assert.deepEqual(Q.summary(source),{rows:8,quantities:7,blankQuantities:1});
+assert.deepEqual(rows.map(r=>[r.quantity,r.unit]),[['21.60','m²'],['21.60','m²'],['36.25','m³'],['2.30','m³'],['0.80','t'],['','台']]);
+assert.equal(rows[0].label,'1階 ／ 床仕上撤去 ／ 下地別');assert.equal(rows[1].source_quoted_amount,null);assert.equal(rows[4].source_quoted_amount,'-28000');assert.equal(rows[5].source_quantity,null);
+assert.ok(rows.every(r=>r.multiplier==='1'&&r.unit_price===''));assert.equal(p.quote_amount_override,null);assert.equal(p.overhead_percent,null);assert.equal(p.markup_percent,null);assert.equal(p.site_id,'target-site');assert.equal(p.groups.length,2);
+assert.equal(C.calculate(p).complete,false);assert.equal(C.calculate(p).total_cost,null);assert.equal(C.calculate(p).price,null);assert.equal(p.quote_notes,'別途工事は協議');assert.match(p.internal_notes,/synthetic-quote.pdf/);
+console.log('PASS exact quantities and units, separate layers, unknowns and source credits survive; selling prices do not become costs');
+rows[0].quantity='10';assert.equal(JSON.stringify(source),original);assert.throws(()=>Q.fromSheet(source,null),/現場/);console.log('PASS reused quantity drafts are independent and require a target site');
+const html=Q.printHTML(source);assert.match(html,/見積数量の積算表/);assert.match(html,/1階 ／ 床仕上撤去 ／ 下地別/);assert.match(html,/21.60/);assert.match(html,/m³/);assert.match(html,/数量未入力/);assert.match(html,/別途/);assert.doesNotMatch(html,/110,000/);
+const unsafe=fixture();unsafe.title='<script>alert(1)</script>';unsafe.groups[0].lines[0].notes='<img src=x onerror=alert(1)>';
+assert.doesNotMatch(Q.printHTML(unsafe),/<script>|<img/);assert.match(Q.printHTML(unsafe),/&lt;script&gt;/);assert.match(Q.table(source.groups[1],true),/-28,000円/);assert.match(Q.table(source.groups[0],true),/空欄/);console.log('PASS printable quantities preserve provenance and escape source text; reference prices retain blanks and credits');
