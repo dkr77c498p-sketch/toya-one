@@ -25,7 +25,7 @@
   if(internal)demolition.push(line('内部床撤去',internal,'㎡',750,'階数 '+Math.max(1,Math.round(num(a.floors)||1))+'階'),line('内部床下地撤去',internal,'㎡',750),line('内部天井撤去',internal,'㎡',600),line('内部天井下地撤去',internal,'㎡',400));
   if(wall)demolition.push(line('内部壁撤去',wall,'㎡',500),line('内部壁下地撤去',wall,'㎡',250));
   const based='TOYA標準300㎡表から面積比例',w=r.waste,wr=r.wasteRates,waste=m2&&!interior?[line('産業廃棄物運搬費',m2*w.haul,'m³',wr.haul,'コンクリート以外／'+based),line('産業廃棄物運搬費',m2*w.concrete,'m³',wr.concreteHaul,'コンクリート／'+based),line('産業廃棄物処分費',m2*w.wood,'m³',wr.wood,'木くず／'+based),line('産業廃棄物処分費',m2*w.glass,'m³',wr.glass,'ガラス・陶磁器／'+based),line('産業廃棄物処分費',m2*w.plastic,'m³',wr.plastic,'廃プラスチック／'+based),line('産業廃棄物処分費',m2*w.paper,'m³',wr.paper,'紙・繊維／'+based),line('産業廃棄物処分費',m2*w.board,'m³',wr.board,'ボード類／'+based),line('産業廃棄物処分費',m2*w.concrete,'m³',wr.concrete,'コンクリート・アスファルト／'+based),line('産業廃棄物処分費',m2*w.rubble,'m³',wr.rubble,'がれき／'+based),line('産業廃棄物処分費',m2*w.metal,'t',wr.metal,'金属／'+based),line('産業廃棄物処分費',m2*w.mixed,'m³',wr.mixed,'その他混合／'+based)]:[];
-  const other=[line('解体跡整地',a.grading_m2,'㎡',850),line('土嚢積み',a.sandbag_m,'m','')];
+  const other=[line('解体跡整地',a.grading_m2,'㎡',500),line('土嚢積み',a.sandbag_m,'m',1000)];
   const groups=[group('A 仮設工事',temporary,a),group('B 解体工事',demolition),group('C 産業廃棄物処理工事',waste),group('D その他工事',other),group('E 諸経費・法定福利費・値引き',[])];
   return {input:a,groups};
  }

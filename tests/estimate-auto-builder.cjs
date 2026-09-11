@@ -14,6 +14,9 @@ assert.equal(A.autoFoundation('wood',300,1),'45','木造平屋は延床面積×�
 assert.equal(A.autoFoundation('wood',300,2),'28.5','階数から建築面積を計算して木造2階平均を適用');
 assert.equal(A.autoFoundation('steel',300,1),'69','鉄骨造平屋の平均を適用');
 assert.equal(A.autoFoundation('rc',300,4),'60','RC造4階の平均を適用');
+const other=A.build({kind:'wood',grading_m2:'10',sandbag_m:'20'}).groups[3].quote_lines;
+assert.equal(other.find(r=>r.label==='解体跡整地').quote_price,'500');
+assert.equal(other.find(r=>r.label==='土嚢積み').quote_price,'1000');
 A.percentRows(built.groups,built.input);
 assert.equal(built.groups[4].quote_lines.length,2,'法定福利費と諸経費を自動追加');
 const plan={entry_mode:'quote',tax_rate:10,groups:built.groups};
@@ -29,5 +32,8 @@ assert.equal(interior.groups[2].quote_lines.length,0,'内部解体では建物�
 const doc={kind:'estimate',document_number:null,document_date:'2026-09-11',customer_name:'テスト建設株式会社',customer_address:'鹿児島市',subject:'木造解体工事',site_name:'木造解体工事',site_address:'鹿児島市',notes:'',issuer:{issuer_name:'株式会社TOYA',representative:'代表取締役　宮下 直也',postal_code:'891-1205',address:'鹿児島市犬迫町8485-4',phone:'099-801-3027'},items:total.quote_items,tax_rate:10,subtotal:total.price,total:total.total,estimate_snapshot:{...plan,calculation:total}};
 const html=E.printHTML(doc);
 for(const text of ['御　見　積　書','工事内訳書','見積諸条件','建設業許可：鹿児島県知事（般-7）第16963号','アスベスト含有調査'])assert.ok(html.includes(text),text);
-assert.ok((html.match(/class="te-page/g)||[]).length>=6,'TOYA書式を複数ページで構成');
+assert.ok((html.match(/class="te2-page/g)||[]).length>=6,'TOYA書式を複数ページで構成');
+assert.ok(html.includes('width=device-width,initial-scale=1'),'スマホ画面幅で見積書を表示');
+assert.ok(html.includes('@page{size:A4;margin:0}'),'PDFは余白を含めてA4固定');
+assert.ok(html.includes('class="te2-frame"'),'御社書式の見積書枠を使用');
 console.log('estimate auto builder tests passed');
