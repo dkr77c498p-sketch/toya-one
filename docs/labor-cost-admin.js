@@ -13,7 +13,7 @@
   const optional = v => v === '' || v == null ? null : Number(v);
   const round = n => Math.round((n + Number.EPSILON) * 100) / 100;
   function calculate(r) {
-    const autoLabor = round(Array.isArray(r.hourlyCrews)&&r.hourlyCrews.length?r.hourlyCrews.reduce((n,e)=>n+e.minutes*e.quantity*num(r.dayRate)/480,0):Number.isFinite(r.hourlyMinutes)?r.hourlyMinutes*(r.hourlyQuantity||1)*num(r.dayRate)/480:num(r.full) * num(r.dayRate) + num(r.half) * num(r.halfRate));
+    const autoLabor = round(Array.isArray(r.hourlyCrews)&&r.hourlyCrews.length?r.hourlyCrews.reduce((n,e)=>n+(Number.isFinite(e.weightedMinutes)?e.weightedMinutes:e.minutes)*e.quantity*num(r.dayRate)/480,0):Number.isFinite(r.hourlyMinutes)?(Number.isFinite(r.hourlyWeightedMinutes)?r.hourlyWeightedMinutes:r.hourlyMinutes)*(r.hourlyQuantity||1)*num(r.dayRate)/480:num(r.full) * num(r.dayRate) + num(r.half) * num(r.halfRate));
     const manualLabor = optional(r.manualLabor), manualTravel = optional(r.manualTravel);
     const autoTravel = r.area === 'outside' ? null : round(num(r.vehicles) * num(r.cityRate));
     const labor = manualLabor === null ? autoLabor : manualLabor;
@@ -61,10 +61,10 @@
       const matches=result.sheet.entries.filter(e=>e.key===r.key),e=matches[0];
       if(!e)return {...r,full:0,half:0,manualLabor:0,manualTravel:0,highway:0,travelImportNote:result.issues.join(' ')};
       if(matches.length>1&&matches.every(e=>Number.isFinite(e.minutes)))return {...r,full:matches.reduce((n,e)=>n+(e.minutes>0?e.quantity:0),0),half:0,
-        hourlyCrews:matches.map(e=>({minutes:e.minutes,quantity:e.quantity})),
+        hourlyCrews:matches.map(e=>({minutes:e.minutes,quantity:e.quantity,...(e.premium?{premium:structuredClone(e.premium),weightedMinutes:e.weightedMinutes}:{})})),
         manualLabor:round(matches.reduce((n,e)=>n+e.laborCost,0)),manualTravel:round(matches.reduce((n,e)=>n+(e.travel||0),0)),highway:round(matches.reduce((n,e)=>n+(e.highway||0),0)),travelImportNote:result.issues.join(' ')};
       if(!Number.isFinite(e.minutes))return r;
-      return {...r,full:e.minutes>0?(e.quantity||1):0,half:0,hourlyMinutes:e.minutes,hourlyQuantity:e.quantity||1,
+      return {...r,full:e.minutes>0?(e.quantity||1):0,half:0,hourlyMinutes:e.minutes,hourlyQuantity:e.quantity||1,...(e.premium?{hourlyPremium:structuredClone(e.premium),hourlyWeightedMinutes:e.weightedMinutes}:{}),
         manualLabor:e.laborCost,manualTravel:e.travel??0,highway:e.highway??0,travelImportNote:result.issues.join(' ')};
     });return mapped;
   }
@@ -175,12 +175,12 @@
   function entryHTML(r,i){
     if(r.kind==='own')return `<div class="row lc-entry lc-person" data-lc-index="${i}">
       <div class="lc-row-head"><b>${esc(r.label)}</b><span data-lc-row-total></span></div>
-      <p class="note">${Number.isFinite(r.hourlyMinutes)?`日報の実働：${r.hourlyMinutes/60}時間（時間変更は日報で行います）`:""}</p><div class="lc-duty" style="${Number.isFinite(r.hourlyMinutes)?"display:none":""}" role="group" aria-label="${esc(r.label)}の勤務">${[['none','なし'],['half','半日'],['full','1日']].map(([key,label])=>`<button type="button" data-lc-duty="${key}" aria-pressed="false">${label}</button>`).join('')}</div>
+      <p class="note">${Number.isFinite(r.hourlyMinutes)?`日報の実働：${r.hourlyMinutes/60}時間（時間変更は日報で行います）`:""}${r.hourlyPremium?' ／ '+esc(window.ToyaWorkTimeEngine.describe(r.hourlyPremium)):''}</p><div class="lc-duty" style="${Number.isFinite(r.hourlyMinutes)?"display:none":""}" role="group" aria-label="${esc(r.label)}の勤務">${[['none','なし'],['half','半日'],['full','1日']].map(([key,label])=>`<button type="button" data-lc-duty="${key}" aria-pressed="false">${label}</button>`).join('')}</div>
       ${adjustment(i,r)}</div>`;
     return `<details class="row lc-entry lc-company" data-lc-index="${i}" ${calculate(r).active?'open':''}>
       <summary>${esc(r.label)} <span data-lc-row-total></span></summary>
       <div class="lc-mini-note">1日 ${yen(r.dayRate)}／半日 ${yen(r.halfRate)}${r.kind==='outgoing'?'（売上）':''}</div>
-      <p class="note">${r.hourlyCrews?.length?r.hourlyCrews.map((e,i)=>`班${i+1}：1人${e.minutes/60}時間 × ${e.quantity}人`).join(' ／ '):Number.isFinite(r.hourlyMinutes)?`日報の実働：1人${r.hourlyMinutes/60}時間 × ${r.hourlyQuantity||1}人`:""}</p><div class="lc-count-grid" style="${Number.isFinite(r.hourlyMinutes)||r.hourlyCrews?.length?"display:none":""}">${counter(i,'full',r.full,'1日の人数（人）')}${counter(i,'half',r.half,'半日の人数（人）')}</div>
+      <p class="note">${r.hourlyCrews?.length?r.hourlyCrews.map((e,i)=>`班${i+1}：1人${e.minutes/60}時間 × ${e.quantity}人${e.premium?' ／ '+esc(window.ToyaWorkTimeEngine.describe(e.premium)):''}`).join(' ／ '):Number.isFinite(r.hourlyMinutes)?`日報の実働：1人${r.hourlyMinutes/60}時間 × ${r.hourlyQuantity||1}人${r.hourlyPremium?' ／ '+esc(window.ToyaWorkTimeEngine.describe(r.hourlyPremium)):''}`:""}</p><div class="lc-count-grid" style="${Number.isFinite(r.hourlyMinutes)||r.hourlyCrews?.length?"display:none":""}">${counter(i,'full',r.full,'1日の人数（人）')}${counter(i,'half',r.half,'半日の人数（人）')}</div>
       <div class="grid2">${counter(i,'vehicles',r.vehicles,'通勤台数（台）')}${travelArea(r)}</div>
       ${r.kind==='dispatch'?`<div class="lc-mini-note">市内通勤：1台 ${yen(r.cityRate)}。半日も同額。</div>`:'<div class="lc-mini-note">市外交通費・高速代は別途入力。</div>'}
       ${adjustment(i,r)}</details>`;

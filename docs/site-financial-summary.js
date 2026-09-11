@@ -131,7 +131,12 @@
         if (working.length > 1) note(label + 'が同じ現場の複数日報にあります。同一班とみなし人数を1回だけ計算しています。別班なら調整してください。');
       });
       if (own.some(r => String(raw(r).otherWorker || '').trim())) note('その他の作業者は人数・単価を確定できないため含めていません。');
-      if (own.some(r => (amount(raw(r).overtime) || 0) > 0)) note('残業の割増単価が未設定です。残業代は含めていません。');
+      const premiumRecorded = r => {
+        const d=raw(r),labels=[...list(d.workers).map(named),...(Number(d.meikenCount)>0?['明建']:[]),...(Number(d.asahiCount)>0?['朝日']:[])];
+        return labels.length>0&&labels.every(label=>list(d.usageHours?.entries).some(e=>['labor','dispatch'].includes(e.kind)&&normal(e.label)===normal(label)&&list(e.allocations).length&&e.allocations.every(a=>a.premium)));
+      };
+      if (own.some(r => (amount(raw(r).overtime) || 0) > 0&&!premiumRecorded(r))) note('残業の時間・割増を人工欄で確認してください。内訳未入力の残業代は含めていません。');
+      if (own.some(r => raw(r).workTime?.version===1&&!premiumRecorded(r))) note('休憩・残業・夜間の設定を人工欄へ反映してください。現場移動がある場合は、作業者ごとに時間の内訳を入力します。');
       if (incoming.length) note('移動先としての作業があります。移動者と人工配分が未確認のため、移動分だけ自動加算を保留しています。');
       if (!workers.size && own.length && !entries.length) note('作業者の記録を確認してください。記入者を作業者として勝手に加算しません。');
     } else {

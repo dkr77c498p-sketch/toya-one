@@ -122,7 +122,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.6.7 売上・利益対応版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.6.8 売上・利益対応版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -1314,7 +1314,7 @@ function renderSiteSummary(){
   let personHours=0,machineHours=0,fuel=0,adblue=0,grease=0,fuelCost=0,other=0;
   const machines={},vehicles={};
   arr.forEach(d=>{
-    const hrs=timeHours(d.start,d.end)+Number(d.overtime||0),people=(d.workers||[]).length+Number(d.meikenCount||0)+Number(d.asahiCount||0)+(d.otherWorker?1:0);personHours+=hrs*people;
+    const shift=window.ToyaWorkTimeEngine?.report(d);const hrs=shift?(shift.minutes||0)/60:timeHours(d.start,d.end)+Number(d.overtime||0),people=(d.workers||[]).length+Number(d.meikenCount||0)+Number(d.asahiCount||0)+(d.otherWorker?1:0);personHours+=hrs*people;
     (d.machines||[]).forEach(m=>{const h=Number((d.machineHours||{})[m]||hrs||0);machines[m]=(machines[m]||0)+h;machineHours+=h});
     (d.vehicles||[]).forEach(v=>vehicles[v]=(vehicles[v]||0)+1);
     (d.fuels||[]).forEach(x=>{const q=Number(x.qty??x.liters??0),a=fuelAmount(x);if(x.type==='軽油'||x.type==='ガソリン')fuel+=q;else if(x.type==='AdBlue')adblue+=q;else if(['グリース','ブルーグリス'].includes(x.type))grease+=q;fuelCost+=a});
@@ -1878,7 +1878,7 @@ async function deleteSaved(id){
     renderRecords();
   }
 }
-async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const rows=[['日付','現場','記入者','クラウド登録者','天気','明建人数','朝日人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ']];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
+async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const rows=[['日付','現場','記入者','クラウド登録者','天気','明建人数','朝日人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ','終了日区分','勤務日区分','休憩（分）','実働（分）','夜間（分）','休日夜間（分）','残業倍率']];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo,...(window.ToyaWorkTimeEngine?.exportColumns(d)||['','','','','','',''])]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
 const DAILY_REPORT_STAFF=['上村 凌太','宮下 哲也'];
 async function renderHome(){
   let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);
@@ -1953,14 +1953,15 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 <script src="waste-price-admin.js?v=20260908-shori-v1"></script>
 <script src="site-waste-cost-summary.js?v=20260910-sites-v3"></script>
 <script src="dispatch-travel.js?v=20260909-travel-v1"></script>
-<script src="labor-cost-admin.js?v=20260911-separate-crews-v1"></script>
+<script src="work-time.js?v=20260911-premiums-v1"></script>
+<script src="labor-cost-admin.js?v=20260911-premiums-v1"></script>
 <script src="vehicle-cost-admin.js?v=20260910-unified-rates-v1"></script>
 <script src="equipment-cost-admin.js?v=20260910-unified-rates-v1"></script>
 <script src="equipment-transport.js?v=20260909-transport-v1"></script>
-<script src="usage-hours.js?v=20260911-separate-crews-v1"></script>
+<script src="usage-hours.js?v=20260911-premiums-v1"></script>
 <script src="attachment-rate-admin.js?v=20260910-add-name-v1"></script>
 <script src="pending-transport-tools.js?v=20260910-unified-rates-v1"></script>
-<script src="site-financial-summary.js?v=20260911-separate-crews-v1"></script>
+<script src="site-financial-summary.js?v=20260911-premiums-v1"></script>
 <script src="employee-activity-summary.js?v=20260910-sites-v3"></script>
 <script src="shared-site-master.js?v=20260910-sites-v3"></script>
 <script src="unified-daily-rate-admin.js?v=20260910-v1"></script>

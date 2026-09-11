@@ -3,6 +3,7 @@
  */
 (() => {
  'use strict';
+ const workTime=typeof module==='object'&&module.exports?require('./work-time.js'):window.ToyaWorkTimeEngine;
  const arr=v=>Array.isArray(v)?v:[],norm=v=>String(v??'').normalize('NFKC').replace(/[\s　]/g,'').toLowerCase();
  const key=v=>['sk55','sk55sr'].includes(norm(v))?'sk55':norm(v)==='アームロール'?norm('4tアームロール'):norm(v);
  const num=v=>v==null||String(v).trim()===''||typeof v==='boolean'?null:Number(v);
@@ -27,6 +28,7 @@
    if(!String(a.site||'').trim()||seen.has(norm(a.site)))return '同じ対象の現場を重複させないでください。';seen.add(norm(a.site));
    if(a.minutes===null)return '使用時間が未入力です。0時間とは区別しています。';
    if(!Number.isInteger(a.minutes)||a.minutes<0||a.minutes>1440)return '時間は0〜24時間、分は整数で入力してください。';sum+=a.minutes;
+   if(['labor','dispatch'].includes(e.kind)&&a.premium){const error=workTime.premiumError(a.minutes,a.premium);if(error)return error;}
   }
   if(e.kind==='dispatch'&&!seen.has(norm(e.travelSite)))return '通勤費の計上先を指定した現場から選んでください。';
   if(sum>1440)return '同じ対象の1日の時間合計が24時間を超えています。';
@@ -79,7 +81,7 @@
    }
   }
   for(const g of groups.values()){
-   const canonical=c=>JSON.stringify({q:c.e.quantity,sites:arr(c.e.allocations).map(a=>[norm(a.site),a.minutes]).sort(),travel:norm(c.e.travelSite)});
+   const canonical=c=>JSON.stringify({q:c.e.quantity,sites:arr(c.e.allocations).map(a=>[norm(a.site),a.minutes,...(['labor','dispatch'].includes(c.e.kind)?[a.premium?[a.premium.overtimeMinutes,a.premium.nightMinutes,a.premium.holidayNightMinutes,a.premium.overtimeMultiplier??null]:null]:[])]).sort(),travel:norm(c.e.travelSite)});
    if(new Set(g.claims.map(canonical)).size>1)g.errors.push('同じ対象の時間記録が複数の日報で異なります。片方を勝手に採用していません。');
    const c=g.claims[0];
    const known=arr(data.sites);if(known.length&&arr(c.e.allocations).some(a=>known.filter(t=>norm(t.name)===norm(a.site)).length!==1))g.errors.push('時間を指定した現場名を登録現場から一意に確認できません。');
@@ -124,17 +126,19 @@
    if(matches.length!==1){pending.push(g.label);issues.add(date+'：'+g.label+'の単価が未登録・重複です。時間は記録済みですが金額は未計上です。');continue;}
    const r=matches[0],daily=num(r[kind==='labor'?'day_rate':'daily_rate']);
    if(daily===null||!Number.isFinite(daily)||daily<0){pending.push(g.label);issues.add(date+'：'+g.label+'の単価を確認してください。');continue;}
-   const gross=round(daily*m*e.quantity/480);
+   const weighted=kind==='labor'?workTime.weighted(m,a?.premium):{minutes:m,issue:''};
+   if(weighted.issue){pending.push(g.label+'の残業');issues.add(date+'：'+g.label+'／'+weighted.issue);}
+   const gross=round(daily*weighted.minutes*e.quantity/480);
    if(kind==='labor'){
     let travel=0,highway=0;
     if(g.kind==='dispatch'&&norm(e.travelSite||g.report.report_data?.site)===norm(site.name)&&travelEngine){const t=travelEngine.resolve([g.report],r.code,r.city_per_vehicle);travel=t.travel;highway=t.highway;if(travel===null||highway===null)pending.push(g.label+'の交通費');t.issues.forEach(x=>issues.add(date+'：'+g.label+'／'+x));}
-    s.entries.push({key:r.code,label:r.label,kind:r.kind,minutes:m,quantity:e.quantity,cost:round(gross+(travel||0)+(highway||0)),laborCost:gross,travel,highway});
+    s.entries.push({key:r.code,label:r.label,kind:r.kind,minutes:m,quantity:e.quantity,...(a?.premium?{premium:structuredClone(a.premium),weightedMinutes:weighted.minutes}:{}),cost:round(gross+(travel||0)+(highway||0)),laborCost:gross,travel,highway});
    }else{
     // Vehicle and equipment rates are usage charges. Fuel stays in the daily
     // report and is added separately by the financial summary.
     s.entries.push({code:r.code,label:r.label,used:m>0,minutes:m,quantity:e.quantity,dayRate:daily,manualGross:gross,manualFuel:null,recordedFuel:0,fuelCount:0});
    }
-   if(m>480&&kind==='labor')issues.add(date+'：'+g.label+'は8時間を超えています。原価の時間換算のみで、残業割増は別確認です。');
+   if(m>480&&kind==='labor'&&!a?.premium)issues.add(date+'：'+g.label+'は8時間を超えています。原価の時間換算のみで、残業割増は別確認です。');
   }
   if(kind==='labor')s.cost_total=round(arr(s.entries).reduce((n,e)=>n+(num(e.cost)??0),0));
   else{s.gross_total=round(arr(s.entries).reduce((n,e)=>n+(e.used?(num(e.manualGross)??num(e.dayRate)??0):0),0));s.fuel_deduction_total=0;s.net_total=s.gross_total;}
@@ -193,8 +197,9 @@
  }
  function makeEntry(r,d){
   const sites=availableSites(),moving=sites.length>1;
-  const main=(r.kind==='labor'||r.kind==='dispatch')&&!moving?workMinutes(d.start,d.end,breakMinutes):!moving?r.minutes:null;
-  return {kind:r.kind,label:r.label,quantity:r.quantity,fromReportTime:!moving&&['labor','dispatch','equipment'].includes(r.kind),travelSite:d.site,allocations:sites.map((site,i)=>({site,minutes:i===0?main:0}))};
+  const labor=['labor','dispatch'].includes(r.kind),shift=labor?workTime.report(d):null;
+  const main=labor&&!moving?(shift?shift.issue?null:shift.minutes:workMinutes(d.start,d.end,breakMinutes)):!moving?r.minutes:null;
+  return {kind:r.kind,label:r.label,quantity:r.quantity,fromReportTime:!moving&&['labor','dispatch','equipment'].includes(r.kind),travelSite:d.site,allocations:sites.map((site,i)=>({site,minutes:i===0?main:0,...(!moving&&shift?.premium?{premium:structuredClone(shift.premium)}:{})}))};
  }
  function sync(d){
   const rows=resources(d),sites=availableSites();
@@ -204,12 +209,20 @@
    else{
     const e=state[id]=syncEntrySites(state[id],sites);e.quantity=r.quantity;
     if(e.fromReportTime){
-     if(sites.length===1&&e.allocations.length===1)e.allocations[0].minutes=['labor','dispatch'].includes(r.kind)?workMinutes(d.start,d.end,breakMinutes):r.minutes;
+     if(sites.length===1&&e.allocations.length===1){
+      const shift=['labor','dispatch'].includes(r.kind)?workTime.report(d):null;
+      e.allocations[0].minutes=['labor','dispatch'].includes(r.kind)?(shift?shift.issue?null:shift.minutes:workMinutes(d.start,d.end,breakMinutes)):r.minutes;
+      if(shift?.premium)e.allocations[0].premium=structuredClone(shift.premium);
+     }
      else e.fromReportTime=false; // Retain entered minutes when adding a destination.
     }
    }
   }
   return rows.map(r=>state[rid(r.kind,r.label)]);
+ }
+ function premiumHTML(a,i,pfx){
+  const p=a.premium||{overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:null};
+  return '<details><summary>残業・夜間の内訳'+(workTime.describe(a.premium)?'（入力あり）':'')+'</summary><p class="note">実働時間のうち、割増になる時間だけ入力します。同じ時間は重ねません。</p>'+[['overtimeMinutes','残業（17〜22時・分）'],['nightMinutes','夜間（1.5倍・分）'],['holidayNightMinutes','休日夜間（1.6倍・分）']].map(([k,label])=>'<label>'+label+'<input type="number" inputmode="numeric" min="0" max="1440" step="1" data-uh-premium="'+k+'" data-uh-allocation="'+i+'" aria-label="'+pfx+' '+label+'" value="'+esc(p[k])+'"></label>').join('')+'<label>残業倍率<select data-uh-premium="overtimeMultiplier" data-uh-allocation="'+i+'" aria-label="'+pfx+' 残業倍率"><option value=""'+(p.overtimeMultiplier==null?' selected':'')+'>未選択</option>'+[1.25,1.3].map(n=>'<option value="'+n+'"'+(p.overtimeMultiplier===n?' selected':'')+'>'+n+'倍</option>').join('')+'</select></label></details>';
  }
  function mountHosts(){
   const worker=q('input[name="worker"]')?.closest('.choice-grid');
@@ -239,7 +252,7 @@
     '<input data-stepper="1" aria-label="'+pfx+' 時間" data-uh-index="'+i+'" data-uh-part="h" type="number" min="0" max="24" step="1" inputmode="numeric" value="'+(a.minutes===null?'':Math.floor(a.minutes/60))+'" placeholder="未入力"><span>時間</span>'+
     '<input data-stepper="1" aria-label="'+pfx+' 分" data-uh-index="'+i+'" data-uh-part="m" type="number" min="0" max="59" step="1" inputmode="numeric" value="'+(a.minutes===null?'':a.minutes%60)+'" placeholder="分"><span>分</span></div>'+
     '<div class="uh-quick">'+[1,4,8].map(h=>'<button type="button" data-uh-quick="'+(h*60)+'" data-uh-allocation="'+i+'">'+h+'時間</button>').join('')+'</div>'+
-    (labor?'<details><summary>開始・終了・休憩から計算</summary><label>開始<input type="time" class="uh-start" value="'+esc(clock.start||'')+'"></label><label>終了<input type="time" class="uh-end" value="'+esc(clock.end||'')+'"></label><label>休憩（分）<input data-stepper="1" type="number" class="uh-break" min="0" max="1440" step="1" value="'+esc(clock.pause??0)+'"></label><button type="button" class="btn light" data-uh-times="'+i+'">この現場の実働時間を計算</button></details>':'')+'</div>';
+    (labor?premiumHTML(a,i,pfx)+'<details><summary>開始・終了・休憩から計算</summary><label>開始<input type="time" class="uh-start" value="'+esc(clock.start||'')+'"></label><label>終了<input type="time" class="uh-end" value="'+esc(clock.end||'')+'"></label><label>休憩（分）<input data-stepper="1" type="number" class="uh-break" min="0" max="1440" step="1" value="'+esc(clock.pause??0)+'"></label><button type="button" class="btn light" data-uh-times="'+i+'">この現場の実働時間を計算</button></details>':'')+'</div>';
   }).join('');
   const total=e.allocations.reduce((n,a)=>n+(a.minutes||0),0);
   const message=validateEntry(e)||'合計 '+Math.floor(total/60)+'時間'+total%60+'分';
@@ -252,6 +265,8 @@
  function display(){
   if(!q('#uhCard')||!originalCollect)return;
   mountHosts();const d=originalCollect(),entries=sync(d);
+  const shift=workTime.report(d);if(shift&&!shift.issue){breakMinutes=shift.breakMinutes;q('#uhBreak').value=breakMinutes;}
+  q('#uhBreak').closest('details').hidden=!!shift;
   for(const [kind,title] of groups){
    const buckets=kind==='dispatch'?[['meiken','明建'],['asahi','朝日']]:[[kind,null]];
    for(const [id,name] of buckets){
@@ -309,6 +324,7 @@
    sync(d).filter(e=>['labor','dispatch'].includes(e.kind)).forEach(e=>{e.allocations=[{site:d.site,minutes:m}];e.fromReportTime=true;});display();
   };
   document.addEventListener('input',event=>{
+   if(event.target.matches('.uh-inline [data-uh-premium]')){const el=event.target,row=el.closest('[data-uh-id]'),e=state[row.dataset.uhId],a=e.allocations[Number(el.dataset.uhAllocation)];e.fromReportTime=false;a.premium||={overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:null};a.premium[el.dataset.uhPremium]=el.value===''&&el.dataset.uhPremium==='overtimeMultiplier'?null:Number(el.value);updateRow(row);return;}
    const el=event.target,row=el.closest('.uh-inline [data-uh-id]'),i=el.dataset.uhIndex;
    if(!row||i===undefined)return;
    const entry=state[row.dataset.uhId],box=el.closest('.uh-allocation');
@@ -328,6 +344,16 @@
    const i=Number(b.dataset.uhTimes);state[row.dataset.uhId].allocations[i].clock=clock;setMinutes(row,i,m);
   });
   window.collect=function(){const d=originalCollect.apply(this,arguments);if(enabled)d.usageHours={version:1,baseHours:8,breakMinutes,entries:structuredClone(sync(d))};return d;};
+  document.addEventListener('toya-work-time-change',event=>{
+   if(!event.detail.enabled){schedule();return;}
+   enabled=true;q('#uhEnable').checked=true;
+   if(event.detail.apply){
+    const d=originalCollect();if(availableSites().length>1){alert('現場移動があるため、下の人工欄で現場ごとの実働・残業・夜間を入力してください。');schedule();return;}
+    const shift=workTime.report(d);if(shift?.issue){alert(shift.issue);return;}
+    if(shift)sync(d).filter(e=>['labor','dispatch'].includes(e.kind)).forEach(e=>{e.allocations=[{site:d.site,minutes:shift.minutes,premium:structuredClone(shift.premium)}];e.fromReportTime=true;});
+   }
+   schedule();
+  });
   const fill=window.fillReportForm;window.fillReportForm=function(d,mode='edit'){const out=fill.apply(this,arguments);restore(d,mode);return out;};
   const valid=window.validate;window.validate=function(d){
    if(!valid.apply(this,arguments))return false;
@@ -338,7 +364,7 @@
     const problem=validateEntry(e);if(problem&&!problem.includes('未入力')){alert(e.label+'：'+problem);return false;}
    }return true;
   };
-  const text=window.lineText;window.lineText=function(d){let t=text.apply(this,arguments);if(d.usageHours?.entries?.length)t+='\n\n■現場別の作業・使用時間\n'+d.usageHours.entries.map(e=>e.label+'：'+e.allocations.map(a=>a.site+' '+(a.minutes===null?'時間未入力':Math.floor(a.minutes/60)+'時間'+a.minutes%60+'分')).join('／')).join('\n');return t;};
+  const text=window.lineText;window.lineText=function(d){let t=text.apply(this,arguments);if(d.usageHours?.entries?.length)t+='\n\n■現場別の作業・使用時間\n'+d.usageHours.entries.map(e=>e.label+'：'+e.allocations.map(a=>a.site+' '+(a.minutes===null?'時間未入力':Math.floor(a.minutes/60)+'時間'+a.minutes%60+'分')+(workTime.describe(a.premium)?'（'+workTime.describe(a.premium)+'）':'')).join('／')).join('\n');return t;};
   document.addEventListener('change',event=>{
    const el=event.target;
    if(el.matches('input[name="worker"],input[name="vehicle"],input[name="machine"],input[name="attachment"],#meikenCount,#asahiCount,#start,#end,#site,.sm-site')||el.closest('#smallToolChoices,#machineAttachmentChoices'))schedule();
