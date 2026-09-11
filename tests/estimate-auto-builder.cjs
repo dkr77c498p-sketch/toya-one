@@ -17,6 +17,11 @@ assert.equal(A.autoFoundation('rc',300,4),'60','RC造4階の平均を適用');
 const other=A.build({kind:'wood',grading_m2:'10',sandbag_m:'20'}).groups[3].quote_lines;
 assert.equal(other.find(r=>r.label==='解体跡整地').quote_price,'500');
 assert.equal(other.find(r=>r.label==='土嚢積み').quote_price,'1000');
+for(const kind of ['wood','lightSteel','steel','rc']){
+ const metal=A.build({kind,area_m2:'300'}).groups[2].quote_lines.find(r=>r.spec.startsWith('金属'));
+ assert.equal(metal.unit,'t');
+ assert.equal(metal.quote_price,'-37000',kind+'の金属くずは37円/kgの買取控除');
+}
 A.percentRows(built.groups,built.input);
 assert.equal(built.groups[4].quote_lines.length,2,'法定福利費と諸経費を自動追加');
 const plan={entry_mode:'quote',tax_rate:10,groups:built.groups};
