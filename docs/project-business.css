@@ -79,6 +79,8 @@
 .ep-simple h3{font-size:20px;line-height:1.5}
 .ep-simple input[aria-invalid=true]{border:2px solid #b92323;background:#fff7f7}
 .ep-simple [data-quote-choice]{margin:0 0 8px;max-width:100%;font-size:15px}
+.ep-auto{border:2px solid var(--lime,#b8ff00);border-radius:14px;padding:14px;margin:14px 0;background:#fbfff2}.ep-auto>summary{font-size:18px;font-weight:800}.ep-auto details{border-top:1px solid #d6dfca;margin-top:12px;padding-top:10px}.ep-auto details>summary{font-weight:750}.ep-auto-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.ep-auto-grid .pb-field{min-width:0}.ep-auto-grid input{width:100%;min-width:0}.ep-manual{margin:16px 0}.ep-manual>summary{font-size:17px;font-weight:800}
+@media(max-width:600px){.ep-auto-grid{grid-template-columns:1fr 1fr}}
 #epStep1,#epStep2,#estimateDocumentHost{scroll-margin-top:160px}
 #epInputFooter{border-top:1px solid #ddd;margin-top:18px;padding-top:8px}
 #epNextItems,#epCreateQuote,#pbIssueDoc{margin-top:16px}

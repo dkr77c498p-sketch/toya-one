@@ -11,7 +11,7 @@ async function setup(role='admin',active=true){
  w.cloudClient={from(table){const filters=[],query={select(){return this},eq(k,v){filters.push([k,v]);return this},order(){return this},range(from,to){this.bounds=[from,to];return this},then(resolve,reject){calls.push({table,filters});if(table===fail)return Promise.resolve({error:{message:'synthetic read failure'}}).then(resolve,reject);const rows=(db[table]||[]).filter(r=>filters.every(([k,v])=>k==='company_id'||r[k]===v));const [from,to]=this.bounds;return Promise.resolve({data:structuredClone(rows.slice(from,to+1)),error:null}).then(resolve,reject)}};return query},rpc(){throw Error('Automatic aggregation must never write data');}};
  w.ToyaSiteCostSummaryEngine=S;w.applyCloudRoleUI=()=>{};w.confirm=()=>true;w.Element.prototype.scrollIntoView=function(){};w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};
  w.setInterval=fn=>{intervals.push(fn);return intervals.length};const timeout=w.setTimeout.bind(w);w.setTimeout=(fn,ms)=>timeout(fn,Math.min(ms,5));
- for(const file of ['project-documents-engine.js','estimate-plan-engine.js','estimate-plan-admin.js','site-auto-ledger.js'])w.eval(fs.readFileSync(path.join(root,'docs',file),'utf8'));
+ for(const file of ['project-documents-engine.js','estimate-plan-engine.js','estimate-auto-builder.js','estimate-plan-admin.js','site-auto-ledger.js'])w.eval(fs.readFileSync(path.join(root,'docs',file),'utf8'));
  await new Promise(r=>setTimeout(r,70));return {dom,w,q,db,calls,intervals,fail:table=>{fail=table;}};
 }
 (async()=>{
