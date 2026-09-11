@@ -13,9 +13,8 @@
   return '<div class="eq-scroll"><table class="eq-table"><thead><tr><th>工事項目・品目</th><th>見積数量</th><th>単位</th>'+(prices?'<th>元見積単価</th><th>元見積金額</th>':'')+'</tr></thead><tbody>'+group.lines.map(r=>'<tr><th>'+esc(label(r))+'<small>'+esc(referenceNote(r))+'</small></th><td class="'+(blank(r.quantity)?'eq-blank':'')+'">'+(blank(r.quantity)?'空欄':esc(r.quantity))+'</td><td>'+esc(r.unit||'空欄')+'</td>'+(prices?'<td>'+money(r.quoted_unit_price)+'</td><td class="'+(Number(r.quoted_amount)<0?'eq-credit':'')+'">'+money(r.quoted_amount)+'</td>':'')+'</tr>').join('')+'</tbody></table></div>';
  }
  function fromSheet(sheet,site){
-  if(!site?.id)throw new Error('数量を使う現場を選んでください。');
   const p=C.draft(site);
-  p.title=site.name+' 見積積算';p.customer_name=sheet.customer_name||'';
+  p.title=site?.name?site.name+' 見積積算':'';p.customer_name=sheet.customer_name||'';
   p.quote_notes=(sheet.source_summary?.conditions||[]).join('\n');
   p.internal_notes=('数量取込元：'+sheet.title+' / '+sheet.source_filename+' / '+(sheet.document_date||'日付未記載')+'\n原本ID：'+sheet.id+'\n元見積の単価・金額は原価単価に転記していません。数量・工事条件・単価を今回の工事に合わせて確認してください。諸経費・値引きは原本の参考欄に残します。\n'+(sheet.warnings||[]).join('\n')).slice(0,3000);
   p.groups=sheet.groups.map(g=>({name:g.name,lines:g.lines.filter(r=>!['allowance','adjustment'].includes(r.row_kind)).map(r=>({
@@ -61,13 +60,13 @@
  }
  function updateSites(){
   if(!q('#eqTarget'))return;const sites=window.ToyaEstimatePlanUI?.getSites?.()||[],options=sites.map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+(s.completed_on?'（完工済み）':'')+'</option>').join('');
-  if(options!==siteOptions){const old=q('#eqTarget').value;siteOptions=options;q('#eqTarget').innerHTML='<option value="">数量を使う現場を選択</option>'+options;q('#eqTarget').value=old||q('#epSite')?.value||'';}
-  q('#eqUse').disabled=busy()||!q('#eqTarget').value;
+  if(options!==siteOptions){const old=q('#eqTarget').value;siteOptions=options;q('#eqTarget').innerHTML='<option value="">新しい工事（工事名・住所を入力）</option>'+options;q('#eqTarget').value=old;}
+  q('#eqUse').disabled=busy();q('#eqUse').textContent=q('#eqTarget').value?'この数量で積算を開く':'この数量で新しい見積を作る';
  }
  function render(){
   const sheet=sheets.find(s=>s.id===selected);if(!sheet){q('#eqDetail').innerHTML='';return;}const s=summary(sheet);
-  q('#eqDetail').innerHTML='<h3>'+esc(sheet.title)+'</h3><p class="note">'+esc(sheet.customer_name)+'<br>'+esc(sheet.site_address)+'<br>元見積日 '+esc(sheet.document_date||'未記載')+' ／ 数量記載 '+s.quantities+'行</p>'+((sheet.warnings||[]).length?'<div class="eq-warning">'+sheet.warnings.map(x=>'<p>'+esc(x)+'</p>').join('')+'</div>':'')+sheet.groups.map((g,i)=>'<details class="eq-group" '+(i===0?'open':'')+'><summary>'+esc(g.name)+'（'+g.lines.length+'行）</summary>'+(g.notes?'<p class="note">'+esc(g.notes)+'</p>':'')+table(g)+'</details>').join('')+'<details><summary>元見積の金額・条件を確認</summary><p class="note">参考金額 '+money(sheet.source_summary?.quoted_total)+'（'+esc(sheet.source_summary?.tax_label||'原本表記')+'）。日報の原価・請負売上へは加算しません。</p>'+sheet.groups.map(g=>'<h4>'+esc(g.name)+'</h4>'+table(g,true)).join('')+'<p class="note">'+(sheet.source_summary?.conditions||[]).map(esc).join('<br>')+'</p></details><button id="eqPrint" type="button" class="btn light pb-wide">この数量表を印刷・PDF</button><details class="eq-reuse"><summary>この数量を現場の積算へ使う</summary><p class="note">数量を入力済みの積算に引き継ぎ、今回の工事に合わせて変更できます。原価単価は登録単価などから設定してください。</p><label for="eqTarget">数量を使う現場</label><select id="eqTarget"></select><button id="eqUse" type="button" class="btn dark pb-wide" disabled>この数量で積算を開く</button><p class="note">元見積の諸経費・値引きは参考欄に残し、今回の積算で設定します。</p></details><p class="note eq-source">取込元：'+esc(sheet.source_filename)+'</p>';
-  siteOptions='';updateSites();q('#eqTarget').onchange=updateSites;q('#eqTarget').onfocus=updateSites;
+  q('#eqDetail').innerHTML='<h3>'+esc(sheet.title)+'</h3><p class="note">'+esc(sheet.customer_name)+'<br>'+esc(sheet.site_address)+'<br>元見積日 '+esc(sheet.document_date||'未記載')+' ／ 数量記載 '+s.quantities+'行</p>'+((sheet.warnings||[]).length?'<div class="eq-warning">'+sheet.warnings.map(x=>'<p>'+esc(x)+'</p>').join('')+'</div>':'')+sheet.groups.map((g,i)=>'<details class="eq-group" '+(i===0?'open':'')+'><summary>'+esc(g.name)+'（'+g.lines.length+'行）</summary>'+(g.notes?'<p class="note">'+esc(g.notes)+'</p>':'')+table(g)+'</details>').join('')+'<details><summary>元見積の金額・条件を確認</summary><p class="note">参考金額 '+money(sheet.source_summary?.quoted_total)+'（'+esc(sheet.source_summary?.tax_label||'原本表記')+'）。日報の原価・請負売上へは加算しません。</p>'+sheet.groups.map(g=>'<h4>'+esc(g.name)+'</h4>'+table(g,true)).join('')+'<p class="note">'+(sheet.source_summary?.conditions||[]).map(esc).join('<br>')+'</p></details><button id="eqPrint" type="button" class="btn light pb-wide">この数量表を印刷・PDF</button><details class="eq-reuse"><summary>この数量で見積を作る</summary><p class="note">新しい工事の見積へ数量を引き継ぎ、工事名・住所や今回の数量を入力できます。原価単価は登録単価などから設定してください。</p><label for="eqTarget">見積の作成先</label><select id="eqTarget"></select><button id="eqUse" type="button" class="btn dark pb-wide" disabled>この数量で積算を開く</button><p class="note">元見積の諸経費・値引きは参考欄に残し、今回の積算で設定します。</p></details><p class="note eq-source">取込元：'+esc(sheet.source_filename)+'</p>';
+  siteOptions=null;updateSites();q('#eqTarget').onchange=updateSites;q('#eqTarget').onfocus=updateSites;
   q('#eqUse').onclick=()=>{if(busy()||!identity())return;try{const site=(window.ToyaEstimatePlanUI?.getSites?.()||[]).find(s=>s.id===q('#eqTarget').value);const draft=fromSheet(sheet,site);if(window.ToyaEstimatePlanUI?.useQuantity(draft))note('数量を積算へ引き継ぎました。工事条件と原価単価を確認して保存してください。');}catch(e){note(e.message);}};
   q('#eqPrint').onclick=()=>preview(sheet);
  }
