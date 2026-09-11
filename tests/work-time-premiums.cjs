@@ -30,7 +30,7 @@ test('break overlaps are a union and invalid or over-24-hour shifts remain unkno
  for(const [a,b,s] of [['22:00','05:00',settings()],['08:00','09:00',settings({nextDay:true})],['xx','17:00',settings()],['08:00','17:00',settings({breaks:[{start:'10:00',end:'10:00'}]})]])assert.ok(W.classify(a,b,s).issue);
 });
 test('missing overtime multiplier withholds just the overtime part and keeps a warning',()=>{
- const d=data('08:00','23:00',settings({overtimeMultiplier:null})),r=S.analyze(d,site);
+ const d=data('08:00','23:00',settings({overtimeMultiplier:null,holiday:undefined})),r=S.analyze(d,site);
  assert.equal(r.categories.labor.value,19125);assert.equal(r.partial,true);assert.ok(r.warnings.some(x=>x.includes('残業倍率が未選択')));
  const one=data('17:00','18:00',settings({overtimeMultiplier:1.25}));assert.equal(S.analyze(one,site).categories.labor.value,2812.5);
 });
@@ -57,5 +57,24 @@ test('administrator import preserves weighted minutes after manual override is c
 });
 test('serialized report, line description and CSV columns retain night and holiday facts',()=>{
  const d=JSON.parse(JSON.stringify(data('22:00','05:00',settings({nextDay:true,holiday:true})).reports[0].report_data));assert.equal(W.report(d).premium.holidayNightMinutes,420);assert.match(W.describe(W.report(d).premium),/休日夜間 7時間（1.6倍）/);assert.deepEqual(W.exportColumns(d),['翌日','休日',0,420,0,420,1.3]);
+});
+test('known ordinary and holiday work choose 1.25 and 1.3 without changing night factors',()=>{
+ for(const holiday of [false,true]){
+  const s=settings({holiday,overtimeMultiplier:null}),d=data('17:00','23:00',s),r=S.analyze(d,site);
+  const p=d.reports[0].report_data.usageHours.entries[0].allocations[0].premium;
+  assert.equal(p.overtimeMultiplier,holiday?1.3:1.25);
+  assert.equal(r.categories.labor.value,holiday?18225:17437.5);
+  assert.equal(r.partial,false);
+  assert.equal(p.nightMinutes,holiday?0:60);assert.equal(p.holidayNightMinutes,holiday?60:0);
+  assert.equal(W.exportColumns(d.reports[0].report_data)[6],holiday?1.3:1.25);
+  // Resolve a previously blank allocation from its explicit report day type.
+  p.overtimeMultiplier=null;assert.equal(S.analyze(d,site).categories.labor.value,r.categories.labor.value);
+ }
+});
+test('an explicit saved multiplier stays intact; an unknown day type remains pending',()=>{
+ const p={overtimeMinutes:60,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:1.3};
+ assert.equal(W.resolvePremium(p,{holiday:false}).overtimeMultiplier,1.3);
+ assert.equal(W.resolvePremium({...p,overtimeMultiplier:null},{}).overtimeMultiplier,null);
+ assert.equal(W.overtimeFactor(false),1.25);assert.equal(W.overtimeFactor(true),1.3);
 });
 console.log('Passed',count,'working-time and premium tests');

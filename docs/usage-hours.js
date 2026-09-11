@@ -81,7 +81,7 @@
    }
   }
   for(const g of groups.values()){
-   const canonical=c=>JSON.stringify({q:c.e.quantity,sites:arr(c.e.allocations).map(a=>[norm(a.site),a.minutes,...(['labor','dispatch'].includes(c.e.kind)?[a.premium?[a.premium.overtimeMinutes,a.premium.nightMinutes,a.premium.holidayNightMinutes,a.premium.overtimeMultiplier??null]:null]:[])]).sort(),travel:norm(c.e.travelSite)});
+   const canonical=c=>JSON.stringify({q:c.e.quantity,sites:arr(c.e.allocations).map(a=>{const p=workTime.resolvePremium(a.premium,c.r.report_data?.workTime);return [norm(a.site),a.minutes,...(['labor','dispatch'].includes(c.e.kind)?[p?[p.overtimeMinutes,p.nightMinutes,p.holidayNightMinutes,p.overtimeMultiplier??null]:null]:[])];}).sort(),travel:norm(c.e.travelSite)});
    if(new Set(g.claims.map(canonical)).size>1)g.errors.push('同じ対象の時間記録が複数の日報で異なります。片方を勝手に採用していません。');
    const c=g.claims[0];
    const known=arr(data.sites);if(known.length&&arr(c.e.allocations).some(a=>known.filter(t=>norm(t.name)===norm(a.site)).length!==1))g.errors.push('時間を指定した現場名を登録現場から一意に確認できません。');
@@ -126,13 +126,14 @@
    if(matches.length!==1){pending.push(g.label);issues.add(date+'：'+g.label+'の単価が未登録・重複です。時間は記録済みですが金額は未計上です。');continue;}
    const r=matches[0],daily=num(r[kind==='labor'?'day_rate':'daily_rate']);
    if(daily===null||!Number.isFinite(daily)||daily<0){pending.push(g.label);issues.add(date+'：'+g.label+'の単価を確認してください。');continue;}
-   const weighted=kind==='labor'?workTime.weighted(m,a?.premium):{minutes:m,issue:''};
+   const premium=workTime.resolvePremium(a?.premium,g.report.report_data?.workTime);
+   const weighted=kind==='labor'?workTime.weighted(m,premium):{minutes:m,issue:''};
    if(weighted.issue){pending.push(g.label+'の残業');issues.add(date+'：'+g.label+'／'+weighted.issue);}
    const gross=round(daily*weighted.minutes*e.quantity/480);
    if(kind==='labor'){
     let travel=0,highway=0;
     if(g.kind==='dispatch'&&norm(e.travelSite||g.report.report_data?.site)===norm(site.name)&&travelEngine){const t=travelEngine.resolve([g.report],r.code,r.city_per_vehicle);travel=t.travel;highway=t.highway;if(travel===null||highway===null)pending.push(g.label+'の交通費');t.issues.forEach(x=>issues.add(date+'：'+g.label+'／'+x));}
-    s.entries.push({key:r.code,label:r.label,kind:r.kind,minutes:m,quantity:e.quantity,...(a?.premium?{premium:structuredClone(a.premium),weightedMinutes:weighted.minutes}:{}),cost:round(gross+(travel||0)+(highway||0)),laborCost:gross,travel,highway});
+    s.entries.push({key:r.code,label:r.label,kind:r.kind,minutes:m,quantity:e.quantity,...(premium?{premium:structuredClone(premium),weightedMinutes:weighted.minutes}:{}),cost:round(gross+(travel||0)+(highway||0)),laborCost:gross,travel,highway});
    }else{
     // Vehicle and equipment rates are usage charges. Fuel stays in the daily
     // report and is added separately by the financial summary.
@@ -221,8 +222,8 @@
   return rows.map(r=>state[rid(r.kind,r.label)]);
  }
  function premiumHTML(a,i,pfx){
-  const p=a.premium||{overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:null};
-  return '<details><summary>残業・夜間の内訳'+(workTime.describe(a.premium)?'（入力あり）':'')+'</summary><p class="note">実働時間のうち、割増になる時間だけ入力します。同じ時間は重ねません。</p>'+[['overtimeMinutes','残業（17〜22時・分）'],['nightMinutes','夜間（1.5倍・分）'],['holidayNightMinutes','休日夜間（1.6倍・分）']].map(([k,label])=>'<label>'+label+'<input type="number" inputmode="numeric" min="0" max="1440" step="1" data-uh-premium="'+k+'" data-uh-allocation="'+i+'" aria-label="'+pfx+' '+label+'" value="'+esc(p[k])+'"></label>').join('')+'<label>残業倍率<select data-uh-premium="overtimeMultiplier" data-uh-allocation="'+i+'" aria-label="'+pfx+' 残業倍率"><option value=""'+(p.overtimeMultiplier==null?' selected':'')+'>未選択</option>'+[1.25,1.3].map(n=>'<option value="'+n+'"'+(p.overtimeMultiplier===n?' selected':'')+'>'+n+'倍</option>').join('')+'</select></label></details>';
+  const p=workTime.resolvePremium(a.premium,originalCollect().workTime)||{overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:workTime.overtimeFactor(originalCollect().workTime?.holiday)};
+  return '<details><summary>残業・夜間の内訳'+(workTime.describe(a.premium)?'（入力あり）':'')+'</summary><p class="note">実働時間のうち、割増になる時間だけ入力します。同じ時間は重ねません。</p>'+[['overtimeMinutes','残業（17〜22時・分）'],['nightMinutes','夜間（1.5倍・分）'],['holidayNightMinutes','休日夜間（1.6倍・分）']].map(([k,label])=>'<label>'+label+'<input type="number" inputmode="numeric" min="0" max="1440" step="1" data-uh-premium="'+k+'" data-uh-allocation="'+i+'" aria-label="'+pfx+' '+label+'" value="'+esc(p[k])+'"></label>').join('')+'<label>残業倍率<select data-uh-premium="overtimeMultiplier" data-uh-allocation="'+i+'" aria-label="'+pfx+' 残業倍率"><option value=""'+(p.overtimeMultiplier==null?' selected':'')+'>未選択</option>'+[1.25,1.3].map(n=>'<option value="'+n+'"'+(p.overtimeMultiplier===n?' selected':'')+'>'+(n===1.25?'通常の残業 1.25倍':'休日残業 1.3倍')+'</option>').join('')+'</select></label></details>';
  }
  function mountHosts(){
   const worker=q('input[name="worker"]')?.closest('.choice-grid');
@@ -324,7 +325,7 @@
    sync(d).filter(e=>['labor','dispatch'].includes(e.kind)).forEach(e=>{e.allocations=[{site:d.site,minutes:m}];e.fromReportTime=true;});display();
   };
   document.addEventListener('input',event=>{
-   if(event.target.matches('.uh-inline [data-uh-premium]')){const el=event.target,row=el.closest('[data-uh-id]'),e=state[row.dataset.uhId],a=e.allocations[Number(el.dataset.uhAllocation)];e.fromReportTime=false;a.premium||={overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:null};a.premium[el.dataset.uhPremium]=el.value===''&&el.dataset.uhPremium==='overtimeMultiplier'?null:Number(el.value);updateRow(row);return;}
+   if(event.target.matches('.uh-inline [data-uh-premium]')){const el=event.target,row=el.closest('[data-uh-id]'),e=state[row.dataset.uhId],a=e.allocations[Number(el.dataset.uhAllocation)];e.fromReportTime=false;a.premium||={overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:workTime.overtimeFactor(originalCollect().workTime?.holiday)};a.premium[el.dataset.uhPremium]=el.value===''&&el.dataset.uhPremium==='overtimeMultiplier'?null:Number(el.value);updateRow(row);return;}
    const el=event.target,row=el.closest('.uh-inline [data-uh-id]'),i=el.dataset.uhIndex;
    if(!row||i===undefined)return;
    const entry=state[row.dataset.uhId],box=el.closest('.uh-allocation');
@@ -347,6 +348,13 @@
   document.addEventListener('toya-work-time-change',event=>{
    if(!event.detail.enabled){schedule();return;}
    enabled=true;q('#uhEnable').checked=true;
+   if(event.detail.holidayChanged){
+    const d=originalCollect(),holiday=d.workTime?.holiday===true;
+    for(const e of Object.values(state).filter(e=>['labor','dispatch'].includes(e.kind)))for(const a of e.allocations){
+     if(!a.premium)continue;const p=a.premium,night=p.nightMinutes+p.holidayNightMinutes;
+     p.overtimeMultiplier=workTime.overtimeFactor(holiday);p.nightMinutes=holiday?0:night;p.holidayNightMinutes=holiday?night:0;
+    }
+   }
    if(event.detail.apply){
     const d=originalCollect();if(availableSites().length>1){alert('現場移動があるため、下の人工欄で現場ごとの実働・残業・夜間を入力してください。');schedule();return;}
     const shift=workTime.report(d);if(shift?.issue){alert(shift.issue);return;}
