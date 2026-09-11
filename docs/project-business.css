@@ -45,3 +45,28 @@
 #estimatePlanCard .eq-source{overflow-wrap:anywhere;font-size:11px}
 #estimatePlanCard .eq-reuse{background:#f0f6e8;padding:0 10px 10px;border-radius:8px}
 @media(max-width:500px){#estimatePlanCard .eq-card{padding:10px}#estimatePlanCard .eq-table{font-size:13px}#estimatePlanCard .eq-table th,#estimatePlanCard .eq-table td{padding:9px 4px}}
+/* Quote entry follows the company's quotation columns. */
+.ep-simple .ep-group{padding:12px;margin:12px 0}
+.ep-simple .ep-group>summary{gap:8px;align-items:start;font-size:16px}
+.ep-simple .ep-group>summary strong{white-space:nowrap;font-size:15px}
+.ep-simple .ep-group-name{margin:12px 0}
+.ep-simple .ep-group-name>summary,.ep-simple .ep-row-options>summary{font-size:13px;color:#666}
+.ep-quote-row{border-bottom:1px solid #d5ddd3;padding:12px 0}
+.ep-quote-head{display:flex;align-items:end;gap:8px;margin-bottom:8px}
+.ep-quote-head>.pb-field{flex:1;min-width:0}
+.ep-quote-grid{display:grid;grid-template-columns:1fr .8fr 1.4fr 1.3fr;gap:8px;align-items:end}
+.ep-simple .ep-quote-row label{font-size:13px;margin:0 0 4px}
+.ep-simple .ep-quote-row input{padding:10px;width:100%;min-width:0;font-size:16px}
+.ep-simple .ep-small{padding:9px 10px;font-size:12px;min-height:40px;flex-shrink:0}
+.ep-quote-amount{text-align:right;padding:8px 0;min-width:0}
+.ep-quote-amount small,.ep-quote-amount strong{display:block;overflow-wrap:anywhere}
+.ep-quote-amount small{font-size:12px;color:#666}
+.ep-quote-amount strong{font-size:18px}
+.ep-simple .ep-row-options{padding-top:8px}
+.ep-simple .ep-inline{display:flex;align-items:center;gap:8px;margin:12px 0}
+.ep-simple .ep-inline input{width:auto;min-height:24px}
+.ep-simple .ep-costs,.ep-simple .ep-excluded{margin:16px 0;padding:12px;border:1px solid #dae0d8;border-radius:12px}
+.ep-simple .ep-costs>summary,.ep-simple .ep-excluded>summary{font-size:14px}
+.ep-excluded-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #ddd}
+.ep-excluded-row small{display:block;color:#666}
+@media(max-width:600px){.ep-quote-grid{grid-template-columns:1fr 1fr}.ep-quote-head{align-items:end}.ep-simple .ep-group{padding:10px}.ep-simple .ep-group>summary{font-size:15px}.ep-simple .ep-group>summary strong{font-size:13px}}

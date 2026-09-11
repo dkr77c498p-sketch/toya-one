@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict'),C=require('../docs/estimate-plan-engine.js'),Q=require('../docs/estimate-quantities.js'),E=require('../docs/project-documents-engine.js'),fixture=require('./estimate-quantities-fixture.cjs');
+const p=Q.fromSheet(fixture(),null),t=C.calculate(p);
+assert.equal(p.entry_mode,'quote');assert.equal(t.price,50525);assert.equal(t.total_cost,null);assert.equal(t.profit,null);assert.equal(t.pending,0);assert.equal(p.groups[0].quote_lines[1].excluded,true);assert.equal(p.groups[1].quote_lines[2].quantity,'');assert.equal(p.groups[1].quote_lines[1].quote_price,'-35000');assert.equal(p.groups[2].quote_lines[1].quote_price,'-2000');assert.equal(p.groups.flatMap(g=>g.lines).length,0);
+assert.equal(C.quoteLine({label:'テスト',quantity:'0.001',unit:'t',quote_price:'-100.01'}).amount,-1);
+assert.equal(C.quoteLine({label:'一式',quantity:'1',unit:'式',quote_price:'',quote_amount:'15000',amount_mode:true}).amount,15000);
+assert.equal(C.quoteLine({label:'一式',quantity:'1',unit:'式',quote_price:'20000',quote_amount:'',amount_mode:true}).complete,false);
+assert.throws(()=>C.quoteLine({label:'一式',quantity:'1',unit:'式',quote_price:'',quote_amount:'1.1'}));
+assert.throws(()=>C.quoteLine({label:'一式',quantity:'1',unit:'式',quote_price:'1',excluded:'false'}));
+assert.equal(C.calculate(C.quoteDraft(null)).complete,false);
+for(const g of p.groups)g.lines=[{category:'labor',label:'社内限定人工',quantity:'1',multiplier:'1',unit:'人日',unit_price:'1000'}];
+const tc=C.calculate(p);assert.equal(tc.price,50525);assert.equal(tc.total_cost,3000);assert.equal(tc.profit,47525);
+p.calculation=tc;p.site_name='新規工事';p.site_address='工事住所';p.internal_notes='内部限定メモ';
+const d={kind:'estimate',status:'issued',items:tc.quote_items,tax_rate:10,issuer:{issuer_name:'テスト工業'},estimate_snapshot:p,site_name:p.site_name,site_address:p.site_address};
+const html=E.printHTML(d);assert.match(html,/工事内訳書/);assert.match(html,/21.60/);assert.match(html,/金属くず/);assert.ok(!html.includes('床下地撤去'));assert.ok(!html.includes('社内限定人工'));assert.ok(!html.includes('内部限定メモ'));assert.equal(E.total(tc.quote_items,10).subtotal,tc.price);assert.equal(E.total(tc.quote_items,10).cost,tc.total_cost);
+console.log('PASS quotation quantities, exclusions, signed prices, direct amounts, optional cost and customer detail print');

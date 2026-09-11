@@ -14,12 +14,13 @@ async function setup(role,noSites=false){
  w.Element.prototype.scrollIntoView=function(){};w.confirm=()=>true;w.today=()=> '2026-09-11';w.applyCloudRoleUI=()=>{};w.setInterval=()=>0;const originalTimeout=w.setTimeout.bind(w);w.setTimeout=(fn,ms)=>originalTimeout(fn,Math.min(ms,2));w.HTMLDialogElement.prototype.showModal=function(){this.open=true};w.HTMLDialogElement.prototype.close=function(){this.open=false};
  w.eval(fs.readFileSync(root+'docs/project-documents-engine.js','utf8'));w.eval(fs.readFileSync(root+'docs/project-business.js','utf8'));w.eval(fs.readFileSync(root+'docs/estimate-plan-engine.js','utf8'));w.eval(fs.readFileSync(root+'docs/estimate-plan-admin.js','utf8'));await pause();return{dom,w,db,calls};
 }
-(async()=>{
+module.exports={setup,pause};
+if(require.main===module)(async()=>{
  const employee=await setup('employee');assert.equal(employee.w.document.querySelector('#projectBusinessCard'),null);assert.equal(employee.w.document.querySelector('#estimatePlanCard'),null);assert.equal(employee.calls.length,0);employee.dom.window.close();console.log('PASS employee never requests financial documents');
  const {dom,w,db,calls}=await setup('admin'),q=s=>w.document.querySelector(s),set=(s,v)=>{q(s).value=v;q(s).dispatchEvent(new w.Event('input',{bubbles:true}))};
  assert.ok(q('#projectBusinessCard'));assert.ok(q('#estimatePlanCard'));assert.equal(q('[data-pb-kind="estimate"]'),null);assert.ok(q('#pbNew').disabled);
  assert.equal(q('#epSite').value,'');assert.equal(q('#epNew').disabled,false);q('#epNew').click();assert.equal(w.document.activeElement,q('#epJobName'));assert.equal(q('#epJobName').value,'');assert.equal(db.estimate_plans.length,0);console.log('PASS new estimate opens directly without selecting an operational site');
- q('#epSite').value='site-2';q('#epSite').dispatchEvent(new w.Event('change'));q('#epNewForSite').click();assert.match(q('#epTitle').value,/完工済み/);
+ q('#epSite').value='site-2';q('#epSite').dispatchEvent(new w.Event('change'));q('#epNewCost').click();assert.match(q('#epTitle').value,/完工済み/);
  set('#epWork0','内装解体');q('#epRate0').value='0';q('[data-add-rate="0"]').click();assert.equal(q('#epLabel0_0').value,'登録人工');assert.equal(q('#epPrice0_0').value,'20000');assert.equal(q('#epGroups').querySelectorAll('[data-ep-row]').length,1);set('#epQty0_0','3');set('#epMultiplier0_0','2');
  assert.ok(q('#epCreateQuote').disabled);q('#epSave').click();await pause();assert.equal(db.estimate_plans[0].calculation.complete,false);assert.ok(q('#epCreateQuote').disabled);console.log('PASS completed site accepted, registered rate replaces blank row, incomplete plan saves');
  q('#epAddGroup').click();set('#epWork1','運搬処分');set('#epLabel1_0','コンクリート処分');set('#epCategory1_0','waste');set('#epQty1_0','10');set('#epPrice1_0','1000');set('#epUnit1_0','t');set('#epOverhead','10');set('#epMarkup','20');set('#epCustomer','試験建設');set('#epInternalNotes','社内限定の手順');set('#epQuoteNotes','提出先向け条件');assert.match(q('#epTotals').textContent,/171,600円/);assert.match(q('#epTotals').textContent,/28,600円/);
@@ -34,7 +35,7 @@ async function setup(role,noSites=false){
  w.cloudProfile=null;w.applyCloudRoleUI();assert.equal(q('#projectBusinessCard'),null);assert.equal(q('#pbMasterLink'),null);assert.equal(q('#estimatePlanCard'),null);assert.equal(q('#epMasterLink'),null);console.log('PASS logout removes all admin document UI');dom.window.close();
  const prospect=await setup('admin',true),pw=prospect.w,pq=s=>pw.document.querySelector(s),put=(s,v)=>{pq(s).value=v;pq(s).dispatchEvent(new pw.Event('input',{bubbles:true}))};
  const baseline=JSON.stringify({sites:prospect.db.sites,revenues:prospect.db.revenues});
- assert.equal(pq('#epSite').options.length,1);assert.equal(pq('#epNew').disabled,false);pq('#epNew').click();
+ assert.equal(pq('#epSite').options.length,1);assert.equal(pq('#epNew').disabled,false);pq('#epNewCost').click();
  put('#epJobName','新規テスト解体工事');put('#epJobAddress','テスト市新規町1-2');put('#epCustomer','新規の見積先');put('#epWork0','内装解体');put('#epLabel0_0','床撤去');put('#epQty0_0','21.60');put('#epUnit0_0','m²');put('#epPrice0_0','1000');put('#epOverhead','10');put('#epMarkup','20');
  pq('#epSave').click();await pause();let pp=prospect.db.estimate_plans[0];assert.equal(pp.site_id,null);assert.equal(pp.site_name,'新規テスト解体工事');assert.equal(pp.site_address,'テスト市新規町1-2');assert.equal(pp.calculation.price,28512);
  pq('#epNew').click();pq('[data-ep-open="'+pp.id+'"]').click();assert.equal(pq('#epJobName').value,'新規テスト解体工事');pq('#epReload').click();await pause();assert.equal(pq('#epJobAddress').value,'テスト市新規町1-2');
