@@ -70,3 +70,26 @@
 .ep-excluded-row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid #ddd}
 .ep-excluded-row small{display:block;color:#666}
 @media(max-width:600px){.ep-quote-grid{grid-template-columns:1fr 1fr}.ep-quote-head{align-items:end}.ep-simple .ep-group{padding:10px}.ep-simple .ep-group>summary{font-size:15px}.ep-simple .ep-group>summary strong{font-size:13px}}
+.ep-simple [hidden]{display:none!important}
+.ep-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;list-style:none;padding:0;margin:0 0 20px}
+.ep-steps li{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 2px;border-radius:10px;background:#eee;color:#666;font-size:13px;font-weight:700;text-align:center}
+.ep-steps li b{display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:#fff;color:#555;font-size:14px}
+.ep-steps li.active{background:var(--lime,#b8ff00);color:#111}
+.ep-steps li.active b{background:#111;color:#fff}
+.ep-simple h3{font-size:20px;line-height:1.5}
+.ep-simple input[aria-invalid=true]{border:2px solid #b92323;background:#fff7f7}
+.ep-simple [data-quote-choice]{margin:0 0 8px;max-width:100%;font-size:15px}
+#epStep1,#epStep2,#estimateDocumentHost{scroll-margin-top:160px}
+#epInputFooter{border-top:1px solid #ddd;margin-top:18px;padding-top:8px}
+#epNextItems,#epCreateQuote,#pbIssueDoc{margin-top:16px}
+.pb-simple-review .pb-editor-heading{align-items:flex-start;gap:8px}
+.pb-simple-review .pb-editor-heading h3{font-size:20px;line-height:1.5}
+.pb-simple-review .pb-editor-heading button{font-size:13px;padding:10px;flex-shrink:0}
+.pb-review-job{padding:14px;background:#f3f6f1;border-radius:12px;margin:12px 0;overflow-wrap:anywhere}
+.pb-review-job p{margin:6px 0 0;font-size:14px}
+.pb-review-groups p{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #ddd;font-size:15px}
+.pb-review-groups b{white-space:nowrap}
+.pb-review-done{padding:12px;background:#e7f5d8;border-radius:10px;font-weight:700}
+.pb-simple-review #pbTotals .pb-metrics{grid-template-columns:1fr}
+.pb-simple-review #pbTotals .pb-metrics>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.pb-simple-review #pbTotals .pb-metrics b{font-size:22px}
