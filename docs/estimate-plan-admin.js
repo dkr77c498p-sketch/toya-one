@@ -90,8 +90,11 @@
  }
  function bindAutoBuilder(){
   q('#epAutoKind').value=A.normalize(autoInput()).kind;
-  q('#epAutoM2').oninput=()=>{const n=Number(q('#epAutoM2').value);q('#epAutoTsubo').value=n>0?A.round(n/A.TSUBO,2):'';};
-  q('#epAutoTsubo').oninput=()=>{const n=Number(q('#epAutoTsubo').value);q('#epAutoM2').value=n>0?A.round(n*A.TSUBO,2):'';};
+  const foundation=q('#epAutoFoundation'),refreshFoundation=()=>{if(foundation.dataset.manual==='1')return;foundation.value=A.autoFoundation(q('#epAutoKind').value,q('#epAutoM2').value,q('#epAutoFloors').value);foundation.dataset.auto='1';};
+  if(foundation.value)foundation.dataset.auto='1';foundation.oninput=()=>{foundation.dataset.manual='1';delete foundation.dataset.auto;};
+  q('#epAutoM2').oninput=()=>{const n=Number(q('#epAutoM2').value);q('#epAutoTsubo').value=n>0?A.round(n/A.TSUBO,2):'';refreshFoundation();};
+  q('#epAutoTsubo').oninput=()=>{const n=Number(q('#epAutoTsubo').value);q('#epAutoM2').value=n>0?A.round(n*A.TSUBO,2):'';refreshFoundation();};
+  q('#epAutoFloors').oninput=refreshFoundation;q('#epAutoKind').onchange=refreshFoundation;
   q('#epAutoApply').onclick=()=>{gather();const input=Object.fromEntries([...q('.ep-auto').querySelectorAll('[data-auto-key]')].map(el=>[el.dataset.autoKey,el.value]));const existing=plan.groups.some(g=>(g.quote_lines||[]).some(r=>!r.auto_percent));if(existing&&!plan.groups.some(g=>g.auto_input)&&!confirm('現在の明細を、自動積算の明細へ入れ替えますか？'))return;const result=A.build(input);plan.groups=A.percentRows(result.groups,result.input);dirty=true;renderSimpleGroups(0);q('.ep-manual').open=true;updateTotals();note('数量から明細を作成しました。単価未登録の項目と産廃数量を確認してください。');q('#epGroups').scrollIntoView({block:'start',behavior:'smooth'});};
  }
  function setSimpleStep(step,scroll=true){

@@ -10,6 +10,10 @@ assert.equal(built.groups[0].quote_lines.find(r=>r.label==='養生足場').quote
 assert.ok(built.groups[2].quote_lines.length>=10,'建物面積から産廃処分・運搬数量を作る');
 const woodWaste=Object.fromEntries(built.groups[2].quote_lines.filter(r=>r.label==='産業廃棄物処分費').map(r=>[r.spec.split('／')[0],Number(r.quantity)]));
 assert.equal(woodWaste['木くず'],17.289,'300㎡標準表52.3㎥を面積比例');
+assert.equal(A.autoFoundation('wood',300,1),'45','木造平屋は延床面積×平均0.15㎥');
+assert.equal(A.autoFoundation('wood',300,2),'28.5','階数から建築面積を計算して木造2階平均を適用');
+assert.equal(A.autoFoundation('steel',300,1),'69','鉄骨造平屋の平均を適用');
+assert.equal(A.autoFoundation('rc',300,4),'60','RC造4階の平均を適用');
 A.percentRows(built.groups,built.input);
 assert.equal(built.groups[4].quote_lines.length,2,'法定福利費と諸経費を自動追加');
 const plan={entry_mode:'quote',tax_rate:10,groups:built.groups};
