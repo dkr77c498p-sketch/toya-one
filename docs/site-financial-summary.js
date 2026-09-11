@@ -305,7 +305,22 @@
     return {categories, expenses, days, subtotal, partial, warnings: [...warnings], notes: [...notes], reportCount: own.length, hasData: byDay.size > 0,
       contract, contractAmount, outgoingRevenue, sales, profit, profitMargin};
   }
-  const engine = Object.freeze({analyze, automaticSheet, periodBounds, amount, fuelAmount, signature: sig});
+  const sources = [
+        ['reports', 'daily_reports', 'id,site_id,report_date,recorder_name,report_data,updated_at', 'report_date'],
+        ['laborSheets', 'labor_cost_sheets', 'id,site_id,work_date,entries,cost_total,revenue_total,source_reports,updated_at', 'work_date'],
+        ['vehicleSheets', 'vehicle_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date'],
+        ['equipmentSheets', 'equipment_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date'],
+        ['laborRates', 'labor_rate_master', 'id,code,label,kind,day_rate,half_rate,city_per_vehicle,active', null],
+        ['dispatchCrews', 'dispatch_crew_confirmations', 'id,site_id,report_id,work_date,dispatch_code,crew_key,report_updated_at', 'work_date'],
+        ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null],
+        ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null],
+        ['transportRates', 'equipment_transport_rate_master', 'id,carrier,machine_name,distance_label,unit_price,price_basis,active', null],
+        ['toolRates', 'small_tool_rate_master', 'id,label,hourly_rate,fuel_included,active', null],
+        ['attachmentRates', 'attachment_rate_master', 'id,label,hourly_rate,active', null],
+        ['revenues', 'revenues', 'id,site_id,revenue_date,revenue_type,description,amount,updated_at', null]
+  ].map(x => Object.freeze(x));
+
+  const engine = Object.freeze({analyze, automaticSheet, periodBounds, amount, fuelAmount, signature: sig, sources: Object.freeze(sources)});
   if (typeof module === 'object' && module.exports) {module.exports = engine; return;}
   if (window.__toyaSiteFinancialSummaryV1) return;
   window.__toyaSiteFinancialSummaryV1 = true;
@@ -460,20 +475,7 @@
       const matches = sites.filter(s => normal(s.name) === normal(siteName));
       if (matches.length !== 1) throw new Error('現場名を一意に確認できません。登録を確認してください。');
       const site = matches[0];
-      const definitions = [
-        ['reports', 'daily_reports', 'id,site_id,report_date,recorder_name,report_data,updated_at', 'report_date', null],
-        ['laborSheets', 'labor_cost_sheets', 'id,site_id,work_date,entries,cost_total,revenue_total,source_reports,updated_at', 'work_date', null],
-        ['vehicleSheets', 'vehicle_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', null],
-        ['equipmentSheets', 'equipment_cost_sheets', 'id,site_id,work_date,entries,gross_total,fuel_deduction_total,net_total,source_reports,review_warnings,updated_at', 'work_date', null],
-        ['laborRates', 'labor_rate_master', 'id,code,label,kind,day_rate,half_rate,city_per_vehicle,active', null, null],
-        ['dispatchCrews', 'dispatch_crew_confirmations', 'id,site_id,report_id,work_date,dispatch_code,crew_key,report_updated_at', 'work_date', null],
-        ['vehicleRates', 'vehicle_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null, null],
-        ['equipmentRates', 'equipment_rate_master', 'id,code,label,daily_rate,calculation_mode,active', null, null],
-        ['transportRates', 'equipment_transport_rate_master', 'id,carrier,machine_name,distance_label,unit_price,price_basis,active', null, null],
-        ['toolRates', 'small_tool_rate_master', 'id,label,hourly_rate,fuel_included,active', null, null],
-        ['attachmentRates', 'attachment_rate_master', 'id,label,hourly_rate,active', null, null],
-        ['revenues', 'revenues', 'id,site_id,revenue_date,revenue_type,description,amount,updated_at', null, site.id]
-      ];
+      const definitions = sources.map(([name,table,fields,df]) => [name,table,fields,df,name==='revenues'?site.id:null]);
       const values = await Promise.all(definitions.map(([, table, fields, df, sid]) => readAll(table, fields, company, bounds, df, sid, ticket)));
       if (ticket !== token || owner !== mine || identity() !== mine || currentKey() !== k) return;
       const data = Object.fromEntries(definitions.map(([name], i) => [name, values[i]]));

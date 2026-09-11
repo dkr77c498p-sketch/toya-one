@@ -1,0 +1,8 @@
+// Synthetic records only; shared by calculation, UI and print checks.
+module.exports=function fixture(){
+ const sites=[{id:'a',name:'完工テスト現場',status:'inactive',completed_on:'2026-09-08'},{id:'b',name:'施工中テスト現場',status:'active',completed_on:null},{id:'c',name:'予定テスト現場',status:'active',completed_on:null},{id:'d',name:'請負未登録テスト現場',status:'active',completed_on:null}];
+ const report=(id,site,report_data)=>({id,site_id:site.id,report_date:'2026-09-08',updated_at:'2026-09-08T10:00:00Z',recorder_name:'試験記入者',report_data:{site:site.name,...report_data}});
+ const reports=[report('r1',sites[0],{workers:['試験社員'],vehicles:['試験車両'],fuels:[{asset:'試験車両',amount:500}],items:[{isWaste:true,name:'処分',qty:12,price:4200}]}),report('r2',sites[1],{fuels:[{amount:300}],items:[{name:'資材',price:900}]}),report('r3',sites[3],{fuels:[{amount:400}]})];
+ const source_reports=[{id:'r1',updated_at:reports[0].updated_at}];
+ return {sites,reports,laborSheets:[{id:'l1',site_id:'a',work_date:'2026-09-08',cost_total:20000,revenue_total:0,source_reports}],vehicleSheets:[{id:'v1',site_id:'a',work_date:'2026-09-08',gross_total:10000,fuel_deduction_total:500,net_total:9500,entries:[{label:'試験車両',used:true}],source_reports,review_warnings:[]}],equipmentSheets:[],laborRates:[],vehicleRates:[{id:'vr1',label:'試験車両',daily_rate:10000,active:true}],equipmentRates:[],dispatchCrews:[],transportRates:[],toolRates:[],attachmentRates:[],revenues:[{id:'rev-a',site_id:'a',revenue_type:'contract',amount:100000},{id:'rev-b',site_id:'b',revenue_type:'contract',amount:10000},{id:'rev-c',site_id:'c',revenue_type:'contract',amount:50000}]};
+};
