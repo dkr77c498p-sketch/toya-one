@@ -43,4 +43,7 @@ assert.ok(html.includes('@page{size:A4;margin:0}'),'PDFは余白を含めてA4�
 assert.ok(html.includes('class="te2-frame"'),'御社書式の見積書枠を使用');
 assert.ok(html.includes('body{width:794px;min-width:794px'),'スマホプレビューはA4比率を崩さない');
 assert.ok(html.includes('@media print{html,body{zoom:1!important}}'),'PDF保存時は原寸A4に戻す');
+const legacy=JSON.parse(JSON.stringify(doc)),legacyRow=legacy.estimate_snapshot.groups[2].quote_lines[2];
+legacyRow.label='産業廃棄物処分費';legacyRow.spec='木くず／TOYA標準300㎡表から面積比例';
+assert.ok(E.printHTML(legacy).includes('木くず処分費'),'保存済みの旧見積も種類名を品名欄へ表示');
 console.log('estimate auto builder tests passed');
