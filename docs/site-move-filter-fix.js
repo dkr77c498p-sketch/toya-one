@@ -1,8 +1,5 @@
 (function(){
   function invalidSite(x){return !x||['新しい現場','現場名をあとで変更','未登録現場'].includes(x)}
-  function localReports(){try{return (typeof LS!=='undefined'&&typeof get==='function')?(get(LS.reports,[])||[]):[]}catch(e){return []}}
-  function cloudReports(){try{return (typeof cloudReportsCache!=='undefined'&&Array.isArray(cloudReportsCache))?cloudReportsCache:[]}catch(e){return []}}
-  function currentReports(){try{return (typeof currentRecordsData!=='undefined'&&Array.isArray(currentRecordsData))?currentRecordsData:[]}catch(e){return []}}
 
   async function loadActiveSites(){
     try{
@@ -25,12 +22,12 @@
 
   function installRecordFilters(){
     if(typeof recordFilters!=='function'||window.__moveRecordFiltersFixed5)return false;
-    window.recordFilters=function(a){
+    window.recordFilters=function(a,{ignoreDate=false}={}){
       const q=(document.querySelector('#recordSearch')?.value||'').trim().toLowerCase();
       const site=document.querySelector('#recordSiteFilter')?.value||'';
       const writer=document.querySelector('#recordWriterFilter')?.value||'';
-      const from=document.querySelector('#recordDateFrom')?.value||'';
-      const to=document.querySelector('#recordDateTo')?.value||'';
+      const from=ignoreDate?'':(document.querySelector('#recordDateFrom')?.value||'');
+      const to=ignoreDate?'':(document.querySelector('#recordDateTo')?.value||'');
       const siteKey=v=>String(v||'').normalize('NFKC').replace(/[\s　]/g,'');
       return (a||[]).filter(d=>{
         const moves=d.siteMoves||[];
@@ -58,52 +55,8 @@
     return true;
   }
 
-  function allCalendarReports(){
-    const seen=new Set(),out=[];
-    [...cloudReports(),...currentReports(),...localReports()].forEach(d=>{
-      if(!d)return;
-      const key=String(d.cloudId??d.id??'')+'|'+String(d.date||'')+'|'+String(d.site||'')+'|'+String(d.writer||'');
-      if(seen.has(key))return;
-      seen.add(key);out.push(d);
-    });
-    return out;
-  }
-
-  function installCalendarFix(){
-    if(typeof window.selectRecordDate!=='function'||typeof window.renderRecordCalendar!=='function'||typeof window.rerenderRecordBrowser!=='function'||window.__toyaCalendarStableV1)return false;
-
-    window.selectRecordDate=function(date){
-      recordSelectedDate=date;
-      const f=document.querySelector('#recordDateFrom'),t=document.querySelector('#recordDateTo');
-      if(f)f.value=date;if(t)t.value=date;
-      window.rerenderRecordBrowser();
-    };
-
-    const oldRerender=window.rerenderRecordBrowser;
-    window.rerenderRecordBrowser=function(){
-      const f=document.querySelector('#recordDateFrom')?.value||'';
-      const t=document.querySelector('#recordDateTo')?.value||'';
-      if(f&&f===t)recordSelectedDate=f;
-      const out=oldRerender.apply(this,arguments);
-      try{if(typeof recordViewMode!=='undefined'&&recordViewMode==='calendar')window.renderRecordCalendar(allCalendarReports())}catch(e){console.warn('カレンダー表示補正',e)}
-      return out;
-    };
-
-    const oldRender=window.renderRecordBrowser;
-    if(typeof oldRender==='function'){
-      window.renderRecordBrowser=function(){
-        const out=oldRender.apply(this,arguments);
-        try{if(typeof recordViewMode!=='undefined'&&recordViewMode==='calendar')window.renderRecordCalendar(allCalendarReports())}catch(e){console.warn('カレンダー表示補正',e)}
-        return out;
-      };
-    }
-
-    window.__toyaCalendarStableV1=true;
-    return true;
-  }
-
   function installAll(){
-    installRecordFilters();installAsahiFix();installCalendarFix();refreshNonRecordSiteSelectors();
+    installRecordFilters();installAsahiFix();refreshNonRecordSiteSelectors();
   }
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(installAll,300));else setTimeout(installAll,300);
@@ -217,11 +170,9 @@
   if(!install()){let n=0;const t=setInterval(()=>{n++;if(install()||n>40)clearInterval(t)},100);}
 })();
 
-/* TOYA_ATTACHMENT_ADD_AUTO_TRACK_V1 */
+/* TOYA_ATTACHMENT_ADD_V2: usage display lives in attachment-usage.js. */
 (function(){
-  const smallCats=new Set(['小型機械','発電機','エア工具']);
   const cleanName=v=>String(v||'').replace(/\s*×\s*\d+(?:台|本)$/,'').trim();
-  const machineNames=d=>(d?.machines||[]).map(x=>typeof x==='string'?x:x?.name).filter(Boolean);
 
   function addMasterAttachment(kind){
     try{
@@ -263,65 +214,10 @@
     }
   }
 
-  function updateLocalState(d){
-    try{
-      if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function'||!d?.site)return;
-      const selected=new Set((d.attachments||[]).map(cleanName));
-      if(!selected.size)return;
-      const machines=machineNames(d);
-      const a=get(LS.attachments,[])||[];
-      let changed=false;
-      a.forEach(x=>{
-        if(!x||!selected.has(cleanName(x.name)))return;
-        x.location=d.site;
-        if(smallCats.has(x.category))x.mountedOn='';
-        else x.mountedOn=machines.length===1?machines[0]:(machines.length>1?'複数重機':'未装着');
-        changed=true;
-      });
-      if(changed)set(LS.attachments,a);
-    }catch(e){console.warn('アタッチメント自動更新失敗',e)}
-  }
-
-  function latestUsage(name){
-    const reports=(typeof cloudReportsCache!=='undefined'&&Array.isArray(cloudReportsCache)&&cloudReportsCache.length)?cloudReportsCache:(typeof LS!=='undefined'&&typeof get==='function'?get(LS.reports,[]):[]);
-    const n=cleanName(name);
-    return [...(reports||[])].filter(d=>(d.attachments||[]).some(v=>cleanName(v)===n)).sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||'')))[0]||null;
-  }
-
-  function applyLatestUsage(){
-    try{
-      const list=document.querySelector('#attachmentList');
-      if(!list||typeof LS==='undefined'||typeof get!=='function')return;
-      const master=get(LS.attachments,[])||[];
-      const rows=[...list.querySelectorAll('.record')];
-      rows.forEach((row,i)=>{
-        const x=master[i];if(!x)return;
-        const d=latestUsage(x.name);if(!d)return;
-        const ms=machineNames(d);
-        const mounted=smallCats.has(x.category)?'—':(ms.length===1?ms[0]:(ms.length>1?'複数重機':'未装着'));
-        const meta=row.querySelector('.record-meta')||row.querySelector('.meta');
-        if(meta)meta.textContent=`現在地：${d.site||x.location||'未登録'} ／ 装着中：${mounted}`;
-      });
-    }catch(e){console.warn('アタッチメント最新位置表示失敗',e)}
-  }
-
   function install(){
     ensureButtons();
     if(typeof window.renderSelectors==='function'&&!window.__toyaAttachmentAddRenderWrap){
       const old=window.renderSelectors;window.renderSelectors=function(){const out=old.apply(this,arguments);setTimeout(ensureButtons,0);return out;};window.__toyaAttachmentAddRenderWrap=true;
-    }
-    if(typeof window.renderAttachments==='function'&&!window.__toyaAttachmentUsageWrap){
-      const old=window.renderAttachments;window.renderAttachments=function(){const out=old.apply(this,arguments);setTimeout(applyLatestUsage,0);return out;};window.__toyaAttachmentUsageWrap=true;
-    }
-    if(typeof window.saveReport==='function'&&!window.__toyaAttachmentSaveWrap){
-      const old=window.saveReport;window.saveReport=async function(){
-        const before=(typeof LS!=='undefined'&&typeof get==='function')?JSON.stringify(get(LS.reports,[])):'';
-        let snap=null;try{if(typeof collect==='function')snap=collect()}catch(e){}
-        const out=await old.apply(this,arguments);
-        const after=(typeof LS!=='undefined'&&typeof get==='function')?JSON.stringify(get(LS.reports,[])):'';
-        if(snap&&before!==after){updateLocalState(snap);setTimeout(()=>{try{if(typeof renderAttachments==='function')renderAttachments()}catch(e){}},0)}
-        return out;
-      };window.__toyaAttachmentSaveWrap=true;
     }
     return !!document.querySelector('#machineAttachmentChoices');
   }

@@ -126,7 +126,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.13 車両別燃料入力版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.14 日報連動表示修正版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -258,20 +258,22 @@ textarea{min-height:105px;resize:vertical}
 
 <section id="attachmentPage" class="page">
 <div class="card">
-<h2>アタッチメント管理</h2>
+<h2>アタッチメント・小型機械の使用記録</h2>
+<p class="note">保存済みの日報で使用した機材だけを表示します。最後に使用した日と現場を確認できます。</p>
 <div class="statgrid">
-  <div class="stat"><b id="attachmentCount">0</b><span>自社アタッチメント</span></div>
-  <div class="stat"><b id="leasedAttachmentCount">0</b><span>現在のリース登録</span></div>
+  <div class="stat"><b id="attachmentCount">0</b><span>使用記録あり（自社）</span></div>
+  <div class="stat"><b id="leasedAttachmentCount">0</b><span>使用記録あり（リース）</span></div>
 </div>
+<p id="attachmentUsageStatus" class="note" role="status" aria-live="polite"></p>
+<button class="btn light" type="button" style="width:100%" onclick="renderAttachments()">使用記録を更新</button>
 </div>
 <div class="card">
-<h2>自社アタッチメント一覧</h2>
+<h2>日報で使用した自社機材</h2>
 <div id="attachmentList"></div>
-<button class="btn light" style="width:100%" onclick="addAttachment()">＋ アタッチメントを追加</button>
 </div>
 <div class="card">
-<h2>保管・装着状況</h2>
-<p class="note">登録管理で「保管場所」「装着中の重機」「メモ」を更新できます。現場で“どこにある？”を確認するための台帳です。</p>
+<h2>日報で使用したリース機材</h2>
+<div id="leasedAttachmentList"></div>
 </div>
 </section>
 
@@ -353,6 +355,7 @@ let cloudProfilesCache={};
 let cloudSitesCache=[];
 let editingReport=null;
 let currentRecordsData=[];
+let recordCalendarPickedDate='';
 let recordViewMode='calendar';
 let recordCalendarMonth='';
 let recordSelectedDate='';
@@ -420,6 +423,7 @@ async function cloudLoadActivity(){
 }
 
 function applyCloudRoleUI(){
+  window.ToyaAttachmentUsage?.sessionChanged();
   const isAdmin=cloudProfile?.role==='admin';
   const ac=$('#activityCard');if(ac)ac.style.display=isAdmin?'block':'none';
   const dc=$('#adminDataCard');if(dc)dc.style.display=isAdmin?'block':'none';
@@ -1758,13 +1762,18 @@ function setRecordView(mode){
   if(lb)lb.className='btn '+(mode==='list'?'active':'light');
   rerenderRecordBrowser();
 }
-function rerenderRecordBrowser(){const a=(currentRecordsData&&currentRecordsData.length)?currentRecordsData:((cloudReportsCache&&cloudReportsCache.length)?cloudReportsCache:currentRecordsData);renderRecordBrowser(a)}
-function recordFilters(a){
+function rerenderRecordBrowser(){
+  const from=$('#recordDateFrom')?.value||'',to=$('#recordDateTo')?.value||'';
+  if(from!==recordCalendarPickedDate||to!==recordCalendarPickedDate)recordCalendarPickedDate='';
+  recordSelectedDate=from&&from===to?from:'';
+  renderRecordBrowser(currentRecordsData);
+}
+function recordFilters(a,{ignoreDate=false}={}){
   const q=($('#recordSearch')?.value||'').trim().toLowerCase();
   const site=$('#recordSiteFilter')?.value||'';
   const writer=$('#recordWriterFilter')?.value||'';
-  const from=$('#recordDateFrom')?.value||'';
-  const to=$('#recordDateTo')?.value||'';
+  const from=ignoreDate?'':($('#recordDateFrom')?.value||'');
+  const to=ignoreDate?'':($('#recordDateTo')?.value||'');
   return a.filter(d=>{
     const hay=[d.site,d.writer,d.details,d.memo,...(d.workTypes||[])].join(' ').toLowerCase();
     return (!q||hay.includes(q))&&(!site||d.site===site)&&(!writer||d.writer===writer)&&(!from||String(d.date||'')>=from)&&(!to||String(d.date||'')<=to);
@@ -1778,7 +1787,7 @@ function updateRecordFilterOptions(a){
     writer.innerHTML='<option value="">全員</option>'+writers.map(x=>`<option>${cloudHtml(x)}</option>`).join('');if(writers.includes(wv))writer.value=wv;
     window.ToyaSharedSiteUI.syncBrowse(site,false,sv);return;
   }
-  const sites=[...new Set(a.map(x=>x.site).filter(Boolean))].sort();
+  const sites=[...new Set(a.flatMap(x=>[x.site,...(x.siteMoves||[]).map(m=>m?.site)]).filter(Boolean))].sort();
   const writers=[...new Set(a.map(x=>x.writer).filter(Boolean))].sort();
   site.innerHTML='<option value="">全現場</option>'+sites.map(x=>`<option>${cloudHtml(x)}</option>`).join('');
   writer.innerHTML='<option value="">全員</option>'+writers.map(x=>`<option>${cloudHtml(x)}</option>`).join('');
@@ -1791,9 +1800,12 @@ function recordCard(d,isCloud){
   return `<div class="record"><div class="record-title">${cloudHtml(d.date)}　${cloudHtml(d.site)}</div><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}${(d.photoCount||0)>0?`／写真：${d.photoCount}枚`:''}／${cloudHtml(d.start||'')}〜${cloudHtml(d.end||'')}</div><div>${(d.workTypes||[]).map(x=>`<span class="badge">${cloudHtml(x)}</span>`).join('')}</div><div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px"><button class="btn dark" onclick="copySaved(Number('${id}'))">LINE文コピー</button>${photoBtn}<button class="btn light" onclick="editLocalReport(Number('${id}'))">編集</button><button class="btn light" onclick="duplicateLocalReport(Number('${id}'))">別現場へ複製</button><button class="btn light" onclick="printSaved(Number('${id}'))">PDF表示</button><button class="btn danger" onclick="deleteSaved(Number('${id}'))">削除</button></div></div>`;
 }
 function shiftRecordMonth(delta){
+  const f=$('#recordDateFrom'),t=$('#recordDateTo');
+  if(recordCalendarPickedDate&&f?.value===recordCalendarPickedDate&&t?.value===recordCalendarPickedDate){f.value='';t.value='';}
+  recordCalendarPickedDate='';
   const base=recordCalendarMonth||today().slice(0,7),parts=base.split('-').map(Number);const d=new Date(parts[0],parts[1]-1+delta,1);recordCalendarMonth=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;recordSelectedDate='';rerenderRecordBrowser();
 }
-function selectRecordDate(date){const next=recordSelectedDate===date?'':date;recordSelectedDate=next;const f=document.querySelector('#recordDateFrom'),t=document.querySelector('#recordDateTo');if(f)f.value=next;if(t)t.value=next;rerenderRecordBrowser()}
+function selectRecordDate(date){const next=recordSelectedDate===date?'':date;recordSelectedDate=next;recordCalendarPickedDate=next;const f=document.querySelector('#recordDateFrom'),t=document.querySelector('#recordDateTo');if(f)f.value=next;if(t)t.value=next;rerenderRecordBrowser()}
 function renderRecordCalendar(a){
   const box=$('#recordsCalendar');if(!box)return;
   if(!recordCalendarMonth)recordCalendarMonth=today().slice(0,7);
@@ -1813,7 +1825,9 @@ function renderRecordBrowser(data){
   const a=recordFilters(currentRecordsData).slice().sort((x,y)=>String(y.date||'').localeCompare(String(x.date||''))||String(y.createdAt||'').localeCompare(String(x.createdAt||''))),b=$('#records'),cal=$('#recordsCalendar');
   if(!b)return;
   if(recordViewMode==='calendar'){
-    renderRecordCalendar(a);
+    // A day tap narrows the cards; the month keeps the same site/writer/search filters.
+    const picked=!!recordCalendarPickedDate&&$('#recordDateFrom')?.value===recordCalendarPickedDate&&$('#recordDateTo')?.value===recordCalendarPickedDate;
+    renderRecordCalendar(recordFilters(currentRecordsData,{ignoreDate:picked}));
     const shown=recordSelectedDate?a.filter(x=>x.date===recordSelectedDate):[];
     b.innerHTML=recordSelectedDate?(shown.length?`<div class="meta" style="margin-top:12px">${recordSelectedDate} の日報 ${shown.length}件</div>`+shown.map(d=>recordCard(d,!!cloudProfile)).join(''):'<div class="empty">この日の日報はありません。</div>'):'<div class="empty">日付をタップすると、その日の日報を表示します。</div>';
   }else{
@@ -1989,12 +2003,7 @@ function renderAttachmentMaster(){
  </div>`).join('');
 }
 function renderAttachments(){
- const a=get(LS.attachments,defaults.attachments).filter(x=>!isLegacyMacBucket(x));
- $('#attachmentCount').textContent=a.length;
- const reports=get(LS.reports,[]);
- const latest=reports[0]||{};
- $('#leasedAttachmentCount').textContent=(latest.leaseAttachments||[]).length;
- $('#attachmentList').innerHTML=a.map(x=>`<div class="record"><div class="record-title">${x.category||''}　${x.name}</div><div class="record-meta">保管：${x.location||'未登録'}　／　装着：${x.mountedOn||'なし'}</div>${x.memo?`<div class="small">${x.memo}</div>`:''}</div>`).join('')||'<div class="empty">登録がありません。</div>';
+ return window.ToyaAttachmentUsage?.render();
 }
 function addAttachment(){const a=get(LS.attachments,defaults.attachments);a.push({name:'新しいアタッチメント',category:'',location:'',mountedOn:'',memo:''});set(LS.attachments,a);renderMasters();renderSelectors();renderAttachments()}
 function updateAttachment(i,k,v){const a=get(LS.attachments,defaults.attachments);a[i][k]=esc(v);set(LS.attachments,a);renderSelectors()}
@@ -2010,7 +2019,8 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 
 </script>
 <script src="midway.js?v=20260910-sites-v3"></script>
-<script src="site-move-filter-fix.js?v=20260910-mac-buckets-v1"></script>
+<script src="site-move-filter-fix.js?v=20260912-report-filters-v2"></script>
+<script src="attachment-usage.js?v=20260912-report-usage-v1"></script>
 <script src="attachment-separation-stable.js?v=20260908-1705"></script>
 <script src="waste-price-master.js?v=20260908-shori-v1"></script>
 <script src="waste-price-admin.js?v=20260908-shori-v1"></script>
