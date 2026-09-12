@@ -98,9 +98,22 @@ textarea{min-height:105px;resize:vertical}
 .stepper button{border:0;border-radius:10px;min-height:48px;background:#111;color:#fff;font-size:26px;font-weight:900;touch-action:manipulation}
 .stepper button:active{transform:scale(.96)}
 .stepper input[type=number]{text-align:center;font-size:20px;font-weight:900;margin:0}
-.fuel-vehicle-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 12px}
-.fuel-vehicle-choices button{min-width:0;min-height:48px;overflow-wrap:anywhere;text-align:left}
-.fuel-row{scroll-margin-top:145px}.fuel-row .rowhead{gap:8px}.f-asset-title{overflow-wrap:anywhere}
+
+#reportPage .fuel-group{min-width:0;margin:12px 0;padding:12px;border:1px solid #ccc;border-radius:12px;background:#fff;overflow-wrap:anywhere}
+#reportPage [data-uh-fuel-asset] .fuel-group{border:0;padding:0;margin:0}
+#reportPage .fuel-group [hidden],#reportPage .fuel-row [hidden]{display:none!important}
+#reportPage .fuel-row{min-width:0;border:0;padding:0;margin:10px 0;scroll-margin-top:145px}
+#reportPage .fuel-row+.fuel-row{border-top:1px solid #ddd;padding-top:12px}
+#reportPage .fuel-row .rowhead{gap:8px;margin:0;justify-content:space-between}
+#reportPage .fuel-row .f-remove{width:auto;min-height:32px;font-size:13px;padding:5px 10px;margin:0 0 0 auto}
+#reportPage .fuel-row .stepper{grid-template-columns:48px minmax(0,1fr) 48px}
+#reportPage .fuel-row .stepper button{margin:0;min-height:48px}
+#reportPage .fuel-row .stepper input{font-size:20px;min-width:0;text-align:center}
+#reportPage .fuel-row .f-qty-label{margin-top:6px}
+#reportPage .fuel-row summary,#reportPage .f-more summary{padding:10px 0;font-size:13px;font-weight:700;color:#555;cursor:pointer}
+#reportPage .fuel-row .manifest-chip{width:auto;margin:0}
+#otherFuelEntry>summary{padding:12px 0;font-size:14px;font-weight:700;cursor:pointer}
+.f-asset-title{overflow-wrap:anywhere}
 .quick-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}
 .quick-btn{border:1px solid #bbb;background:#fff;border-radius:999px;padding:8px 12px;font-weight:900;min-height:40px}
 .quick-btn:active{background:var(--lime)}
@@ -126,7 +139,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.15 運搬入力・社員表示修正版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.16 使用車両・重機の給油入力版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -201,11 +214,12 @@ textarea{min-height:105px;resize:vertical}
 <label>詳細</label><textarea id="details"></textarea>
 </div>
 
-<div class="card"><h2>使用車両</h2><div id="vehicleChoices" class="choice-grid"></div>
+<div class="card"><h2>使用車両</h2><p class="note">車両を選び、使用時間と給油量を入力します。給油していなければ空欄で大丈夫です。</p><div id="vehicleChoices" class="choice-grid"></div><div id="vehicleFuelInputs"></div>
 <div class="row"><div class="rowhead"><b>リース車両</b></div><div id="leaseVehicles"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addLeaseVehicle()">＋ リース車両を追加</button></div>
+<details id="otherFuelEntry"><summary>その他の給油・油脂</summary><p class="note">この日報で使用していない車両への給油などを入力できます。</p><button type="button" class="btn light" onclick="addVehicleFuel('')">＋ 給油・油脂を追加</button><div id="fuelRows"></div></details>
 </div>
 
-<div class="card"><h2>使用重機</h2><div id="machineChoices" class="choice-grid"></div><div id="machineHours"></div>
+<div class="card"><h2>使用重機</h2><p class="note">重機を選び、使用時間と給油量を入力します。給油していなければ空欄で大丈夫です。</p><div id="machineChoices" class="choice-grid"></div><div id="machineHours"></div><div id="machineFuelInputs"></div>
 <div class="row"><div class="rowhead"><b>リース重機</b></div><div id="leaseMachines"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addLeaseMachine()">＋ リース重機を追加</button></div>
 </div>
 
@@ -223,7 +237,7 @@ textarea{min-height:105px;resize:vertical}
 </div>
 
 <div class="card"><h2>産業廃棄物（タップ入力）</h2><div class="muted-small">品目をタップすると「材料・処分・経費」に産廃行を追加します。数量と単位をタップで調整できます。</div><div class="waste-preset"><button type="button" class="preset-chip" onclick="addWasteItem('コンクリートがら','t')">コンクリートがら</button><button type="button" class="preset-chip" onclick="addWasteItem('アスファルトがら','t')">アスファルトがら</button><button type="button" class="preset-chip" onclick="addWasteItem('木くず','m³')">木くず</button><button type="button" class="preset-chip" onclick="addWasteItem('混合廃棄物','m³')">混合廃棄物</button><button type="button" class="preset-chip" onclick="addWasteItem('廃プラスチック類','m³')">廃プラスチック類</button><button type="button" class="preset-chip" onclick="addWasteItem('金属くず','t')">金属くず</button><button type="button" class="preset-chip" onclick="addWasteItem('ガラス・陶磁器くず','t')">ガラス・陶磁器くず</button><button type="button" class="preset-chip" onclick="addWasteItem('石膏ボード','m³')">石膏ボード</button></div></div>
-<div class="card"><h2>燃料費（車両別）</h2><div class="note">給油した車両を押し、1台ごとに給油量を入力してください。金額は自動計算し、車両・重機・小型機械ごとに月間集計します。</div><div id="fuelVehicleChoices" class="fuel-vehicle-choices" aria-label="給油した車両を選ぶ"></div><button type="button" class="btn light no-print" style="width:100%" onclick="addVehicleFuel('')">＋ その他の車両・重機の給油を追加</button><div id="fuelRows"></div></div>
+
 <div class="card"><h2>材料・処分・経費</h2><div id="items"></div><button type="button" class="btn light no-print" style="width:100%;margin-top:9px" onclick="addItem()">＋ 品目を追加</button></div>
 
 <div class="card" id="photoSection"><h2>現場写真</h2>
@@ -935,7 +949,7 @@ async function applyMovedSite(selected){
   closeSiteMovePicker();
   $('#site').value=selected;
   $('#details').value='';$('#memo').value='';$('#start').value=current.end||'13:00';$('#end').value='17:00';$('#overtime').value=0;
-  $('#items').innerHTML='';addItem();if($('#fuelRows'))$('#fuelRows').innerHTML='';
+  $('#items').innerHTML='';addItem();clearFuelInputs();syncFuelInputs();
   editingCloudReportId=null;editingLocalReportId=null;editingOriginalCreatorId=null;editingOriginalCreatorName='';updateEditBanner();
   window.scrollTo({top:0,behavior:'smooth'});
   setTimeout(()=>alert('1現場目を保存しました。移動先「'+selected+'」の日報入力に切り替えました。'),200);
@@ -995,7 +1009,7 @@ function checked(n){return $$(`input[name="${n}"]:checked`).map(x=>x.value)}
 function esc(s){return (s||'').trim()}
 function showStatus(m){const s=$('#status');s.textContent=m;s.style.display='block';setTimeout(()=>s.style.display='none',2500)}
 function renderSelectors(){
- const selectedAttachments=checked('attachment');
+ const selectedAttachments=checked('attachment'),selectedVehicles=checked('vehicle'),selectedMachines=checked('machine');
  const localSites=get(LS.sites,defaults.sites);
  const sites=cloudProfile&&cloudSitesCache.length?[...new Set([...cloudSitesCache.filter(x=>x.status!=='inactive').map(x=>x.name),...localSites])]:localSites;
  const vs=get(LS.vehicles,defaults.vehicles),ms=get(LS.machines,defaults.machines),ats=get(LS.attachments,defaults.attachments).filter(x=>!isLegacyMacBucket(x));
@@ -1005,12 +1019,13 @@ function renderSelectors(){
  const smallCats=new Set(['小型機械','発電機','エア工具']); const machineAts=ats.filter(x=>!smallCats.has(x.category)); const smallAts=ats.filter(x=>smallCats.has(x.category)); $('#machineAttachmentChoices').innerHTML=machineAts.map(x=>`<label class="choice"><input type="checkbox" name="attachment" value="${x.name}">${x.category||'アタッチメント'}｜${x.name}</label>`).join(''); $('#smallToolChoices').innerHTML=smallAts.map(x=>`<label class="choice"><input type="checkbox" name="attachment" value="${x.name}">${x.name}</label>`).join('');
  restoreAttachmentChoices(selectedAttachments);
  $$('input[name="attachment"]').forEach(c=>c.checked=selectedAttachments.includes(c.value));
- $$('input[name="machine"]').forEach(c=>c.onchange=renderMachineHours)
+ $$('input[name="vehicle"]').forEach(c=>c.checked=selectedVehicles.includes(c.value));
+ $$('input[name="machine"]').forEach(c=>{c.checked=selectedMachines.includes(c.value);c.onchange=renderMachineHours;});
  renderFuelVehicleChoices();
 }
 function renderMachineHours(){const old={};$$('#machineHours .mh').forEach(x=>old[x.dataset.name]=x.querySelector('input[type=number]').value);$('#machineHours').innerHTML='';checked('machine').forEach(name=>{const r=document.createElement('div');r.className='row mh';r.dataset.name=name;r.innerHTML=`<div class="grid2"><div><label>自社重機</label><input value="${name}" readonly></div><div><label>稼働時間</label><input type="number" min="0" step="0.5" value="${old[name]||''}"></div></div>`;$('#machineHours').appendChild(r);enhanceNumericInputs(r)})}
-function addLeaseVehicle(d={}){const r=document.createElement('div');r.className='row lease-vehicle';r.innerHTML=`<div class="rowhead"><b>リース車両</b><button class="btn danger" type="button" onclick="this.closest('.row').remove()">削除</button></div><div class="grid2"><div><label>車両名</label><input class="lv-name" value="${d.name||''}"></div><div><label>会社名</label><input class="lv-company" value="${d.company||''}"></div></div><div class="grid2"><div><label>台数</label><input class="lv-count" type="number" min="1" value="${d.count||1}"></div><div><label>使用時間</label><input class="lv-hours" type="number" min="0" step="0.5" value="${d.hours||''}"></div></div>`;$('#leaseVehicles').appendChild(r);enhanceNumericInputs(r)}
-function addLeaseMachine(d={}){const r=document.createElement('div');r.className='row lease-machine';r.innerHTML=`<div class="rowhead"><b>リース重機</b><button class="btn danger" type="button" onclick="this.closest('.row').remove()">削除</button></div><div class="grid2"><div><label>重機名</label><input class="lm-name" value="${d.name||''}"></div><div><label>会社名</label><input class="lm-company" value="${d.company||''}"></div></div><div class="grid2"><div><label>台数</label><input class="lm-count" type="number" min="1" value="${d.count||1}"></div><div><label>稼働時間</label><input class="lm-hours" type="number" min="0" step="0.5" value="${d.hours||''}"></div></div>`;$('#leaseMachines').appendChild(r);enhanceNumericInputs(r)}
+function addLeaseVehicle(d={}){const r=document.createElement('div');r.className='row lease-vehicle';r.innerHTML=`<div class="rowhead"><b>リース車両</b><button class="btn danger" type="button" onclick="removeLeaseFuelRow(this.closest('.lease-vehicle'))">削除</button></div><div class="grid2"><div><label>車両名</label><input class="lv-name" value="${d.name||''}"></div><div><label>会社名</label><input class="lv-company" value="${d.company||''}"></div></div><div class="grid2"><div><label>台数</label><input class="lv-count" type="number" min="1" value="${d.count||1}"></div><div><label>使用時間</label><input class="lv-hours" type="number" min="0" step="0.5" value="${d.hours||''}"></div></div>`;$('#leaseVehicles').appendChild(r);enhanceNumericInputs(r)}
+function addLeaseMachine(d={}){const r=document.createElement('div');r.className='row lease-machine';r.innerHTML=`<div class="rowhead"><b>リース重機</b><button class="btn danger" type="button" onclick="removeLeaseFuelRow(this.closest('.lease-machine'))">削除</button></div><div class="grid2"><div><label>重機名</label><input class="lm-name" value="${d.name||''}"></div><div><label>会社名</label><input class="lm-company" value="${d.company||''}"></div></div><div class="grid2"><div><label>台数</label><input class="lm-count" type="number" min="1" value="${d.count||1}"></div><div><label>稼働時間</label><input class="lm-hours" type="number" min="0" step="0.5" value="${d.hours||''}"></div></div>`;$('#leaseMachines').appendChild(r);enhanceNumericInputs(r)}
 
 function addLeaseAttachment(d={}){
  const r=document.createElement('div');r.className='row lease-attachment';
@@ -1243,19 +1258,110 @@ function closePhotoViewer(){
 }
 
 
-function renderFuelVehicleChoices(){
-  const host=$('#fuelVehicleChoices');if(!host)return;
-  host.replaceChildren();
-  [...new Set(get(LS.vehicles,defaults.vehicles).filter(Boolean))].forEach(asset=>{
-    const button=document.createElement('button');button.type='button';button.className='btn light';
-    button.textContent='＋ '+asset;button.setAttribute('aria-label',asset+'の給油を入力');
-    button.onclick=()=>addVehicleFuel(asset);host.appendChild(button);
+function renderFuelVehicleChoices(){syncFuelInputs();}
+function fuelHasInput(row){return row.querySelector('.f-qty').value!==''||!!row.querySelector('.f-note').value||Number(row.querySelector('.f-amount').value)>0;}
+function clearFuelInputs(){
+  $$('.fuel-group,.fuel-row').forEach(row=>row.remove());
+  if($('#otherFuelEntry'))$('#otherFuelEntry').open=false;
+}
+function parkFuelInputs(host){
+  // Keep the actual input nodes alive while the usage-time cards are redrawn.
+  host.querySelectorAll('.fuel-group').forEach(group=>$('#fuelRows').appendChild(group));
+}
+function removeLeaseFuelRow(row){parkFuelInputs(row);row.remove();syncFuelInputs();}
+function fuelKind(asset){
+  if(get(LS.vehicles,defaults.vehicles).includes(asset))return 'vehicle';
+  if(get(LS.machines,defaults.machines).includes(asset))return 'equipment';
+  if($$('#smallToolChoices input').some(x=>x.value===asset))return 'tool';
+  return 'other';
+}
+function makeFuelGroup(asset,kind){
+  const group=document.createElement('div');group.className='fuel-group';group.dataset.fuelAsset=asset;group.dataset.fuelKind=kind;
+  group.innerHTML='<b class="f-group-title"></b><p class="note f-only-note" hidden>給油のみ（使用の選択なし）</p><div class="f-group-rows"></div><details class="f-more"><summary>追加の給油・油脂</summary><button type="button" class="btn light">＋ 同じ車両・重機の給油を追加</button></details>';
+  group.querySelector('.f-group-title').textContent=asset;
+  group.querySelector('.f-more button').onclick=()=>{
+    const previous=group.querySelector('.fuel-row');
+    const row=addFuelRow({asset:group.dataset.fuelAsset,source:previous?.querySelector('.f-source').value,outlet:previous?.querySelector('.f-outlet').value,type:previous?.querySelector('.f-type').value},group.querySelector('.f-group-rows'));
+    group.querySelector('.f-more').open=false;syncFuelInputs();row.querySelector('.f-qty').focus();
+  };
+  $('#fuelRows').appendChild(group);return group;
+}
+function syncFuelInputs(){
+  if(!$('#fuelRows'))return;
+  const chosen=new Map(),add=(asset,kind,lease=null)=>{if(asset&&!chosen.has(asset))chosen.set(asset,{kind,lease});};
+  checked('vehicle').forEach(n=>add(n,'vehicle'));
+  checked('machine').forEach(n=>add(n,'equipment'));
+  // Only fuel-powered small equipment gets a default fuel field, never hoses or hand tools.
+  $$('#smallToolChoices input:checked').filter(x=>/発電機|洗浄機|コンプレッサー|散水機/.test(x.value)).forEach(x=>add(x.value,'tool'));
+  for(const [selector,input,kind] of [['.lease-vehicle','.lv-name','vehicle'],['.lease-machine','.lm-name','equipment']]){
+    $$(selector).forEach(lease=>{
+      const name=lease.querySelector(input).value.trim();
+      const group=lease._fuelGroup?.isConnected?lease._fuelGroup:lease.querySelector('.fuel-group');
+      if(name&&group&&group.dataset.fuelAsset!==name){
+        group.dataset.fuelAsset=name;
+        group.querySelectorAll('.fuel-row').forEach(row=>{populateFuelAssetOptions(row,name);updateFuelAssetTitle(row);});
+      }
+      add(name,kind,lease);
+    });
+  }
+  let smallHost=$('#smallToolFuelInputs'),small=$('#smallToolChoices');
+  if(small){
+    if(!smallHost){smallHost=document.createElement('div');smallHost.id='smallToolFuelInputs';}
+    if(smallHost.parentElement!==small.parentElement)small.after(smallHost);
+  }
+  const groups=new Map();
+  $$('.fuel-group').forEach(group=>{
+    const name=group.dataset.fuelAsset;
+    if(groups.has(name)){
+      group.querySelectorAll('.fuel-row').forEach(row=>groups.get(name).querySelector('.f-group-rows').appendChild(row));group.remove();
+    }else groups.set(name,group);
   });
+  $$('#fuelRows > .fuel-row').forEach(row=>{
+    const asset=row.querySelector('.f-asset').value;if(!asset)return;
+    let group=groups.get(asset);
+    if(!group){group=makeFuelGroup(asset,chosen.get(asset)?.kind||fuelKind(asset));groups.set(asset,group);}
+    group.querySelector('.f-group-rows').appendChild(row);
+  });
+  for(const [asset,info] of chosen){
+    if(!groups.has(asset))groups.set(asset,makeFuelGroup(asset,info.kind));
+  }
+  const slots=$$('[data-uh-fuel-asset]');
+  for(const [asset,group] of groups){
+    const info=chosen.get(asset),body=group.querySelector('.f-group-rows');
+    const rows=[...body.querySelectorAll('.fuel-row')];
+    if(rows.length>1)rows.filter(row=>row.dataset.fuelPlaceholder==='1'&&!fuelHasInput(row)).forEach(row=>row.remove());
+    if(!info&&![...body.querySelectorAll('.fuel-row')].some(row=>fuelHasInput(row)||row.dataset.fuelManual==='1')){group.remove();continue;}
+    if(!body.children.length){const row=addFuelRow({asset},body);row.dataset.fuelPlaceholder='1';}
+    const kind=info?.kind||group.dataset.fuelKind;
+    group.dataset.fuelKind=kind;
+    const slot=info&&!info.lease?slots.find(x=>x.dataset.uhFuelAsset===asset&&!x.closest('.uh-inline')?.hidden):null;
+    const fallback=kind==='vehicle'?$('#vehicleFuelInputs'):kind==='equipment'?$('#machineFuelInputs'):kind==='tool'?smallHost:$('#fuelRows');
+    const target=info?.lease||slot||fallback||$('#fuelRows');
+    if(group.parentElement!==target)target.appendChild(group);
+    if(info?.lease)info.lease._fuelGroup=group;
+    group.querySelector('.f-group-title').textContent=asset;
+    group.querySelector('.f-group-title').hidden=!!slot||!!info?.lease;
+    group.querySelector('.f-only-note').hidden=!!info||kind==='other';
+    body.querySelectorAll('.fuel-row').forEach(row=>{
+      row.querySelector('.f-asset-wrap').hidden=true;
+      row.querySelector('.f-asset-title').hidden=true;
+      row.querySelector('.f-remove').hidden=body.children.length===1&&!fuelHasInput(row)&&row.dataset.fuelManual!=='1';
+    });
+  }
+  if($('#fuelRows').children.length)$('#otherFuelEntry').open=true;
 }
 function addVehicleFuel(asset){
-  const row=addFuelRow({asset});
-  row.scrollIntoView({behavior:'smooth',block:'start'});
+  const row=addFuelRow({asset});row.dataset.fuelManual='1';syncFuelInputs();
+  row.scrollIntoView({behavior:'smooth',block:'nearest'});
+  row.querySelector(asset?'.f-qty':'.f-asset').focus({preventScroll:true});
+  return row;
 }
+document.addEventListener('change',event=>{
+  if(event.target.matches('input[name="vehicle"],input[name="machine"],input[name="attachment"],.lv-name,.lm-name'))syncFuelInputs();
+});
+document.addEventListener('input',event=>{
+  if(event.target.matches('.lv-name,.lm-name'))syncFuelInputs();
+});
 function populateFuelAssetOptions(row,savedAsset=row.querySelector('.f-asset').value){
   const select=row.querySelector('.f-asset');select.replaceChildren();
   const addOption=(host,name,value=name)=>{const option=document.createElement('option');option.textContent=name;option.value=value;host.appendChild(option)};
@@ -1283,33 +1389,43 @@ function updateFuelAssetTitle(row){
   const asset=row.querySelector('.f-asset').value;
   row.querySelector('.f-asset-title').textContent=asset?asset+'の給油・油脂':'給油する車両・重機';
   if(asset)row.querySelector('.f-asset-error').hidden=true;
+  row.querySelector('.f-qty')?.setAttribute('aria-label',asset+' '+row.querySelector('.f-qty-label').textContent);
 }
-function addFuelRow(d={}){
-  const r=document.createElement('div');
-  r.className='row fuel-row';
+function addFuelRow(d={},target){
+  const r=document.createElement('div');r.className='row fuel-row';
   const source=d.source||d.company||'スタンド';
-  const outlet=d.outlet||((d.note||'').includes('IDEX')?'IDEX':(d.note||'').includes('ENEOS')?'ENEOS':'ENEOS');
+  const outlet=d.outlet||((d.note||'').includes('IDEX')?'IDEX':'ENEOS');
   const type=d.type||'軽油';
-  const qty=d.qty??d.liters??'';
-  const unit=d.unit||(['グリース','ブルーグリス'].includes(type)?'本':'L');
-  r.innerHTML=`<div class="rowhead"><b class="f-asset-title"></b><button class="btn danger" type="button" onclick="this.closest('.fuel-row').remove()">削除</button></div>
-  <label>給油した車両・重機・小型機械</label><select class="f-asset" aria-label="給油した車両・重機・小型機械"></select>
+  r.innerHTML=`<div class="rowhead"><b class="f-asset-title"></b><button class="btn danger f-remove" type="button" onclick="removeFuelRow(this.closest('.fuel-row'))">クリア</button></div>
+  <div class="f-asset-wrap"><label>給油した車両・重機・小型機械</label><select class="f-asset" aria-label="給油した車両・重機・小型機械"></select></div>
   <div class="note cloud-bad f-asset-error" role="alert" hidden>給油した車両・重機を選択してください。</div>
-  <label>給油先</label><div class="manifest-chips fuel-source-chips"><button type="button" class="manifest-chip ${source==='スタンド'?'active':''}" data-source="スタンド" onclick="setFuelSource(this,'スタンド')">スタンド</button><button type="button" class="manifest-chip ${source==='マルマサ'?'active':''}" data-source="マルマサ" onclick="setFuelSource(this,'マルマサ')">マルマサ</button><button type="button" class="manifest-chip ${source==='川崎建機'?'active':''}" data-source="川崎建機" onclick="setFuelSource(this,'川崎建機')">川崎建機</button></div><input type="hidden" class="f-source" value="${source}">
-  <div class="f-outlet-wrap" style="${source==='スタンド'?'':'display:none'}"><label>スタンド</label><div class="manifest-chips fuel-outlet-chips"><button type="button" class="manifest-chip ${outlet==='ENEOS'?'active':''}" data-outlet="ENEOS" onclick="setFuelOutlet(this,'ENEOS')">ENEOS</button><button type="button" class="manifest-chip ${outlet==='IDEX'?'active':''}" data-outlet="IDEX" onclick="setFuelOutlet(this,'IDEX')">IDEX</button></div><input type="hidden" class="f-outlet" value="${outlet}"></div>
+  <div class="f-qty-main"><label class="f-qty-label">給油量（L）</label><input class="f-qty f-liters" type="number" inputmode="decimal" min="0" step="0.1" placeholder="給油なしは空欄"></div>
+  <details class="f-settings"><summary class="f-settings-summary"></summary>
+  <label>給油先</label><div class="manifest-chips fuel-source-chips"><button type="button" class="manifest-chip" data-source="スタンド" onclick="setFuelSource(this,'スタンド')">スタンド</button><button type="button" class="manifest-chip" data-source="マルマサ" onclick="setFuelSource(this,'マルマサ')">マルマサ</button><button type="button" class="manifest-chip" data-source="川崎建機" onclick="setFuelSource(this,'川崎建機')">川崎建機</button></div><input type="hidden" class="f-source">
+  <div class="f-outlet-wrap"><label>スタンド</label><div class="manifest-chips fuel-outlet-chips"><button type="button" class="manifest-chip" data-outlet="ENEOS" onclick="setFuelOutlet(this,'ENEOS')">ENEOS</button><button type="button" class="manifest-chip" data-outlet="IDEX" onclick="setFuelOutlet(this,'IDEX')">IDEX</button></div><input type="hidden" class="f-outlet"></div>
   <label>燃料・油脂の種類</label><select class="f-type" aria-label="燃料・油脂の種類"></select>
-  <div class="grid3"><div><label class="f-qty-label">数量（${unit}）</label><input class="f-qty f-liters" type="number" min="0" step="0.1" value="${qty}"></div><div><label class="f-unit-label">単価（円/${unit}）</label><input class="f-unit" type="number" min="0" step="0.1" value="${d.unitPrice||''}" readonly></div><div><label>金額（円）</label><input class="f-amount" type="number" min="0" step="1" value="${d.amount||''}" readonly></div></div>
-  <div class="note f-price-note" style="margin-top:8px"></div><label>メモ</label><input class="f-note" type="text" placeholder="任意">`;
-  $('#fuelRows').appendChild(r);
+  <div class="grid2"><div><label class="f-unit-label">単価（円/L）</label><input class="f-unit" type="number" min="0" step="0.1" readonly data-stepper="1"></div><div><label>金額（円）</label><input class="f-amount" type="number" min="0" step="1" readonly data-stepper="1"></div></div>
+  <div class="note f-price-note" style="margin-top:8px"></div><label>メモ</label><input class="f-note" type="text" placeholder="任意"></details>`;
+  (target?.nodeType===1?target:$('#fuelRows')).appendChild(r);
   r.querySelector('.f-note').value=d.note||'';
-  populateFuelAssetOptions(r,d.asset);
-  r.querySelector('.f-asset').onchange=()=>updateFuelAssetTitle(r);
+  r.querySelector('.f-qty').value=d.qty??d.liters??'';
+  r.querySelector('.f-source').value=source;r.querySelector('.f-outlet').value=outlet;
+  r.querySelectorAll('[data-source]').forEach(b=>b.classList.toggle('active',b.dataset.source===source));
+  r.querySelectorAll('[data-outlet]').forEach(b=>b.classList.toggle('active',b.dataset.outlet===outlet));
+  r.querySelector('.f-outlet-wrap').hidden=source!=='スタンド';
+  populateFuelAssetOptions(r,d.asset);updateFuelAssetTitle(r);
+  r.querySelector('.f-asset').onchange=()=>{updateFuelAssetTitle(r);syncFuelInputs();};
   r.querySelector('.f-asset').onfocus=()=>populateFuelAssetOptions(r);
-  updateFuelAssetTitle(r);
-  updateFuelOptions(r,type);
-  // Only the quantity is entered; price and amount are calculated fields.
-  enhanceNumericInputs(r.querySelector('.f-qty').parentElement);
+  updateFuelOptions(r,type,d);
+  enhanceNumericInputs(r.querySelector('.f-qty-main'));
   return r;
+}
+function removeFuelRow(row){
+  const group=row.closest('.fuel-group');
+  if(group&&group.querySelectorAll('.fuel-row').length===1){
+    row.querySelector('.f-qty').value='';row.querySelector('.f-note').value='';row.querySelector('.f-amount').value='';row.dataset.fuelPlaceholder='1';delete row.dataset.fuelManual;
+  }else row.remove();
+  syncFuelInputs();
 }
 function fuelPrice(source,type){
   const table={
@@ -1319,34 +1435,41 @@ function fuelPrice(source,type){
   };
   return table[source]?.[type]||{price:0,unit:'L'};
 }
-function updateFuelOptions(row,preferred){
+function updateFuelOptions(row,preferred,saved={}){
   const source=row.querySelector('.f-source').value;
   const sel=row.querySelector('.f-type');
   const types=source==='川崎建機'?['ブルーグリス']:source==='マルマサ'?['軽油','AdBlue','グリース']:['軽油','ガソリン'];
-  sel.innerHTML=types.map(x=>`<option ${x===preferred?'selected':''}>${x}</option>`).join('');
+  if(preferred&&!types.includes(preferred)&&(saved.type||saved.unitPrice!==undefined))types.push(preferred);
+  sel.replaceChildren(...types.map(x=>new Option(x,x,false,x===preferred)));
   if(!types.includes(sel.value))sel.value=types[0];
   sel.onchange=()=>applyFuelPrice(row);
-  applyFuelPrice(row);
+  applyFuelPrice(row,saved);
 }
-function applyFuelPrice(row){
+function applyFuelPrice(row,saved={}){
   const source=row.querySelector('.f-source').value;
   const type=row.querySelector('.f-type').value;
-  const info=fuelPrice(source,type);
+  const current=fuelPrice(source,type);
+  const savedPrice=saved.unitPrice!==undefined&&saved.unitPrice!==null&&saved.unitPrice!==''&&Number.isFinite(Number(saved.unitPrice));
+  const info=savedPrice?{price:Number(saved.unitPrice),unit:saved.unit||current.unit}:current;
   const qty=row.querySelector('.f-qty'),unit=row.querySelector('.f-unit'),amount=row.querySelector('.f-amount');
   row.dataset.qtyUnit=info.unit;
   qty.step=info.unit==='本'?'1':'0.1';
-  row.querySelector('.f-qty-label').textContent=`数量（${info.unit}）`;
+  const qtyLabel=(type==='軽油'||type==='ガソリン'?'給油量':type+' 数量')+`（${info.unit}）`;
+  row.querySelector('.f-qty-label').textContent=qtyLabel;
+  qty.setAttribute('aria-label',row.querySelector('.f-asset').value+' '+qtyLabel);
   row.querySelector('.f-unit-label').textContent=`単価（円/${info.unit}）`;
   unit.value=info.price;
   row.querySelector('.f-price-note').textContent=`${source}${source==='スタンド'?'（'+(row.querySelector('.f-outlet').value||'ENEOS')+'）':''}：${type} ${info.price.toLocaleString()}円/${info.unit}`;
-  const calc=()=>{amount.value=qty.value?Math.round(Number(qty.value)*info.price):''};
+  row.querySelector('.f-settings-summary').textContent=type+' ／ '+(source==='スタンド'?row.querySelector('.f-outlet').value:source)+'（変更）';
+  const calc=()=>{amount.value=qty.value?Math.round(Number(qty.value)*info.price):'';row.querySelector('.f-remove').hidden=!!row.closest('.fuel-group')&&row.closest('.fuel-group').querySelectorAll('.fuel-row').length===1&&!fuelHasInput(row)&&row.dataset.fuelManual!=='1';};
   qty.oninput=calc;calc();
+  if(saved.amount!==undefined&&saved.amount!==null&&saved.amount!==''&&Number.isFinite(Number(saved.amount)))amount.value=saved.amount;
 }
 function setFuelSource(btn,source){
   const row=btn.closest('.fuel-row');
   row.querySelectorAll('.fuel-source-chips .manifest-chip').forEach(b=>b.classList.toggle('active',b.dataset.source===source));
   row.querySelector('.f-source').value=source;
-  row.querySelector('.f-outlet-wrap').style.display=source==='スタンド'?'':'none';
+  row.querySelector('.f-outlet-wrap').hidden=source!=='スタンド';
   updateFuelOptions(row,'軽油');
 }
 function setFuelOutlet(btn,outlet){
@@ -1847,7 +1970,7 @@ function ensureSiteOption(name){if(!name)return;const sel=$('#site');if([...sel.
 function clearReportFormDynamic(){
  $$('[data-saved-attachment]').forEach(x=>x.remove());
   $$('input[name="worker"],input[name="workType"],input[name="vehicle"],input[name="machine"],input[name="attachment"]').forEach(x=>x.checked=false);
-  $('#leaseVehicles').innerHTML='';$('#leaseMachines').innerHTML='';$('#leaseAttachments').innerHTML='';$('#fuelRows').innerHTML='';$('#items').innerHTML='';$('#machineHours').innerHTML='';stagedPhotos=[];renderStagedPhotos();
+  $('#leaseVehicles').innerHTML='';$('#leaseMachines').innerHTML='';$('#leaseAttachments').innerHTML='';clearFuelInputs();$('#items').innerHTML='';$('#machineHours').innerHTML='';stagedPhotos=[];renderStagedPhotos();
 }
 function fillReportForm(d,mode='edit'){
   clearReportFormDynamic();ensureSiteOption(d.site||'');
@@ -1855,7 +1978,7 @@ function fillReportForm(d,mode='edit'){
   $('#date').value=d.date||today();$('#weather').value=d.weather||'晴れ';$('#site').value=d.site||'';$('#writer').value=d.writer||'';$('#meikenCount').value=Number(d.meikenCount||0);$('#asahiCount').value=Number(d.asahiCount||0);$('#otherWorker').value=d.otherWorker||'';$('#start').value=d.start||'08:00';$('#end').value=d.end||'17:00';$('#overtime').value=d.overtime||0;$('#details').value=d.details||'';$('#memo').value=d.memo||'';
   const cv=(name,vals)=>$$(`input[name="${name}"]`).forEach(x=>x.checked=(vals||[]).includes(x.value));cv('worker',d.workers);cv('workType',d.workTypes);cv('vehicle',d.vehicles);cv('machine',(d.machines||[]).map(x=>x.name));cv('attachment',d.attachments);renderMachineHours();
   (d.machines||[]).forEach(x=>{const row=$$('#machineHours .mh').find(r=>r.dataset.name===x.name);if(row)row.querySelector('input[type=number]').value=x.hours||''});
-  (d.leaseVehicles||[]).forEach(addLeaseVehicle);(d.leaseMachines||[]).forEach(addLeaseMachine);(d.leaseAttachments||[]).forEach(addLeaseAttachment);(d.fuels||[]).forEach(addFuelRow);(d.items||[]).forEach(addItem);
+  (d.leaseVehicles||[]).forEach(addLeaseVehicle);(d.leaseMachines||[]).forEach(addLeaseMachine);(d.leaseAttachments||[]).forEach(addLeaseAttachment);(d.fuels||[]).forEach(addFuelRow);syncFuelInputs();(d.items||[]).forEach(addItem);
   if(mode==='edit'){editingReport={...d};$('#editBanner')?.classList.add('show');if($('#editBannerText'))$('#editBannerText').textContent=`編集中：${d.date||''} ${d.site||''}`;if($('#saveReportBtn'))$('#saveReportBtn').textContent='変更を保存'}
   else{clearReportEditState();if($('#editBannerText'))$('#editBannerText').textContent='別現場用に複製しました。現場名・時間を確認してください。';$('#editBanner')?.classList.add('show')}
   document.querySelector('[data-page="reportPage"]')?.click();window.scrollTo({top:0,behavior:'smooth'});
@@ -2013,6 +2136,10 @@ function deleteAttachment(i){if(!confirm('削除しますか？'))return;const a
 function backupData(){const data={reports:get(LS.reports,[]),sites:get(LS.sites,[]),vehicles:get(LS.vehicles,[]),machines:get(LS.machines,[]),attachments:get(LS.attachments,[])};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='TOYA_Manager_backup.json';a.click()}
 $('#restoreFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);set(LS.reports,d.reports||[]);set(LS.sites,d.sites||defaults.sites);set(LS.vehicles,d.vehicles||defaults.vehicles);set(LS.machines,d.machines||defaults.machines);set(LS.attachments,d.attachments||defaults.attachments);alert('復元しました。');location.reload()}catch(err){alert('復元に失敗しました。')}};r.readAsText(f)}
 function resetAll(){if(confirm('全データを削除しますか？')){Object.values(LS).forEach(k=>localStorage.removeItem(k));location.reload()}}
+const fuelInputObserver=new MutationObserver(()=>syncFuelInputs());
+for(const id of ['vehicleChoices','machineChoices','smallToolChoices','leaseVehicles','leaseMachines']){
+  const el=$('#'+id);if(el)fuelInputObserver.observe(el,{childList:true});
+}
 renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSession();
 
 
@@ -2032,7 +2159,7 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 <script src="vehicle-cost-admin.js?v=20260910-unified-rates-v1"></script>
 <script src="equipment-cost-admin.js?v=20260910-unified-rates-v1"></script>
 <script src="equipment-transport.js?v=20260912-input-v2"></script>
-<script src="usage-hours.js?v=20260912-employee-time-v1"></script>
+<script src="usage-hours.js?v=20260912-inline-fuel-v1"></script>
 <script src="attachment-rate-admin.js?v=20260910-add-name-v1"></script>
 <script src="pending-transport-tools.js?v=20260912-input-v2"></script>
 <script src="site-financial-summary.js?v=20260911-quote-quantities-v1"></script>

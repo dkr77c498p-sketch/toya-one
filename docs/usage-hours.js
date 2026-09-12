@@ -177,7 +177,7 @@
  if(window.ToyaUsageHoursEngine)return;window.ToyaUsageHoursEngine=engine;
  const q=(s,r=document)=>r.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const isAdmin=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin';
- const groups=[['labor','人工の時間'],['dispatch','応援・派遣の時間'],['vehicle','車両の使用時間'],['equipment','重機の使用時間'],['attachment','アタッチメントの使用時間'],['tool','小型機械・工具の使用時間']];
+ const groups=[['labor','人工の時間'],['dispatch','応援・派遣の時間'],['vehicle','選択した車両'],['equipment','選択した重機'],['attachment','アタッチメントの使用時間'],['tool','小型機械・工具の使用時間']];
  let state={},enabled=true,installed=false,originalCollect=null,breakMinutes=60,scheduled=false;
  const rid=(k,n)=>k+'|'+key(n);
  const availableSites=()=>[...new Set([q('#site')?.value,...[...document.querySelectorAll('.sm-site')].map(e=>e.value)].filter(Boolean))];
@@ -264,7 +264,8 @@
   }).join('');
   const total=e.allocations.reduce((n,a)=>n+(a.minutes||0),0);
   const message=validateEntry(e)||'合計 '+Math.floor(total/60)+'時間'+total%60+'分';
-  return '<div class="uh-row" data-uh-id="'+esc(id)+'"><b>'+esc(friendly(e))+count+'</b>'+al+
+  return '<div class="uh-row" data-uh-id="'+esc(id)+'"><b>'+esc(friendly(e))+count+'</b>'+
+   (['vehicle','equipment','tool'].includes(kind)?'<div data-uh-fuel-asset="'+esc(e.label)+'"></div>':'')+al+
    (kind==='dispatch'?(e.allocations.length===1?'<p class="note uh-travel-auto">通勤費・高速代：'+esc(e.travelSite)+'へ自動計上（1回だけ）</p>':
     '<label>通勤費・高速代の計上先（1回だけ）<select data-uh-travel><option value="" '+(!e.travelSite?'selected':'')+'>計上先の現場を選択</option>'+e.allocations.filter(a=>availableSites().some(n=>norm(n)===norm(a.site))).map(a=>'<option value="'+esc(a.site)+'" '+(a.site===e.travelSite?'selected':'')+'>'+esc(a.site)+'</option>').join('')+'</select></label>'):'')+
    '<p class="note uh-note" role="status">'+esc(message)+'</p>'+
@@ -286,9 +287,11 @@
     // Do not detach a field while the user is typing in it on a mobile keyboard.
     if(host.contains(document.activeElement)&&host.dataset.structure===structure)continue;
     host.dataset.structure=structure;
+    window.parkFuelInputs?.(host);
     host.innerHTML=es.length?'<h3>'+esc(title)+'</h3>'+es.map(entryHTML).join(''):'';
    }
   }
+  window.syncFuelInputs?.();
   q('#uhInlineStatus').textContent=enabled?'選択した項目のすぐ下で時間を入力できます。上へ戻る操作は不要です。':'時間入力は無効です。過去の日報は従来の計算を保持しています。';
  }
  function schedule(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;display();},0);}
