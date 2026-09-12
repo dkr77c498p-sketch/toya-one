@@ -10,6 +10,8 @@
  let siteLoaded=false,profileDirty=false;
  let owner='',sites=[],docs=[],profile={},contract=null,rates=[],siteId='',editor=null,dirty=false,busy=false,ticket=0,kind='invoice';
  const site=()=>sites.find(s=>s.id===siteId);
+ const summarySite=()=>q('#siteSummarySelect')?.value||'';
+ const siteByName=name=>sites.find(s=>s.name===name);
  const documentReady=()=>!!editor&&(editor.kind==='estimate'&&!editor.site_id||siteLoaded);
  const note=(s,error=false)=>{const n=q('#pbStatus');if(n){n.textContent=s;n.classList.toggle('pb-error',error);}const local=q('#pbActionStatus');if(local){local.textContent=s;local.classList.toggle('pb-error',error);}};
  const one=data=>Array.isArray(data)?data[0]:data;
@@ -25,9 +27,10 @@
   const card=document.createElement('div');card.id='projectBusinessCard';card.className='card admin-home-only';
   card.innerHTML='<h2>現場・請求・完工</h2><label for="pbSite">現場</label><select id="pbSite"><option value="">現場を選択</option></select><div class="pb-actions"><button id="pbReload" class="btn light" type="button">一覧を更新</button><button id="pbProfit" class="btn light" type="button">この現場の利益を見る</button></div><p id="pbStatus" class="note" role="status" aria-live="polite">読み込み中…</p><div id="pbOverview"></div><details id="pbCompletion"><summary>完工設定</summary><div id="pbCompletionBody"></div></details><div class="pb-tabs" role="group" aria-label="書類の種類"><button class="btn lime" type="button" data-pb-kind="invoice">請求書</button><button class="btn light" type="button" data-pb-kind="progress">出来高請求書</button></div><button id="pbNew" class="btn dark pb-wide" type="button">＋ 請求書を作成</button><div id="pbEditor"></div><div id="pbDocuments"></div><details id="pbCompany"><summary>発行者・振込先の設定</summary><p class="note">自社の情報を登録すると、新しく作る書類に入ります。</p><div id="pbCompanyFields"></div><button id="pbCompanySave" class="btn dark pb-wide" type="button">発行者情報を保存</button><p id="pbCompanyStatus" class="note" role="status"></p></details>';
   q('#siteSummaryCard')?.before(card);
-  q('#pbSite').onchange=async e=>{const next=e.target.value;if(dirty&&!confirm('書類の未保存の入力を閉じて現場を切り替えますか？')){e.target.value=siteId;return;}siteId=next;editor=null;dirty=false;await loadSite();};
+  q('#pbSite').onchange=async e=>{const next=e.target.value;if(dirty&&!confirm('書類の未保存の入力を閉じて現場を切り替えますか？')){e.target.value=siteId;return;}siteId=next;editor=null;dirty=false;await loadSite();syncToSummary();};
+  const summary=q('#siteSummarySelect');summary?.removeEventListener('change',syncFromSummary);summary?.addEventListener('change',syncFromSummary);
   q('#pbReload').onclick=()=>refresh();q('#pbProfit').onclick=showProfit;
-  card.querySelectorAll('[data-pb-kind]').forEach(b=>b.onclick=()=>{kind=b.dataset.pbKind;renderTabs();renderList();});
+  card.querySelectorAll('[data-pb-kind]').forEach(b=>b.onclick=()=>{kind=b.dataset.pbKind;renderTabs();renderList();if(!site())requestSite();});
   q('#pbNew').onclick=()=>newDocument(kind);
   q('#pbCompanySave').onclick=saveProfile;q('#pbCompanyFields').addEventListener('input',()=>{profileDirty=true;});
   const shortcut=document.createElement('div');shortcut.id='pbMasterLink';shortcut.className='card';shortcut.innerHTML='<h2>現場・請求・完工</h2><button class="btn dark pb-wide" type="button">請求・完工設定を開く</button>';shortcut.querySelector('button').onclick=()=>{q('nav [data-page="homePage"]')?.click();card.scrollIntoView({block:'start',behavior:'smooth'});};q('#masterPage')?.prepend(shortcut);
@@ -54,9 +57,22 @@
    const results=await Promise.all([read('sites','id,name,status,completed_on,lifecycle_version',company),read('billing_profiles','*',company)]);
    if(t!==ticket||identity()!==mine)return;
    sites=results[0];profile=results[1][0]||{};
-   const current=siteId||'';q('#pbSite').innerHTML='<option value="">現場を選択</option>'+[...sites].sort((a,b)=>(a.status==='active'?0:1)-(b.status==='active'?0:1)||a.name.localeCompare(b.name,'ja')).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+(s.completed_on?'（完工）':s.status==='active'?'':'（過去・未整理）')+'</option>').join('');siteId=sites.some(s=>s.id===current)?current:'';q('#pbSite').value=siteId;
+   const current=siteId||'',linked=siteByName(summarySite());q('#pbSite').innerHTML='<option value="">現場を選択</option>'+[...sites].sort((a,b)=>(a.status==='active'?0:1)-(b.status==='active'?0:1)||a.name.localeCompare(b.name,'ja')).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+(s.completed_on?'（完工）':s.status==='active'?'':'（過去・未整理）')+'</option>').join('');siteId=sites.some(s=>s.id===current)?current:linked?.id||'';q('#pbSite').value=siteId;
    if(!profileDirty&&!q('#pbCompany')?.contains(document.activeElement))renderProfile();await loadSite();loadRates(company,mine);
   }catch(e){if(identity()===mine)note('読み込みできませんでした：'+e.message,true);}
+ }
+ async function syncFromSummary(){
+  if(!identity()||dirty)return;
+  const linked=siteByName(summarySite());
+  if(!linked||linked.id===siteId)return;
+  siteId=linked.id;editor=null;dirty=false;
+  if(q('#pbSite'))q('#pbSite').value=siteId;
+  await loadSite();
+ }
+ function syncToSummary(){
+  const summary=q('#siteSummarySelect'),selected=site();
+  if(!summary||!selected||summary.value===selected.name||![...summary.options].some(o=>o.value===selected.name))return;
+  summary.value=selected.name;summary.dispatchEvent(new Event('change',{bubbles:true}));
  }
  async function loadRates(company,mine){
   const specs=[['labor_rate_master','label,day_rate,active','day_rate','人日'],['vehicle_rate_master','label,daily_rate,active','daily_rate','日'],['equipment_rate_master','label,daily_rate,active','daily_rate','日'],['small_tool_rate_master','label,hourly_rate,active','hourly_rate','時間'],['attachment_rate_master','label,hourly_rate,active','hourly_rate','時間']];
@@ -75,7 +91,7 @@
   }catch(e){if(t===ticket&&identity()===mine)note('書類を確認できませんでした：'+e.message,true);}
  }
  function renderOverview(){
-  if(!q('#pbOverview'))return;const s=site();q('#pbNew').disabled=!s||!siteLoaded;
+  if(!q('#pbOverview'))return;const s=site();q('#pbNew').disabled=!!s&&!siteLoaded;
   if(!s){q('#pbOverview').innerHTML='';return;}
   if(!siteLoaded){q('#pbOverview').innerHTML='<p class="note">書類・請求額の読み込みが完了すると表示します。</p>';return;}
   const billed=E.billed(docs),amount=contract?Number(contract.amount):null;
@@ -106,8 +122,14 @@
   host.querySelectorAll('[data-pb-open]').forEach(b=>b.onclick=()=>openDocument(b.dataset.pbOpen));
  }
  function discard(){return !dirty||confirm('書類の未保存の入力を閉じますか？');}
+ function requestSite(){
+  note('先に上の「現場」を選んでください。',true);
+  const select=q('#pbSite');select?.scrollIntoView?.({block:'center',behavior:'smooth'});select?.focus();
+ }
  function newDocument(k,from){
-  if(!site()||!siteLoaded||!discard())return;
+  if(!site())return requestSite();
+  if(!siteLoaded)return note('現場の読み込みが終わってから、もう一度押してください。',true);
+  if(!discard())return;
   editor=E.draft(k,site(),profile,date());
   if(k==='invoice'&&!from&&contract&&Number(contract.amount)>E.billed(docs))editor.items=[{name:site().name+' 工事代金',spec:'',quantity:'1',unit:'式',unitPrice:String(Number(contract.amount)-E.billed(docs)),costPrice:null}];
   if(from){editor.customer_name=from.customer_name;editor.customer_address=from.customer_address;editor.subject=from.subject;editor.notes=from.notes;editor.tax_rate=from.tax_rate;editor.items=copy(from.items).map(x=>({...x,costPrice:k==='estimate'?x.costPrice:null}));}
