@@ -126,7 +126,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.14 日報連動表示修正版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.15 運搬入力・社員表示修正版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -430,6 +430,7 @@ function applyCloudRoleUI(){
   const masterNav=document.querySelector('nav [data-page="masterPage"]');
   if(masterNav)masterNav.style.display=isAdmin?'block':'none';
   if(!isAdmin&&$('#masterPage')?.classList.contains('active'))document.querySelector('[data-page="homePage"]')?.click();
+  document.dispatchEvent(new CustomEvent('toya-role-changed'));
 }
 
 async function cloudRefreshSession(){
@@ -1955,7 +1956,7 @@ async function deleteSaved(id){
     renderRecords();
   }
 }
-async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const rows=[['日付','現場','記入者','クラウド登録者','天気','明建人数','朝日人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ','終了日区分','勤務日区分','休憩（分）','実働（分）','夜間（分）','休日夜間（分）','残業倍率']];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo,...(window.ToyaWorkTimeEngine?.exportColumns(d)||['','','','','','',''])]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
+async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const includePremiumRates=cloudProfile?.active===true&&cloudProfile.role==='admin';const rows=[['日付','現場','記入者','クラウド登録者','天気','明建人数','朝日人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ','終了日区分','勤務日区分','休憩（分）','実働（分）','夜間（分）','休日夜間（分）',...(includePremiumRates?['残業倍率']:[])]];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo,...(window.ToyaWorkTimeEngine?.exportColumns(d,{includeRates:includePremiumRates})||Array(includePremiumRates?7:6).fill(''))]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
 const DAILY_REPORT_STAFF=['上村 凌太','宮下 哲也'];
 async function renderHome(){
   let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);
@@ -2026,14 +2027,14 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 <script src="waste-price-admin.js?v=20260908-shori-v1"></script>
 <script src="site-waste-cost-summary.js?v=20260910-sites-v3"></script>
 <script src="dispatch-travel.js?v=20260909-travel-v1"></script>
-<script src="work-time.js?v=20260911-holiday-rates-v1"></script>
+<script src="work-time.js?v=20260912-employee-time-v1"></script>
 <script src="labor-cost-admin.js?v=20260911-premiums-v1"></script>
 <script src="vehicle-cost-admin.js?v=20260910-unified-rates-v1"></script>
 <script src="equipment-cost-admin.js?v=20260910-unified-rates-v1"></script>
-<script src="equipment-transport.js?v=20260909-transport-v1"></script>
-<script src="usage-hours.js?v=20260911-holiday-rates-v1"></script>
+<script src="equipment-transport.js?v=20260912-input-v2"></script>
+<script src="usage-hours.js?v=20260912-employee-time-v1"></script>
 <script src="attachment-rate-admin.js?v=20260910-add-name-v1"></script>
-<script src="pending-transport-tools.js?v=20260910-unified-rates-v1"></script>
+<script src="pending-transport-tools.js?v=20260912-input-v2"></script>
 <script src="site-financial-summary.js?v=20260911-quote-quantities-v1"></script>
 <script src="employee-activity-summary.js?v=20260910-sites-v3"></script>
 <script src="shared-site-master.js?v=20260911-completion-v1"></script>

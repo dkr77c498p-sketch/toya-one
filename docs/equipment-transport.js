@@ -48,7 +48,13 @@
   const yen = n => Number(n).toLocaleString('ja-JP', {maximumFractionDigits:2}) + '円';
   const identity = () => typeof cloudProfile !== 'undefined' && cloudProfile?.active === true && cloudProfile.company_id && typeof cloudClient !== 'undefined' && cloudClient ? cloudProfile.id + ':' + cloudProfile.company_id + ':' + cloudProfile.role : '';
   const isAdmin = () => !!identity() && cloudProfile.role === 'admin';
-  let owner = '', catalog = [], rates = [], loading = false, loaded = false, ticket = 0;
+  // TOYA's input labels contain no prices. They remain usable for a draft while
+  // authentication/catalog loading is pending; authenticated rates stay private.
+  const draftCatalog = () => ['宝友','横手重機'].flatMap(carrier =>
+    ['SK55SR','SK135（1号機）','SK135（2号機）'].flatMap(machine_name =>
+      ['近距離運搬','遠方運搬','鹿児島市内運搬','鹿児島市外運搬'].map(distance_label =>
+        ({carrier,machine_name,distance_label,price_basis:'one_way_per_machine'}))));
+  let owner = '', catalog = draftCatalog(), rates = [], loading = false, loaded = false, ticket = 0;
   const rowData = row => ({name:q('.i-name',row).value,unit:q('.i-unit',row).value,qty:q('.i-qty',row).value,price:q('.i-price',row).value,company:q('.i-company',row).value});
   function paintRow(row) {
     const item = rowData(row), result = calculate(item, rates), info = q('[data-et-result]',row);
@@ -121,7 +127,7 @@
   function preview() {
     if(!q('#etPreview'))return;
     const r=selected(),count=Number(q('#etCount').value);
-    q('#etAdd').disabled=!identity()||!r||!Number.isInteger(count)||count<1||count>1000;
+    q('#etAdd').disabled=!r||!Number.isInteger(count)||count<1||count>1000;
     if(!r){q('#etPreview').textContent='運搬会社・重機・距離区分を選んでください。';return;}
     const value=calculate({name:encode(r),unit:'片道回',qty:count,price:'',company:r.carrier},rates);
     q('#etPreview').textContent=isAdmin()?(value.value===null?value.issue:yen(value.unit)+' × '+count+'回 ＝ '+yen(value.value)):'この内容を日報へ追加し、日報を保存してください。金額入力は不要です。';
@@ -132,10 +138,12 @@
     card.innerHTML='<h2>重機回送（宝友・横手重機など）</h2><p class="note">運搬会社・重機・距離・回数を選びます。重機1台・片道1回が基準です。往復は2回。同じ運搬を複数人の日報に重ねて入力しないでください。</p>'+
       '<label for="etCarrier">運搬会社</label><select id="etCarrier"></select><label for="etMachine">運ぶ重機</label><select id="etMachine"></select><label for="etDistance">距離区分</label><select id="etDistance"></select>'+
       '<label for="etCount">片道の回数（この重機1台分）</label><input id="etCount" type="number" inputmode="numeric" min="1" max="1000" step="1" value="1"><div class="et-count" style="margin-top:8px"><button type="button" class="btn light" data-et-count="1">片道1回</button><button type="button" class="btn light" data-et-count="2">往復2回</button></div>'+
-      '<p id="etPreview" class="note" role="status"></p><button id="etAdd" type="button" class="btn dark et-wide" disabled>＋ この回送を日報へ追加</button><p id="etMessage" class="note" role="status"></p><p class="note">選択だけでは未登録です。追加後、日報を保存すると管理者ホームの「重機回送費」へ反映します。提示単価に消費税・高速代等は自動加算しません。入庫日と出庫日が違う場合は各日に1回ずつ入力してください。</p>';
+      '<p id="etPreview" class="note" role="status"></p><button id="etAdd" type="button" class="btn dark et-wide" disabled>＋ この回送を日報へ追加</button><p id="etMessage" class="note" role="status"></p><p id="etConnection" class="note" role="status" aria-live="polite"></p><div class="et-count"><button id="etReload" class="btn light" type="button">選択肢を更新</button><button id="etLogin" class="btn light" type="button" hidden>ログイン画面へ</button></div><p class="note">選択後に「この回送を日報へ追加」を押し、最後に日報を保存してください。入庫日と出庫日が違う場合は各日に1回ずつ入力します。</p>';
     q('#items').closest('.card').before(card);
-    if(!q('#etStyles')){const s=document.createElement('style');s.id='etStyles';s.textContent='#etCard select,#etCard input,.et-item input{width:100%;box-sizing:border-box;min-height:44px;font-size:16px}.et-wide{width:100%}.et-count{display:flex;align-items:center;gap:8px}.et-count input{min-width:0;flex:1}.et-count button{min-height:44px;flex:1}.et-item summary{font-weight:700;cursor:pointer;padding:10px 0}.et-item [hidden]{display:none!important}.et-description{word-break:break-word}';document.head.appendChild(s);}
+    if(!q('#etStyles')){const s=document.createElement('style');s.id='etStyles';s.textContent='#etCard select,#etCard input,.et-item input{width:100%;box-sizing:border-box;min-height:44px;font-size:16px}.et-wide{width:100%}.et-count{display:flex;align-items:center;gap:8px}.et-count input{min-width:0;flex:1}.et-count button{min-height:44px;flex:1}.et-item summary{font-weight:700;cursor:pointer;padding:10px 0}#etCard [hidden],.et-item [hidden]{display:none!important}.et-description{word-break:break-word}';document.head.appendChild(s);}
     q('#etCarrier').onchange=()=>refreshOptions(1);q('#etMachine').onchange=()=>refreshOptions(2);q('#etDistance').onchange=preview;q('#etCount').oninput=preview;
+    q('#etReload').onclick=()=>init(true);
+    q('#etLogin').onclick=()=>{q('nav [data-page="homePage"]')?.click();q('#cloudEmail')?.scrollIntoView({behavior:'smooth',block:'center'});q('#cloudEmail')?.focus();};
     card.addEventListener('click',e=>{const b=e.target.closest('[data-et-count]');if(b){q('#etCount').value=b.dataset.etCount;preview();}});
     q('#etAdd').onclick=()=>{
       const r=selected();if(!r||q('#etAdd').disabled)return;
@@ -146,24 +154,34 @@
     };
     refreshOptions();
   }
-  async function init() {
+  async function init(force=false) {
     installHooks();ui();
     const next=identity();
-    if(next!==owner){owner=next;catalog=[];rates=[];loaded=false;loading=false;ticket++;refreshOptions();document.querySelectorAll('.et-item').forEach(paintRow);}
-    if(!next){if(q('#etMessage'))q('#etMessage').textContent='ログイン後に選択できます。';return;}
-    if(loading||loaded)return;loading=true;const mine=owner,t=++ticket;
+    if(next!==owner){owner=next;catalog=draftCatalog();rates=[];loaded=false;loading=false;ticket++;if(q('#etReload'))q('#etReload').disabled=false;refreshOptions();document.querySelectorAll('.et-item').forEach(paintRow);}
+    if(!q('#etConnection'))return;
+    q('#etLogin').hidden=!!next;
+    if(!next){q('#etConnection').textContent='未接続です。回送内容は入力できます。クラウドへ保存する前に、ホームでログインしてください。';return;}
+    if(loading||(loaded&&!force))return;loading=true;const mine=owner,t=++ticket;
+    q('#etConnection').textContent='運搬の登録内容を確認中…（入力はできます）';
+    q('#etReload').disabled=true;
     try{
       const result=await cloudClient.rpc('equipment_transport_catalog_v1');if(result.error)throw result.error;
+      if(owner!==mine||identity()!==mine||t!==ticket)return;
+      // Catalog choices must not disappear if an administrator's price read fails.
+      const choices=Array.isArray(result.data)?result.data:[];
+      catalog=choices.length?choices:draftCatalog();refreshOptions();
       let rr=[];
       if(isAdmin()){const res=await cloudClient.from('equipment_transport_rate_master').select('id,carrier,machine_name,distance_label,unit_price,price_basis,active').eq('company_id',cloudProfile.company_id).eq('active',true);if(res.error)throw res.error;rr=res.data||[];}
       if(owner!==mine||identity()!==mine||t!==ticket)return;
-      catalog=result.data||[];rates=rr;loaded=true;refreshOptions();document.querySelectorAll('.et-item').forEach(paintRow);q('#etMessage').textContent='';
-    }catch(e){if(owner===mine&&t===ticket&&q('#etMessage'))q('#etMessage').textContent='回送の選択肢を読み込めませんでした。日報入力タブを開き直してください。';}
-    finally{if(t===ticket)loading=false;}
+      rates=rr;loaded=true;refreshOptions();document.querySelectorAll('.et-item').forEach(paintRow);
+      q('#etConnection').textContent=choices.length?'登録済みの運搬会社・重機・距離から選べます。':'登録された選択肢はまだありません。入力した回送の金額は管理者が確認します。';
+    }catch(e){if(owner===mine&&identity()===mine&&t===ticket){rates=[];refreshOptions();document.querySelectorAll('.et-item').forEach(paintRow);q('#etConnection').textContent='登録内容を確認できませんでした。回送内容は入力できます。接続後に「選択肢を更新」を押してください。';}}
+    finally{if(t===ticket){loading=false;q('#etReload').disabled=false;}}
   }
   function start(){
     init();document.addEventListener('click',e=>{if(e.target.closest?.('nav [data-page="reportPage"]'))init();});
-    window.addEventListener('pageshow',init);
+    window.addEventListener('pageshow',()=>init());
+    document.addEventListener('toya-role-changed',()=>init());
     let n=0;const timer=setInterval(()=>{init();if(loaded||++n>=20)clearInterval(timer);},1000);
     setInterval(()=>{if(identity()!==owner)init();},1000);
   }

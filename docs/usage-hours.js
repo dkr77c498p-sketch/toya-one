@@ -176,6 +176,7 @@
  if(typeof module==='object'&&module.exports){module.exports=engine;return;}
  if(window.ToyaUsageHoursEngine)return;window.ToyaUsageHoursEngine=engine;
  const q=(s,r=document)=>r.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const isAdmin=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin';
  const groups=[['labor','人工の時間'],['dispatch','応援・派遣の時間'],['vehicle','車両の使用時間'],['equipment','重機の使用時間'],['attachment','アタッチメントの使用時間'],['tool','小型機械・工具の使用時間']];
  let state={},enabled=true,installed=false,originalCollect=null,breakMinutes=60,scheduled=false;
  const rid=(k,n)=>k+'|'+key(n);
@@ -223,7 +224,13 @@
  }
  function premiumHTML(a,i,pfx){
   const p=workTime.resolvePremium(a.premium,originalCollect().workTime)||{overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:workTime.overtimeFactor(originalCollect().workTime?.holiday)};
-  return '<details><summary>残業・夜間の内訳'+(workTime.describe(a.premium)?'（入力あり）':'')+'</summary><p class="note">実働時間のうち、割増になる時間だけ入力します。同じ時間は重ねません。</p>'+[['overtimeMinutes','残業（17〜22時・分）'],['nightMinutes','夜間（1.5倍・分）'],['holidayNightMinutes','休日夜間（1.6倍・分）']].map(([k,label])=>'<label>'+label+'<input type="number" inputmode="numeric" min="0" max="1440" step="1" data-uh-premium="'+k+'" data-uh-allocation="'+i+'" aria-label="'+pfx+' '+label+'" value="'+esc(p[k])+'"></label>').join('')+'<label>残業倍率<select data-uh-premium="overtimeMultiplier" data-uh-allocation="'+i+'" aria-label="'+pfx+' 残業倍率"><option value=""'+(p.overtimeMultiplier==null?' selected':'')+'>未選択</option>'+[1.25,1.3].map(n=>'<option value="'+n+'"'+(p.overtimeMultiplier===n?' selected':'')+'>'+(n===1.25?'通常の残業 1.25倍':'休日残業 1.3倍')+'</option>').join('')+'</select></label></details>';
+  const admin=isAdmin();
+  const dayType=p.overtimeMultiplier===1.3?'holiday':p.overtimeMultiplier===1.25?'ordinary':'';
+  const dayLabel=admin?'残業倍率':'残業の勤務日';
+  const choices=admin?[['1.25','通常の残業 1.25倍'],['1.3','休日残業 1.3倍']]:[['ordinary','通常日'],['holiday','休日']];
+  const value=admin?String(p.overtimeMultiplier??''):dayType;
+  const daySelect='<label>'+dayLabel+'<select '+(admin?'data-uh-premium="overtimeMultiplier"':'data-uh-day-type')+' data-uh-allocation="'+i+'" aria-label="'+pfx+' '+dayLabel+'"><option value=""'+(value===''?' selected':'')+'>未選択</option>'+choices.map(([v,label])=>'<option value="'+v+'"'+(value===v?' selected':'')+'>'+label+'</option>').join('')+'</select></label>';
+  return '<details><summary>残業・夜間の内訳'+(workTime.describe(a.premium,{includeRates:false})?'（入力あり）':'')+'</summary><p class="note">実働時間のうち、残業・夜間の時間だけ入力します。同じ時間は重ねません。</p>'+[['overtimeMinutes','残業（17〜22時・分）'],['nightMinutes','夜間（22〜翌5時・分）'+(admin?' 1.5倍':'')],['holidayNightMinutes','休日夜間（22〜翌5時・分）'+(admin?' 1.6倍':'')]].map(([k,label])=>'<label>'+label+'<input type="number" inputmode="numeric" min="0" max="1440" step="1" data-uh-premium="'+k+'" data-uh-allocation="'+i+'" aria-label="'+pfx+' '+label+'" value="'+esc(p[k])+'"></label>').join('')+daySelect+'</details>';
  }
  function mountHosts(){
   const worker=q('input[name="worker"]')?.closest('.choice-grid');
@@ -261,11 +268,12 @@
    (kind==='dispatch'?(e.allocations.length===1?'<p class="note uh-travel-auto">通勤費・高速代：'+esc(e.travelSite)+'へ自動計上（1回だけ）</p>':
     '<label>通勤費・高速代の計上先（1回だけ）<select data-uh-travel><option value="" '+(!e.travelSite?'selected':'')+'>計上先の現場を選択</option>'+e.allocations.filter(a=>availableSites().some(n=>norm(n)===norm(a.site))).map(a=>'<option value="'+esc(a.site)+'" '+(a.site===e.travelSite?'selected':'')+'>'+esc(a.site)+'</option>').join('')+'</select></label>'):'')+
    '<p class="note uh-note" role="status">'+esc(message)+'</p>'+
-   (kind==='attachment'?'<p class="note">アタッチメント独自の時間です。重機の時間・燃料は重ねて加算しません。単価未登録なら金額のみ要確認です。</p>':'')+'</div>';
+   (kind==='attachment'?'<p class="note">アタッチメント自身を使用した時間を入力します。</p>':'')+'</div>';
  }
  function display(){
   if(!q('#uhCard')||!originalCollect)return;
   mountHosts();const d=originalCollect(),entries=sync(d);
+  q('#uhRateGuide').textContent=isAdmin()?'各項目の選択欄で時間を入力します。人工・車両・重機は日額÷8時間、アタッチメント・小型機械は登録時間単価です。空欄と0時間は区別し、保存済みの調整額は優先します。':'各項目の選択欄で、作業・使用した時間を入力します。未入力と0時間は区別します。';
   const shift=workTime.report(d);if(shift&&!shift.issue){breakMinutes=shift.breakMinutes;q('#uhBreak').value=breakMinutes;}
   q('#uhBreak').closest('details').hidden=!!shift;
   for(const [kind,title] of groups){
@@ -274,7 +282,7 @@
     const host=q('#uhInline-'+id);if(!host)continue;
     const es=entries.filter(e=>e.kind===kind&&(!name||e.label===name));
     host.hidden=!enabled||!es.length;
-    const structure=JSON.stringify(es.map(e=>[e.kind,e.label,e.quantity,e.allocations.map(a=>a.site)]));
+    const structure=JSON.stringify([isAdmin(),es.map(e=>[e.kind,e.label,e.quantity,e.allocations.map(a=>a.site)])]);
     // Do not detach a field while the user is typing in it on a mobile keyboard.
     if(host.contains(document.activeElement)&&host.dataset.structure===structure)continue;
     host.dataset.structure=structure;
@@ -313,7 +321,7 @@
    .uh-inline .note{margin:8px 0 0}#uhCard>details>summary{padding:0}#uhCard>details[open]>summary{padding-bottom:12px}
   `;document.head.appendChild(style);
   const card=document.createElement('div');card.id='uhCard';card.className='card';
-  card.innerHTML='<details><summary>時間計算の設定（通常は変更不要）</summary><label class="uh-toggle"><input id="uhEnable" type="checkbox" checked>時間で自動計算する</label><p class="note">各項目の選択欄で時間を入力します。人工・車両・重機は日額÷8時間、アタッチメント・小型機械は登録時間単価です。空欄と0時間は区別し、保存済みの調整額は優先します。</p><details><summary>人工の標準休憩・一括設定</summary><label>休憩（分）<input data-stepper="1" id="uhBreak" type="number" value="60" min="0" max="1440" step="1"></label><button id="uhDefault" type="button" class="btn light">移動なしの人工を日報の時刻から設定</button><p class="note">車両・機械へはコピーしません。</p></details><details><summary>移動先変更・時間入力のやり直し</summary><button id="uhReset" type="button" class="btn light">この画面の時間入力だけをやり直す</button></details></details><p class="note" id="uhInlineStatus"></p>';
+  card.innerHTML='<details><summary>時間計算の設定（通常は変更不要）</summary><label class="uh-toggle"><input id="uhEnable" type="checkbox" checked>時間で自動計算する</label><p class="note" id="uhRateGuide"></p><details><summary>人工の標準休憩・一括設定</summary><label>休憩（分）<input data-stepper="1" id="uhBreak" type="number" value="60" min="0" max="1440" step="1"></label><button id="uhDefault" type="button" class="btn light">移動なしの人工を日報の時刻から設定</button><p class="note">車両・機械へはコピーしません。</p></details><details><summary>移動先変更・時間入力のやり直し</summary><button id="uhReset" type="button" class="btn light">この画面の時間入力だけをやり直す</button></details></details><p class="note" id="uhInlineStatus"></p>';
   q('#siteMoveCard').after(card);
   q('#uhEnable').onchange=()=>{enabled=q('#uhEnable').checked;display();};
   q('#uhBreak').oninput=()=>{breakMinutes=Number(q('#uhBreak').value);};
@@ -333,7 +341,14 @@
    entry.fromReportTime=false;entry.allocations[Number(i)].minutes=h===''&&m===''?null:Number(h||0)*60+Number(m||0);updateRow(row);
   });
   document.addEventListener('change',event=>{
-   const el=event.target;if(el.matches('.uh-inline [data-uh-travel]'))state[el.closest('[data-uh-id]').dataset.uhId].travelSite=el.value;
+   const el=event.target;
+   if(el.matches('.uh-inline [data-uh-day-type]')){
+    const row=el.closest('[data-uh-id]'),e=state[row.dataset.uhId],a=e.allocations[Number(el.dataset.uhAllocation)];
+    e.fromReportTime=false;a.premium||={overtimeMinutes:0,nightMinutes:0,holidayNightMinutes:0,overtimeMultiplier:null};
+    a.premium.overtimeMultiplier=el.value==='holiday'?workTime.overtimeFactor(true):el.value==='ordinary'?workTime.overtimeFactor(false):null;
+    updateRow(row);return;
+   }
+   if(el.matches('.uh-inline [data-uh-travel]'))state[el.closest('[data-uh-id]').dataset.uhId].travelSite=el.value;
   });
   document.addEventListener('click',event=>{
    const b=event.target.closest('.uh-inline button');if(!b)return;
@@ -372,7 +387,7 @@
     const problem=validateEntry(e);if(problem&&!problem.includes('未入力')){alert(e.label+'：'+problem);return false;}
    }return true;
   };
-  const text=window.lineText;window.lineText=function(d){let t=text.apply(this,arguments);if(d.usageHours?.entries?.length)t+='\n\n■現場別の作業・使用時間\n'+d.usageHours.entries.map(e=>e.label+'：'+e.allocations.map(a=>a.site+' '+(a.minutes===null?'時間未入力':Math.floor(a.minutes/60)+'時間'+a.minutes%60+'分')+(workTime.describe(a.premium)?'（'+workTime.describe(a.premium)+'）':'')).join('／')).join('\n');return t;};
+  const text=window.lineText;window.lineText=function(d){let t=text.apply(this,arguments);if(d.usageHours?.entries?.length)t+='\n\n■現場別の作業・使用時間\n'+d.usageHours.entries.map(e=>e.label+'：'+e.allocations.map(a=>a.site+' '+(a.minutes===null?'時間未入力':Math.floor(a.minutes/60)+'時間'+a.minutes%60+'分')+(workTime.describe(a.premium,{includeRates:false})?'（'+workTime.describe(a.premium,{includeRates:false})+'）':'')).join('／')).join('\n');return t;};
   document.addEventListener('change',event=>{
    const el=event.target;
    if(el.matches('input[name="worker"],input[name="vehicle"],input[name="machine"],input[name="attachment"],#meikenCount,#asahiCount,#start,#end,#site,.sm-site')||el.closest('#smallToolChoices,#machineAttachmentChoices'))schedule();
@@ -386,5 +401,6 @@
   const draft=typeof get==='function'&&typeof LS!=='undefined'?get(LS.draft,null):null;
   if(draft?.usageHours)restore(draft,'edit');else display();
  }
+ document.addEventListener('toya-role-changed',display);
  const start=()=>setTimeout(install,180);if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();

@@ -14,14 +14,13 @@
   q('#etCard').appendChild(box);
   q('#ptAdd').onclick=()=>{
    const carrier=q('#ptCarrier').value.trim(),machine=q('#ptMachine').value.trim(),route=q('#ptRoute').value.trim(),count=Number(q('#ptCount').value);
-   if(!ident())return alert('ログインを確認してください。');
    if(!carrier||!machine)return alert('運搬会社と機械名を入力してください。');
    if([carrier,machine,route].some(t=>/[｜|<>]/.test(t)||t.length>150))return alert('名称・メモは150文字以内で、区切り記号は使わず入力してください。');
    if(!Number.isInteger(count)||count<1||count>1000)return alert('片道回数は1以上の整数にしてください。');
    const name='重機回送：'+carrier+'｜'+machine+'｜単価未登録（'+(route||'経路未記入')+'）';
    if([...document.querySelectorAll('#items .i-name')].some(i=>i.value===name)&&!confirm('同じ回送が入力済みです。別の運搬として追加しますか？'))return;
    window.addItem({name,company:carrier,unit:'片道回',qty:count,price:'',isWaste:false});
-   q('#ptMessage').textContent='金額未入力で追加しました。日報を保存すると、管理者ホームへ未入力のお知らせが出ます。';
+   q('#ptMessage').textContent=ident()?'金額未入力で追加しました。日報を保存すると、管理者ホームへ未入力のお知らせが出ます。':'入力欄へ追加しました。クラウドへ保存する前に、ホームでログインしてください。';
   };
  }
  function toolNames(){let a=[];try{if(typeof get==='function'&&typeof LS!=='undefined')a=get(LS.attachments,[]);}catch{}

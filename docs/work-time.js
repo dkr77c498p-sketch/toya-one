@@ -17,7 +17,7 @@
   if(!p)return '';
   if(!integer(minutes)||bands.some(k=>!integer(p[k])))return '実働・残業・夜間は0〜24時間の分数で入力してください。';
   if(bands.reduce((n,k)=>n+p[k],0)>minutes)return '残業・夜間・休日夜間の合計が実働時間を超えています。同じ時間は重ねて入力しません。';
-  if(p.overtimeMultiplier!=null&&!factor(p.overtimeMultiplier))return '残業倍率は1.25倍または1.3倍を選んでください。';
+  if(p.overtimeMultiplier!=null&&!factor(p.overtimeMultiplier))return '残業の勤務日区分を確認してください。';
   return '';
  }
  function weighted(minutes,p){
@@ -56,15 +56,16 @@
  }
  const report=d=>d?.workTime?.version===1?classify(d.start,d.end,d.workTime):null;
  const textMinutes=m=>m==null?'未入力':Math.floor(m/60)+'時間'+(m%60?m%60+'分':'');
- function describe(p){
+ function describe(p,{includeRates=true}={}){
   if(!p)return '';
-  return [['overtimeMinutes',p.overtimeMultiplier===1.3?'休日残業':'残業'],['nightMinutes','夜間'],['holidayNightMinutes','休日夜間']].filter(([k])=>p[k]>0).map(([k,label])=>label+' '+textMinutes(p[k])+(k==='overtimeMinutes'?'（'+(factor(p.overtimeMultiplier)?p.overtimeMultiplier+'倍':'倍率未選択')+'）':k==='nightMinutes'?'（1.5倍）':'（1.6倍）')).join(' ／ ');
+  return [['overtimeMinutes',p.overtimeMultiplier===1.3?'休日残業':'残業'],['nightMinutes','夜間'],['holidayNightMinutes','休日夜間']].filter(([k])=>p[k]>0).map(([k,label])=>label+' '+textMinutes(p[k])+(includeRates?(k==='overtimeMinutes'?'（'+(factor(p.overtimeMultiplier)?p.overtimeMultiplier+'倍':'倍率未選択')+'）':k==='nightMinutes'?'（1.5倍）':'（1.6倍）'):'')).join(' ／ ');
  }
- function exportColumns(d){const x=report(d);return x?[d.workTime.nextDay?'翌日':'当日',d.workTime.holiday?'休日':'通常日',x.breakMinutes,x.minutes,x.premium?.nightMinutes??'',x.premium?.holidayNightMinutes??'',x.premium?.overtimeMultiplier??'未選択']:['','','','','','',''];}
+ function exportColumns(d,{includeRates=true}={}){const x=report(d);const columns=x?[d.workTime.nextDay?'翌日':'当日',d.workTime.holiday?'休日':'通常日',x.breakMinutes,x.minutes,x.premium?.nightMinutes??'',x.premium?.holidayNightMinutes??'',x.premium?.overtimeMultiplier??'未選択']:['','','','','','',''];return includeRates?columns:columns.slice(0,-1);}
  const engine=Object.freeze({standardBreaks,overtimeFactor,resolvePremium,classify,report,premiumError,weighted,describe,textMinutes,exportColumns});
  if(typeof module==='object'&&module.exports){module.exports=engine;return;}
  if(window.ToyaWorkTimeEngine)return;window.ToyaWorkTimeEngine=engine;
  const q=s=>document.querySelector(s),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const isAdmin=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin';
  let enabled=true,manualPremium=null,installed=false;
  function read(){
   return {version:1,nextDay:q('#wtNextDay').checked,holiday:q('#wtHoliday').checked,
@@ -77,9 +78,12 @@
  }
  function update(apply=false,holidayChanged=false){
   q('#wtEnable').checked=enabled;q('#wtFields').hidden=!enabled;
-  q('#wtMultiplier').value=(q('#wtHoliday').checked?'休日残業 1.3倍':'通常の残業 1.25倍');
+  q('#wtMultiplierWrap').hidden=!isAdmin();
+  q('#wtMultiplier').value=isAdmin()?(q('#wtHoliday').checked?'休日残業 1.3倍':'通常の残業 1.25倍'):'';
+  q('label[for=wtNight]').textContent='夜間（22〜翌5時・時間）'+(isAdmin()?' 1.5倍':'');
+  q('label[for=wtHolidayNight]').textContent='休日夜間（22〜翌5時・時間）'+(isAdmin()?' 1.6倍':'');
   if(enabled){const x=classify(q('#start').value,q('#end').value,read());
-   q('#wtStatus').textContent=x.issue||'実働 '+textMinutes(x.minutes)+' ／ 休憩 '+x.breakMinutes+'分'+(describe(x.premium)?' ／ '+describe(x.premium):'');
+   q('#wtStatus').textContent=x.issue||'実働 '+textMinutes(x.minutes)+' ／ 休憩 '+x.breakMinutes+'分'+(describe(x.premium,{includeRates:isAdmin()})?' ／ '+describe(x.premium,{includeRates:isAdmin()}):'');
    if(!manualPremium&&x.premium){q('#overtime').value=x.premium.overtimeMinutes/60;q('#wtNight').value=x.premium.nightMinutes/60;q('#wtHolidayNight').value=x.premium.holidayNightMinutes/60;}
   }else q('#wtStatus').textContent='この日報は以前の時間設定を保持しています。残業・夜間を入力するときは上のチェックを入れてください。';
   document.dispatchEvent(new CustomEvent('toya-work-time-change',{detail:{enabled,apply,holidayChanged}}));
@@ -96,7 +100,7 @@
   const oldInput=q('#overtime'),grid=oldInput.closest('.grid3'),oldWrap=[...grid.children].find(el=>el.contains(oldInput));
   grid.classList.replace('grid3','grid2');oldWrap.remove();
   const card=document.createElement('div');card.id='workTimeCard';card.className='row';
-  card.innerHTML='<h3>休憩・残業・夜間</h3><label class="wt-check"><input id="wtEnable" type="checkbox" checked>休憩・残業・夜間を入力する</label><div id="wtFields"><div class="grid2"><label class="wt-check"><input id="wtNextDay" type="checkbox">翌日終了</label><label class="wt-check"><input id="wtHoliday" type="checkbox">休日の作業</label></div><details><summary>休憩時間を変更</summary><p class="note">基本休憩：10:00〜10:30、12:00〜13:00、15:00〜15:30。作業時間と重なる部分を引きます。</p><div id="wtBreaks"></div><button id="wtAddBreak" type="button" class="btn light">＋休憩を追加</button></details><div class="grid2"><div id="wtOvertimeWrap"><label for="overtime">残業（17〜22時・時間）</label></div><div><label for="wtMultiplier">残業倍率（自動）</label><input id="wtMultiplier" type="text" readonly value="通常の残業 1.25倍"><p class="note">「休日の作業」で切り替わります。</p></div><div><label for="wtNight">夜間（22〜翌5時・1.5倍）</label><input id="wtNight" type="number" min="0" max="24" step="0.25" inputmode="decimal" value="0"></div><div><label for="wtHolidayNight">休日夜間（22〜翌5時・1.6倍）</label><input id="wtHolidayNight" type="number" min="0" max="24" step="0.25" inputmode="decimal" value="0"></div></div><p class="note">時間を入力します。残業・夜間は実働時間の内訳です。同じ時間は重ねず、作業者ごとの違いは下の人工欄で調整できます。</p><button id="wtApply" type="button" class="btn light">開始・終了・休憩から人工の時間を設定</button></div><p id="wtStatus" class="note" role="status" aria-live="polite"></p>';
+  card.innerHTML='<h3>休憩・残業・夜間</h3><label class="wt-check"><input id="wtEnable" type="checkbox" checked>休憩・残業・夜間を入力する</label><div id="wtFields"><div class="grid2"><label class="wt-check"><input id="wtNextDay" type="checkbox">翌日終了</label><label class="wt-check"><input id="wtHoliday" type="checkbox">休日の作業</label></div><details><summary>休憩時間を変更</summary><p class="note">基本休憩：10:00〜10:30、12:00〜13:00、15:00〜15:30。作業時間と重なる部分を引きます。</p><div id="wtBreaks"></div><button id="wtAddBreak" type="button" class="btn light">＋休憩を追加</button></details><div class="grid2"><div id="wtOvertimeWrap"><label for="overtime">残業（17〜22時・時間）</label></div><div id="wtMultiplierWrap" hidden><label for="wtMultiplier">残業倍率（自動）</label><input id="wtMultiplier" type="text" readonly value=""><p class="note">「休日の作業」で切り替わります。</p></div><div><label for="wtNight">夜間（22〜翌5時・時間）</label><input id="wtNight" type="number" min="0" max="24" step="0.25" inputmode="decimal" value="0"></div><div><label for="wtHolidayNight">休日夜間（22〜翌5時・時間）</label><input id="wtHolidayNight" type="number" min="0" max="24" step="0.25" inputmode="decimal" value="0"></div></div><p class="note">時間を入力します。残業・夜間は実働時間の内訳です。同じ時間は重ねず、作業者ごとの違いは下の人工欄で調整できます。</p><button id="wtApply" type="button" class="btn light">開始・終了・休憩から人工の時間を設定</button></div><p id="wtStatus" class="note" role="status" aria-live="polite"></p>';
   grid.after(card);q('#wtOvertimeWrap').appendChild(oldInput);oldInput.max='24';oldInput.step='0.25';oldInput.inputMode='decimal';
   const style=document.createElement('style');style.textContent='#workTimeCard{margin-top:16px}#workTimeCard [hidden]{display:none!important}#workTimeCard .wt-check{display:flex;gap:8px;align-items:center}#workTimeCard .wt-check input,#workTimeCard .wt-break input[type=checkbox]{width:24px;min-width:24px;height:24px;margin:0}#workTimeCard input,#workTimeCard select{box-sizing:border-box;min-width:0;font-size:16px}#workTimeCard .wt-break{display:grid;grid-template-columns:24px minmax(0,1fr) 18px minmax(0,1fr);align-items:center;gap:6px;margin:8px 0}#workTimeCard summary{font-weight:800;padding:12px 0}#workTimeCard .btn{width:100%;margin:8px 0}';document.head.appendChild(style);
   q('#wtEnable').onchange=()=>{enabled=q('#wtEnable').checked;update();};q('#wtAddBreak').onclick=()=>{addBreak();update();};
@@ -116,8 +120,9 @@
   const collect=window.collect;window.collect=function(){const d=collect.apply(this,arguments);if(enabled){d.workTime=read();const x=report(d);if(x?.premium)d.overtime=x.premium.overtimeMinutes/60;}return d;};
   const fill=window.fillReportForm;window.fillReportForm=function(d,mode='edit'){const r=fill.apply(this,arguments);restore(d,mode);return r;};
   const valid=window.validate;window.validate=function(d){if(!valid.apply(this,arguments))return false;const x=report(d);if(x?.issue){alert(x.issue);return false;}return true;};
-  const line=window.lineText;window.lineText=function(d){let t=line.apply(this,arguments);const x=report(d);if(x)t+='\n\n■休憩・残業・夜間\n'+(d.workTime.nextDay?'翌日終了 ／ ':'')+(d.workTime.holiday?'休日 ／ ':'')+'実働 '+textMinutes(x.minutes)+' ／ 休憩 '+x.breakMinutes+'分\n'+(describe(x.premium)||'残業・夜間なし');return t;};
+  const line=window.lineText;window.lineText=function(d){let t=line.apply(this,arguments);const x=report(d);if(x)t+='\n\n■休憩・残業・夜間\n'+(d.workTime.nextDay?'翌日終了 ／ ':'')+(d.workTime.holiday?'休日 ／ ':'')+'実働 '+textMinutes(x.minutes)+' ／ 休憩 '+x.breakMinutes+'分\n'+(describe(x.premium,{includeRates:false})||'残業・夜間なし');return t;};
   standardBreaks().forEach(addBreak);update();
  }
+ document.addEventListener('toya-role-changed',()=>{if(installed)update();});
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
 })();
