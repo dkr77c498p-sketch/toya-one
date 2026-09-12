@@ -50,14 +50,30 @@
  if(typeof module==='object'&&module.exports){module.exports=api;return;}
  window.ToyaAttachmentUsage=api;
  const q=s=>document.querySelector(s);
- let request=0,identity='';
+ let request=0,identity='',connectionStatus='',returnAfterLogin=false,resumeTimer;
  const profile=()=>typeof cloudProfile==='undefined'?null:cloudProfile;
  const profileKey=()=>{const p=profile();return p?JSON.stringify([p.id,p.company_id,p.role,p.active]):'';};
+ const allowed=p=>!!p?.id&&!!p.company_id&&p.active===true&&['admin','employee'].includes(p.role);
+ const sessionStatus=()=>typeof cloudSessionState==='undefined'?(allowed(profile())?'ready':'signed_out'):cloudSessionState.status;
+ const visible=()=>q('#attachmentPage')?.classList.contains('active');
  function clear(){
   for(const id of ['#attachmentList','#leasedAttachmentList'])q(id)?.replaceChildren();
-  for(const id of ['#attachmentCount','#leasedAttachmentCount'])if(q(id))q(id).textContent='0';
+  for(const id of ['#attachmentCount','#leasedAttachmentCount'])if(q(id))q(id).textContent='—';
  }
  function status(message){if(q('#attachmentUsageStatus'))q('#attachmentUsageStatus').textContent=message;}
+ function busy(value){
+  const button=q('#attachmentUsageRefresh');
+  if(button){button.disabled=value;button.textContent=value?'確認中…':'使用記録を更新';}
+  q('#attachmentPage')?.setAttribute('aria-busy',String(value));
+ }
+ function loginAction(show){const button=q('#attachmentUsageLogin');if(button)button.hidden=!show;}
+ function unavailable(state){
+  clear();
+  loginAction(['signed_out','inactive'].includes(state.status));
+  status(state.status==='signed_out'
+   ?'この画面ではログインしていません。ログインすると保存済み日報の使用記録を表示します。'
+   :state.message||'接続を確認できませんでした。「使用記録を更新」を押して再度お試しください。');
+ }
  function paint(rows){
   const node=(cls,value)=>{const el=document.createElement('div');el.className=cls;el.textContent=value;return el;};
   for(const leased of [false,true]){
@@ -79,20 +95,28 @@
    if(!items.length)list.append(node('empty','日報の使用記録はまだありません。'));
   }
  }
- api.render=async()=>{
-  const token=++request,who=profileKey(),p=profile();identity=who;
+ api.render=async(options={})=>{
+  const token=++request;
+  let who=profileKey();identity=who;connectionStatus=sessionStatus();
   const current=()=>token===request&&who===profileKey();
-  clear();
-  if(!p?.company_id||p.active===false){status('ログインすると日報の使用記録を表示します。');return;}
-  status('日報の使用記録を読み込み中…');
+  clear();loginAction(false);busy(true);status('接続を確認中…');
   try{
+   let state=typeof cloudSessionState==='undefined'?null:cloudSessionState;
+   if(options.recover!==false&&typeof cloudEnsureProfile==='function')state=await cloudEnsureProfile();
+   if(token!==request||state?.status==='changed')return;
+   const p=profile();who=profileKey();identity=who;
+   if(!allowed(p)){
+    unavailable(state&&state.status!=='unknown'?state:{status:'signed_out'});return;
+   }
+   status('日報の使用記録を読み込み中…');
    if(typeof cloudClient==='undefined'||!cloudClient)throw new Error('未接続');
    const reports=[];
    // Read just the usage fields, in a stable order, across the entire saved history.
    for(let start=0;;start+=500){
-    const {data,error}=await cloudClient.from('daily_reports')
+    const query=cloudClient.from('daily_reports')
      .select('id,report_date,site:report_data->>site,attachments:report_data->attachments,leaseAttachments:report_data->leaseAttachments,usageHours:report_data->usageHours,sites(name)')
      .eq('company_id',p.company_id).order('id',{ascending:true}).range(start,start+499);
+    const {data,error}=await (typeof cloudSessionTimeout==='function'?cloudSessionTimeout(query):query);
     if(!current())return;
     if(error)throw error;
     if(!Array.isArray(data))throw new Error('日報を取得できませんでした');
@@ -106,11 +130,31 @@
   }catch(error){
    if(!current())return;
    clear();status('使用記録を読み込めませんでした。「使用記録を更新」を押して再度お試しください。');
-  }
+  }finally{if(token===request)busy(false);}
  };
  api.sessionChanged=()=>{
-  if(identity===profileKey())return;
-  ++request;identity=profileKey();clear();status('');
-  if(q('#attachmentPage')?.classList.contains('active'))api.render();
+  if(identity===profileKey()&&connectionStatus===sessionStatus())return;
+  ++request;identity=profileKey();connectionStatus=sessionStatus();clear();status('');busy(false);loginAction(false);
+  if(returnAfterLogin&&allowed(profile())){
+   returnAfterLogin=false;q('nav [data-page="attachmentPage"]')?.click();return;
+  }
+  // The caller already checked the session. Do not start another auth check
+  // from its state-change callback or await the in-flight auth task here.
+  if(visible())api.render({recover:false});
  };
+ api.openLogin=()=>{
+  returnAfterLogin=true;
+  q('nav [data-page="homePage"]')?.click();
+  const input=q('#cloudEmail');
+  input?.scrollIntoView?.({block:'center',behavior:'smooth'});
+  input?.focus({preventScroll:true});
+ };
+ function resume(){
+  if(!visible()||document.visibilityState==='hidden')return;
+  clearTimeout(resumeTimer);
+  resumeTimer=setTimeout(()=>{if(visible()&&document.visibilityState!=='hidden')api.render();},100);
+ }
+ window.addEventListener('pageshow',resume);
+ window.addEventListener('online',resume);
+ document.addEventListener('visibilitychange',resume);
 })();

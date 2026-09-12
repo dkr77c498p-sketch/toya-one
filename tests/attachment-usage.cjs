@@ -75,7 +75,7 @@ const names=()=>Array.from(q('#attachmentList').querySelectorAll('.record-title'
   console.log('PASS pagination keeps historical usage; an empty refresh removes edited/deleted usage');
 
   handler=req=>req.range[0]===0?{data:many,error:null}:{data:null,error:{message:'denied'}};
-  await w.ToyaAttachmentUsage.render();assert.equal(q('#attachmentCount').textContent,'0');assert.equal(names().length,0);assert.match(q('#attachmentUsageStatus').textContent,/読み込めません/);
+  await w.ToyaAttachmentUsage.render();assert.equal(q('#attachmentCount').textContent,'—');assert.equal(names().length,0);assert.match(q('#attachmentUsageStatus').textContent,/読み込めません/);
   let resolve;handler=()=>new Promise(r=>resolve=r);const pending=w.ToyaAttachmentUsage.render();await tick();
   w.cloudProfile=null;w.ToyaAttachmentUsage.sessionChanged();resolve({data:reports,error:null});await pending;
   assert.equal(names().length,0);const n=requests.length;await w.ToyaAttachmentUsage.render();assert.equal(requests.length,n);

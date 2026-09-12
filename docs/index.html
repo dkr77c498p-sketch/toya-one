@@ -112,6 +112,7 @@ textarea{min-height:105px;resize:vertical}
 #reportPage .fuel-row .f-qty-label{margin-top:6px}
 #reportPage .fuel-row summary,#reportPage .f-more summary{padding:10px 0;font-size:13px;font-weight:700;color:#555;cursor:pointer}
 #reportPage .fuel-row .manifest-chip{width:auto;margin:0}
+#attachmentPage [hidden]{display:none!important}
 #otherFuelEntry>summary{padding:12px 0;font-size:14px;font-weight:700;cursor:pointer}
 .f-asset-title{overflow-wrap:anywhere}
 .quick-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}
@@ -139,7 +140,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.16 使用車両・重機の給油入力版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.17 使用記録・接続復帰修正版</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -275,11 +276,12 @@ textarea{min-height:105px;resize:vertical}
 <h2>アタッチメント・小型機械の使用記録</h2>
 <p class="note">保存済みの日報で使用した機材だけを表示します。最後に使用した日と現場を確認できます。</p>
 <div class="statgrid">
-  <div class="stat"><b id="attachmentCount">0</b><span>使用記録あり（自社）</span></div>
-  <div class="stat"><b id="leasedAttachmentCount">0</b><span>使用記録あり（リース）</span></div>
+  <div class="stat"><b id="attachmentCount">—</b><span>使用記録あり（自社）</span></div>
+  <div class="stat"><b id="leasedAttachmentCount">—</b><span>使用記録あり（リース）</span></div>
 </div>
 <p id="attachmentUsageStatus" class="note" role="status" aria-live="polite"></p>
-<button class="btn light" type="button" style="width:100%" onclick="renderAttachments()">使用記録を更新</button>
+<button id="attachmentUsageLogin" class="btn lime" type="button" style="width:100%;margin-bottom:10px" hidden onclick="ToyaAttachmentUsage.openLogin()">ログインして使用記録を表示</button>
+<button id="attachmentUsageRefresh" class="btn light" type="button" style="width:100%" onclick="renderAttachments()">使用記録を更新</button>
 </div>
 <div class="card">
 <h2>日報で使用した自社機材</h2>
@@ -438,7 +440,7 @@ async function cloudLoadActivity(){
 
 function applyCloudRoleUI(){
   window.ToyaAttachmentUsage?.sessionChanged();
-  const isAdmin=cloudProfile?.role==='admin';
+  const isAdmin=cloudProfile?.active===true&&cloudProfile.role==='admin';
   const ac=$('#activityCard');if(ac)ac.style.display=isAdmin?'block':'none';
   const dc=$('#adminDataCard');if(dc)dc.style.display=isAdmin?'block':'none';
   const masterNav=document.querySelector('nav [data-page="masterPage"]');
@@ -447,39 +449,92 @@ function applyCloudRoleUI(){
   document.dispatchEvent(new CustomEvent('toya-role-changed'));
 }
 
-async function cloudRefreshSession(){
-  if(!cloudClient){ cloudMsg('Supabaseライブラリを読み込めませんでした。','bad'); return; }
-  const {data:{session}}=await cloudClient.auth.getSession();
-  if(!session){
-    cloudProfile=null;
-    applyCloudRoleUI();
-    $('#cloudLoggedOut').style.display='block';
-    $('#cloudLoggedIn').style.display='none';
-    cloudMsg('クラウド未接続');
-    return;
+let cloudSessionTask=null,cloudSessionEpoch=0,cloudSessionUserId=null;
+let cloudSessionState={status:'unknown'};
+function cloudSessionTimeout(promise){
+  let timer;
+  return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('接続確認がタイムアウトしました。通信状態を確認して再度お試しください。')),15000);})]).finally(()=>clearTimeout(timer));
+}
+function cloudSetSessionState(state,session=null){
+  const previous=cloudProfile;
+  cloudSessionState=state;cloudProfile=state.status==='ready'?state.profile:null;
+  if(previous&&(previous.id!==cloudProfile?.id||previous.company_id!==cloudProfile?.company_id)){
+    cloudReportsCache=[];cloudPhotoCount={};cloudProfilesCache={};cloudSitesCache=[];
+    if($('#cloudReportList'))$('#cloudReportList').replaceChildren();
+    activityOpenedLogged=false;
   }
-  const {data:profile,error}=await cloudClient.from('profiles')
-    .select('id,company_id,name,role,active').eq('id',session.user.id).single();
-  if(error){
-    cloudMsg('プロフィール取得エラー：'+error.message,'bad');
-    return;
-  }
-  cloudProfile=profile;
-  $('#cloudLoggedOut').style.display='none';
-  $('#cloudLoggedIn').style.display='block';
+  $('#cloudLoggedOut').style.display=cloudProfile?'none':'block';
+  $('#cloudLoggedIn').style.display=cloudProfile?'block':'none';
+  if(cloudProfile){
+    $('#cloudUserName').textContent=cloudProfile.name||session?.user?.email||'ログイン中';
+    $('#cloudUserMeta').textContent=`${session?.user?.email||''}｜権限：${cloudProfile.role}`;
+    cloudMsg('クラウドに接続済み','ok');
+  }else cloudMsg(state.message||(state.status==='signed_out'?'この画面ではログインしていません。':'接続を確認してください。'),state.status==='signed_out'?'':'bad');
   applyCloudRoleUI();
-  $('#cloudUserName').textContent=profile.name||session.user.email||'ログイン中';
-  $('#cloudUserMeta').textContent=`${session.user.email||''}｜権限：${profile.role||'employee'}`;
-  cloudMsg('Supabaseに接続済み','ok');
+}
+function cloudEnsureProfile(){
+  if(cloudSessionTask)return cloudSessionTask;
+  const epoch=++cloudSessionEpoch;
+  const task=(async()=>{
+    let state,session=null;
+    try{
+      if(!cloudClient)throw new Error('接続用の読み込みに失敗しました。画面を再読み込みしてください。');
+      const auth=await cloudSessionTimeout(cloudClient.auth.getSession());
+      if(epoch!==cloudSessionEpoch)return {status:'changed'};
+      if(auth.error)throw auth.error;
+      session=auth.data?.session;
+      cloudSessionUserId=session?.user?.id||null;
+      if(!session?.user?.id)state={status:'signed_out'};
+      else{
+        const result=await cloudSessionTimeout(cloudClient.from('profiles').select('id,company_id,name,role,active').eq('id',session.user.id).single());
+        if(epoch!==cloudSessionEpoch)return {status:'changed'};
+        if(result.error)throw new Error('社員情報を取得できませんでした。接続を確認して再度お試しください。');
+        const p=result.data;
+        state=p?.id===session.user.id&&p.company_id&&p.active===true&&['admin','employee'].includes(p.role)
+          ?{status:'ready',profile:p}
+          :{status:'inactive',message:'このアカウントの利用登録を確認してください。'};
+      }
+    }catch(error){state={status:'error',message:error.message||'接続を確認できませんでした。'};}
+    if(epoch!==cloudSessionEpoch)return {status:'changed'};
+    cloudSetSessionState(state,session);return state;
+  })();
+  cloudSessionTask=task;
+  task.finally(()=>{if(cloudSessionTask===task)cloudSessionTask=null;});
+  return task;
+}
+function installCloudSessionListener(){
+  if(!cloudClient?.auth?.onAuthStateChange)return;
+  cloudClient.auth.onAuthStateChange((event,session)=>{
+    // Never await a Supabase call inside its auth callback.
+    const knownUser=cloudProfile?.id||cloudSessionUserId;
+    const changingUser=session?.user?.id&&(knownUser?knownUser!==session.user.id:event==='SIGNED_IN'&&cloudSessionTask);
+    if(event==='SIGNED_OUT'||changingUser){
+      ++cloudSessionEpoch;cloudSessionTask=null;
+      cloudSessionUserId=session?.user?.id||null;
+      cloudSetSessionState({status:'signed_out'});
+    }
+    if(session?.user?.id&&['INITIAL_SESSION','SIGNED_IN','TOKEN_REFRESHED','USER_UPDATED'].includes(event)){
+      const needsRefresh=!cloudProfile||event==='USER_UPDATED';
+      if(needsRefresh)setTimeout(()=>cloudRefreshSession(),0);
+    }
+  });
+}
+async function cloudRefreshSession(){
+  const state=await cloudEnsureProfile();
+  if(state.status!=='ready')return state;
+  const profile=state.profile;
   if(!activityOpenedLogged){activityOpenedLogged=true;await cloudLogActivity('app_open');}
+  if(cloudProfile?.id!==profile.id||cloudProfile?.company_id!==profile.company_id)return {status:'changed'};
   try{
     await cloudFetchReports();
+    if(cloudProfile?.id!==profile.id||cloudProfile?.company_id!==profile.company_id)return {status:'changed'};
     renderHome();
     if(profile.role==='admin')cloudLoadActivity();
   }catch(e){
     console.error(e);
-    cloudMsg('クラウド共有設定の更新が必要です：'+(e?.message||e),'warn');
+    cloudMsg('日報を読み込めませんでした。通信状態を確認して再度お試しください。','warn');
   }
+  return state;
 }
 async function cloudLogin(){
   if(!cloudClient)return alert('Supabase接続を初期化できませんでした。');
@@ -2140,7 +2195,7 @@ const fuelInputObserver=new MutationObserver(()=>syncFuelInputs());
 for(const id of ['vehicleChoices','machineChoices','smallToolChoices','leaseVehicles','leaseMachines']){
   const el=$('#'+id);if(el)fuelInputObserver.observe(el,{childList:true});
 }
-renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSession();
+renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessionListener();cloudRefreshSession();
 
 
 
@@ -2148,7 +2203,7 @@ renderSelectors();enhanceNumericInputs(document);renderHome();cloudRefreshSessio
 </script>
 <script src="midway.js?v=20260910-sites-v3"></script>
 <script src="site-move-filter-fix.js?v=20260912-report-filters-v2"></script>
-<script src="attachment-usage.js?v=20260912-report-usage-v1"></script>
+<script src="attachment-usage.js?v=20260912-session-recovery-v1"></script>
 <script src="attachment-separation-stable.js?v=20260908-1705"></script>
 <script src="waste-price-master.js?v=20260908-shori-v1"></script>
 <script src="waste-price-admin.js?v=20260908-shori-v1"></script>
