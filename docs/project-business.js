@@ -7,33 +7,43 @@
  const date=()=>typeof today==='function'?today():new Date().toLocaleDateString('sv-SE');
  const copy=x=>JSON.parse(JSON.stringify(x));
  const fitDocumentPreview=frame=>{
-  let stopped=false,style=null;
+  const stage=frame.parentElement,viewport=stage.parentElement;
+  let stopped=false,observedBody=null;
   const apply=()=>{
-   if(stopped||!frame.clientWidth)return;
+   if(stopped||!viewport.clientWidth)return;
    try{
     const doc=frame.contentDocument,body=doc?.body,paper=body?.querySelector('.invoice-document,.te2-page,.te-page');
     if(!paper)return;
     const css=doc.defaultView.getComputedStyle(body),paperCSS=doc.defaultView.getComputedStyle(paper);
-    // CSS widths are unscaled, so repeated resizes never compound the zoom.
-    const width=Math.ceil(parseFloat(paperCSS.width)+parseFloat(css.paddingLeft)+parseFloat(css.paddingRight));
+    // Lay out the document at its full paper width. Scaling body with CSS zoom
+    // lets mobile WebKit enlarge text independently of the table and rules.
+    const width=Math.ceil(Math.max(parseFloat(paperCSS.width)+parseFloat(css.paddingLeft)+parseFloat(css.paddingRight),parseFloat(css.minWidth)||0));
     if(!Number.isFinite(width)||width<=0)return;
-    if(!style||style.ownerDocument!==doc){
-     style=doc.createElement('style');
-     // Fit only the on-screen preview; the printed document keeps its A4 size.
-     style.textContent='@media screen{body{zoom:var(--pb-preview-scale,1)}}@media print{html,body{zoom:1!important}}';
-     doc.head.append(style);
+    frame.style.width=width+'px';
+    const height=Math.ceil(Math.max(body.scrollHeight,body.getBoundingClientRect().height));
+    if(!height)return;
+    const scale=Math.min(1,viewport.clientWidth/width);
+    frame.style.height=height+'px';
+    frame.style.transform='scale('+scale+')';
+    stage.style.width=Math.min(width,viewport.clientWidth)+'px';
+    stage.style.height=Math.ceil(height*scale)+'px';
+    // The parent scrolls over the scaled stage; the iframe itself is never
+    // narrowed or zoomed, and contentWindow.print() keeps the original A4 CSS.
+    if(observedBody!==body){
+     if(observedBody)observer?.unobserve(observedBody);
+     observedBody=body;observer?.observe(body);
+     doc.fonts?.ready.then(apply);
     }
-    body.style.setProperty('--pb-preview-scale',String(Math.min(1,Math.max(1,frame.clientWidth-16)/width)));
    }catch(_){}
   };
   frame.addEventListener('load',apply);window.addEventListener('resize',apply);
-  const observer=window.ResizeObserver?new ResizeObserver(apply):null;observer?.observe(frame);
+  const observer=window.ResizeObserver?new ResizeObserver(apply):null;observer?.observe(viewport);
   const timer=setTimeout(apply,0);
   return()=>{stopped=true;clearTimeout(timer);frame.removeEventListener('load',apply);window.removeEventListener('resize',apply);observer?.disconnect();};
  };
  let siteLoaded=false,profileDirty=false;
  let owner='',sites=[],docs=[],profile={},contract=null,rates=[],siteId='',editor=null,dirty=false,busy=false,ticket=0,kind='invoice';
- let closeIssueConfirmation=null;
+ let closeIssueConfirmation=null,closeDocumentPreview=null;
  const site=()=>sites.find(s=>s.id===siteId);
  const summarySite=()=>q('#siteSummarySelect')?.value||'';
  const siteByName=name=>sites.find(s=>s.name===name);
@@ -66,7 +76,7 @@
   for(let offset=0;offset<100000;offset+=500){let r=cloudClient.from(table).select(fields).eq('company_id',company);if(sid)r=r.eq('site_id',sid);r=await r.order(table==='billing_profiles'?'company_id':'id').range(offset,offset+499);if(r.error)throw new Error(r.error.message);out.push(...(r.data||[]));if((r.data||[]).length<500)return out;}
   throw new Error('件数が多く全件を確認できませんでした。');
  }
- function clear(){closeIssueConfirmation?.();siteLoaded=false;profileDirty=false;kind='invoice';owner='';sites=[];docs=[];profile={};rates=[];siteId='';editor=null;dirty=false;ticket++;q('#projectBusinessCard')?.remove();q('#pbMasterLink')?.remove();q('#pbPreview')?.remove();if(q('#estimateDocumentHost'))q('#estimateDocumentHost').innerHTML='';}
+ function clear(){closeIssueConfirmation?.();closeDocumentPreview?.();siteLoaded=false;profileDirty=false;kind='invoice';owner='';sites=[];docs=[];profile={};rates=[];siteId='';editor=null;dirty=false;ticket++;q('#projectBusinessCard')?.remove();q('#pbMasterLink')?.remove();if(q('#estimateDocumentHost'))q('#estimateDocumentHost').innerHTML='';}
  function mount(){
   const id=identity();if(!id){if(owner)clear();return false;}if(owner&&owner!==id)clear();owner=id;
   if(q('#projectBusinessCard'))return true;
@@ -281,7 +291,11 @@
  }
  function preview(){
   let d;try{d=calculatedDocument().d;if(d.status==='draft')d.document_number=null;}catch(e){return note(e.message,true);}
-  q('#pbPreview')?.remove();const dialog=document.createElement('dialog');dialog.id='pbPreview';dialog.innerHTML='<div class="pb-preview-toolbar"><b>'+E.kinds[d.kind]+'プレビュー</b><div><button id="pbPrint" class="btn dark" type="button">印刷・PDF保存</button><button id="pbPreviewClose" class="btn light" type="button">閉じる</button></div></div><p class="note">'+(d.status==='draft'&&d.kind!=='estimate'?'今は下書きです。正式な請求書にするには、この画面を閉じて「下書きを保存」→「内容を確定・採番」を押してください。請求番号が付き、下書き表示が消えます。':'印刷画面でPDFに保存できます。下書きには「下書き」と表示します。')+'</p><iframe title="書類の印刷プレビュー" sandbox="allow-same-origin allow-modals"></iframe>';document.body.append(dialog);const frame=dialog.querySelector('iframe'),stopFit=fitDocumentPreview(frame);frame.srcdoc=E.printHTML(d);q('#pbPrint').onclick=()=>{frame.contentWindow.focus();frame.contentWindow.print();};q('#pbPreviewClose').onclick=()=>{stopFit();dialog.close();dialog.remove();};dialog.addEventListener('close',()=>{stopFit();dialog.remove();},{once:true});dialog.showModal();
+  closeDocumentPreview?.();const opener=document.activeElement,dialog=document.createElement('dialog');dialog.id='pbPreview';dialog.innerHTML='<div class="pb-preview-toolbar"><b>'+E.kinds[d.kind]+'プレビュー</b><div><button id="pbPrint" class="btn dark" type="button">印刷・PDF保存</button><button id="pbPreviewClose" class="btn light" type="button">閉じる</button></div></div><p class="note">'+(d.status==='draft'&&d.kind!=='estimate'?'今は下書きです。正式な請求書にするには、この画面を閉じて「下書きを保存」→「内容を確定・採番」を押してください。請求番号が付き、下書き表示が消えます。':'印刷画面でPDFに保存できます。下書きには「下書き」と表示します。')+'</p><div class="pb-preview-viewport" tabindex="0" role="region" aria-label="書類のプレビュー"><div class="pb-preview-stage"><iframe title="書類の印刷プレビュー" scrolling="no" sandbox="allow-same-origin allow-modals"></iframe></div></div>';document.body.append(dialog);
+  const frame=dialog.querySelector('iframe'),stopFit=fitDocumentPreview(frame);let closed=false;
+  closeDocumentPreview=()=>{if(closed)return;closed=true;closeDocumentPreview=null;stopFit();if(dialog.open)dialog.close();dialog.remove();if(opener?.isConnected)opener.focus({preventScroll:true});};
+  frame.srcdoc=E.printHTML(d);q('#pbPrint').onclick=()=>{frame.contentWindow.focus();frame.contentWindow.print();};q('#pbPreviewClose').onclick=closeDocumentPreview;
+  const close=closeDocumentPreview;dialog.addEventListener('close',close,{once:true});dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.showModal();
  }
  window.ToyaProjectBusiness={
   isBusy:()=>busy,
