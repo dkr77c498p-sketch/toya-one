@@ -6,7 +6,31 @@
  const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  const date=()=>typeof today==='function'?today():new Date().toLocaleDateString('sv-SE');
  const copy=x=>JSON.parse(JSON.stringify(x));
- const fitEstimatePreview=frame=>{const apply=()=>{try{const body=frame.contentDocument?.body;if(!body?.querySelector('.te2-page'))return;const width=frame.clientWidth||document.documentElement.clientWidth;body.style.zoom=String(Math.min(1,Math.max(.25,(width-16)/794)));}catch(_){}};frame.addEventListener('load',apply);window.addEventListener('resize',apply);setTimeout(apply,0);return()=>window.removeEventListener('resize',apply);};
+ const fitDocumentPreview=frame=>{
+  let stopped=false,style=null;
+  const apply=()=>{
+   if(stopped||!frame.clientWidth)return;
+   try{
+    const doc=frame.contentDocument,body=doc?.body,paper=body?.querySelector('.invoice-document,.te2-page,.te-page');
+    if(!paper)return;
+    const css=doc.defaultView.getComputedStyle(body),paperCSS=doc.defaultView.getComputedStyle(paper);
+    // CSS widths are unscaled, so repeated resizes never compound the zoom.
+    const width=Math.ceil(parseFloat(paperCSS.width)+parseFloat(css.paddingLeft)+parseFloat(css.paddingRight));
+    if(!Number.isFinite(width)||width<=0)return;
+    if(!style||style.ownerDocument!==doc){
+     style=doc.createElement('style');
+     // Fit only the on-screen preview; the printed document keeps its A4 size.
+     style.textContent='@media screen{body{zoom:var(--pb-preview-scale,1)}}@media print{html,body{zoom:1!important}}';
+     doc.head.append(style);
+    }
+    body.style.setProperty('--pb-preview-scale',String(Math.min(1,Math.max(1,frame.clientWidth-16)/width)));
+   }catch(_){}
+  };
+  frame.addEventListener('load',apply);window.addEventListener('resize',apply);
+  const observer=window.ResizeObserver?new ResizeObserver(apply):null;observer?.observe(frame);
+  const timer=setTimeout(apply,0);
+  return()=>{stopped=true;clearTimeout(timer);frame.removeEventListener('load',apply);window.removeEventListener('resize',apply);observer?.disconnect();};
+ };
  let siteLoaded=false,profileDirty=false;
  let owner='',sites=[],docs=[],profile={},contract=null,rates=[],siteId='',editor=null,dirty=false,busy=false,ticket=0,kind='invoice';
  const site=()=>sites.find(s=>s.id===siteId);
@@ -225,7 +249,7 @@
  }
  function preview(){
   let d;try{d=calculatedDocument().d;if(d.status==='draft')d.document_number=null;}catch(e){return note(e.message,true);}
-  q('#pbPreview')?.remove();const dialog=document.createElement('dialog');dialog.id='pbPreview';dialog.innerHTML='<div class="pb-preview-toolbar"><b>'+E.kinds[d.kind]+'プレビュー</b><div><button id="pbPrint" class="btn dark" type="button">印刷・PDF保存</button><button id="pbPreviewClose" class="btn light" type="button">閉じる</button></div></div><p class="note">'+(d.status==='draft'&&d.kind!=='estimate'?'今は下書きです。正式な請求書にするには、この画面を閉じて「下書きを保存」→「内容を確定・採番」を押してください。請求番号が付き、下書き表示が消えます。':'印刷画面でPDFに保存できます。下書きには「下書き」と表示します。')+'</p><iframe title="書類の印刷プレビュー" sandbox="allow-same-origin allow-modals"></iframe>';document.body.append(dialog);const frame=dialog.querySelector('iframe'),stopFit=fitEstimatePreview(frame);frame.srcdoc=E.printHTML(d);q('#pbPrint').onclick=()=>{frame.contentWindow.focus();frame.contentWindow.print();};q('#pbPreviewClose').onclick=()=>{stopFit();dialog.close();dialog.remove();};dialog.addEventListener('close',()=>{stopFit();dialog.remove();},{once:true});dialog.showModal();
+  q('#pbPreview')?.remove();const dialog=document.createElement('dialog');dialog.id='pbPreview';dialog.innerHTML='<div class="pb-preview-toolbar"><b>'+E.kinds[d.kind]+'プレビュー</b><div><button id="pbPrint" class="btn dark" type="button">印刷・PDF保存</button><button id="pbPreviewClose" class="btn light" type="button">閉じる</button></div></div><p class="note">'+(d.status==='draft'&&d.kind!=='estimate'?'今は下書きです。正式な請求書にするには、この画面を閉じて「下書きを保存」→「内容を確定・採番」を押してください。請求番号が付き、下書き表示が消えます。':'印刷画面でPDFに保存できます。下書きには「下書き」と表示します。')+'</p><iframe title="書類の印刷プレビュー" sandbox="allow-same-origin allow-modals"></iframe>';document.body.append(dialog);const frame=dialog.querySelector('iframe'),stopFit=fitDocumentPreview(frame);frame.srcdoc=E.printHTML(d);q('#pbPrint').onclick=()=>{frame.contentWindow.focus();frame.contentWindow.print();};q('#pbPreviewClose').onclick=()=>{stopFit();dialog.close();dialog.remove();};dialog.addEventListener('close',()=>{stopFit();dialog.remove();},{once:true});dialog.showModal();
  }
  window.ToyaProjectBusiness={
   isBusy:()=>busy,
