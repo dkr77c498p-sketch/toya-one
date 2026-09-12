@@ -95,3 +95,5 @@
 .pb-simple-review #pbTotals .pb-metrics{grid-template-columns:1fr}
 .pb-simple-review #pbTotals .pb-metrics>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
 .pb-simple-review #pbTotals .pb-metrics b{font-size:22px}
+
+#pbIssueConfirmation{width:calc(100% - 32px);max-width:420px;max-height:calc(100dvh - 32px);box-sizing:border-box;margin:auto;padding:20px;border:0;border-radius:16px;background:#fff;color:#111;overflow-y:auto}#pbIssueConfirmation::backdrop{background:#0009}#pbIssueConfirmation h3{font-size:20px;margin:0 0 18px}#pbIssueConfirmation dl{margin:0}#pbIssueConfirmation dt{font-size:13px;color:#666;margin-top:12px}#pbIssueConfirmation dd{margin:4px 0 0;font-weight:700;overflow-wrap:anywhere}#pbIssueConfirmation p{font-size:14px;line-height:1.6}#pbIssueConfirmation .btn{font-size:16px;min-height:48px}#pbIssueConfirmation .pb-metrics{margin-top:18px}
