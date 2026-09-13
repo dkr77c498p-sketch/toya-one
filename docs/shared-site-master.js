@@ -54,11 +54,11 @@
  const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id+':'+cloudProfile.role:'';
  const isAdmin=()=>!!identity()&&cloudProfile.role==='admin';
  const local=()=>{try{return typeof get==='function'&&typeof LS!=='undefined'?arr(get(LS.sites,[])):[];}catch{return [];}};
- let owner='',rows=[],loaded=false,pending=null,lastRead=0,writing=false,draftName='',message='',installed=false,scheduled=false;
+ let owner='',rows=[],loaded=false,pending=null,lastRead=0,writing=false,draftName='',editingId='',editName='',message='',installed=false,scheduled=false;
  function note(s){message=s;if(q('#ssAdminStatus'))q('#ssAdminStatus').textContent=s;}
  function adoptIdentity(){
   const id=identity();if(owner===id)return !!id;
-  owner=id;rows=[];loaded=false;lastRead=0;pending=null;draftName='';message='';
+  owner=id;rows=[];loaded=false;lastRead=0;pending=null;draftName='';editingId='';editName='';message='';
   q('#siteShareHint')?.remove();q('#ssEditor')?.remove();return !!id;
  }
 
@@ -117,16 +117,66 @@
   if(!isAdmin()){host.textContent='現場の共有登録は管理者用です。';return;}
   const known=new Set(rows.map(r=>norm(r.name)));
   const drafts=local().filter((n,i,a)=>!placeholder(n)&&!known.has(norm(n))&&a.findIndex(v=>norm(v)===norm(n))===i);
-  host.innerHTML='<div id="ssEditor"><p class="note">ここで追加した現場は社員共通です。共有済みの名前や過去の日報は、この画面では書き換えません。</p><label for="ssNewName">追加する現場名</label><input id="ssNewName" type="text" maxlength="120" placeholder="例：○○ビル解体工事"><button id="ssRegister" type="button" class="btn dark">登録して社員へ共有</button><p id="ssAdminStatus" class="note" role="status"></p><div id="ssSharedRows"></div>'+ (drafts.length?'<details open><summary>この端末だけの現場（未共有）</summary>'+drafts.map((n,i)=>'<div class="ss-row"><b>'+esc(n)+'</b><button type="button" class="btn light" data-ss-draft="'+i+'">社員へ共有</button></div>').join('')+'</details>':'')+'</div>';
+  const sharedRow=r=>{
+   if(editingId===r.id)return '<div class="ss-row ss-edit"><label for="ssRenameName">新しい現場名</label><input id="ssRenameName" type="text" maxlength="120" value="'+esc(editName)+'"><div class="ss-edit-actions"><button type="button" class="btn lime" id="ssRenameSave">この名前に変更</button><button type="button" class="btn light" id="ssRenameCancel">やめる</button></div></div>';
+   return '<div class="ss-row"><b>'+esc(r.name)+(r.status==='active'?'':'（完工・過去）')+'</b><div class="ss-row-actions"><span class="ss-shared">社員と共有済み</span><button type="button" class="btn light" data-ss-rename="'+esc(r.id)+'">名前を変更</button></div></div>';
+  };
+  const active=rows.filter(r=>r.status==='active'&&!placeholder(r.name));
+  const past=rows.filter(r=>r.status!=='active'&&!placeholder(r.name));
+  host.innerHTML='<div id="ssEditor"><p class="note">ここで追加・変更した現場名は社員共通です。名前を変更すると、過去の日報と集計も同じ現場のまま新しい名前になります。</p><label for="ssNewName">追加する現場名</label><input id="ssNewName" type="text" maxlength="120" placeholder="例：○○ビル解体工事"><button id="ssRegister" type="button" class="btn dark">登録して社員へ共有</button><p id="ssAdminStatus" class="note" role="status"></p><div id="ssSharedRows">'+active.map(sharedRow).join('')+'</div>'+(past.length?'<details><summary>完工・過去の現場</summary>'+past.map(sharedRow).join('')+'</details>':'')+ (drafts.length?'<details open><summary>この端末だけの現場（未共有）</summary>'+drafts.map((n,i)=>'<div class="ss-row"><b>'+esc(n)+'</b><button type="button" class="btn light" data-ss-draft="'+i+'">社員へ共有</button></div>').join('')+'</details>':'')+'</div>';
   q('#ssNewName').value=draftName;q('#ssNewName').oninput=e=>{draftName=e.target.value;};
   q('#ssRegister').disabled=writing;q('#ssRegister').onclick=()=>registerName(draftName);
   q('#ssAdminStatus').textContent=message||(loaded?'共有済みの現場は下に表示しています。':'会社共通の一覧を読み込み中…');
-  q('#ssSharedRows').innerHTML=rows.filter(r=>r.status==='active'&&!placeholder(r.name)).map(r=>'<div class="ss-row"><b>'+esc(r.name)+'</b><span class="ss-shared">社員と共有済み</span></div>').join('');
+  host.querySelectorAll('[data-ss-rename]').forEach(b=>{b.disabled=writing;b.onclick=()=>startRename(b.dataset.ssRename);});
+  if(q('#ssRenameName'))q('#ssRenameName').oninput=e=>{editName=e.target.value;};
+  if(q('#ssRenameSave')){q('#ssRenameSave').disabled=writing;q('#ssRenameSave').onclick=saveRename;}
+  if(q('#ssRenameCancel')){q('#ssRenameCancel').disabled=writing;q('#ssRenameCancel').onclick=()=>{editingId='';editName='';message='';renderMaster();};}
   host.querySelectorAll('[data-ss-draft]').forEach(b=>{b.disabled=writing;b.onclick=()=>registerName(drafts[Number(b.dataset.ssDraft)]);});
+ }
+ function startRename(id){
+  const site=rows.find(r=>r.id===id);if(!site||writing)return;
+  editingId=id;editName=site.name;message='新しい現場名を入力してください。';renderMaster();
+  q('#ssRenameName')?.focus();q('#ssRenameName')?.select();
+ }
+ function replaceOpenName(oldName,newName){
+  try{
+   if(typeof get==='function'&&typeof set==='function'&&typeof LS!=='undefined'){
+    const saved=local(),next=saved.map(name=>norm(name)===norm(oldName)?newName:name);
+    if(JSON.stringify(saved)!==JSON.stringify(next))set(LS.sites,next);
+   }
+  }catch{}
+  document.querySelectorAll('#site,.sm-site').forEach(sel=>{
+   if(norm(sel.value)!==norm(oldName))return;
+   const option=[...sel.options].find(o=>norm(o.value)===norm(oldName));
+   if(option){option.value=newName;option.textContent=newName;}else sel.add(new Option(newName,newName));
+   sel.value=newName;
+  });
+ }
+ async function saveRename(){
+  if(!isAdmin()||writing)return;
+  const site=rows.find(r=>r.id===editingId),name=String(editName||'').trim(),problem=validateName(name);
+  if(!site){message='変更する現場を確認してください。';editingId='';renderMaster();return;}
+  if(problem){message=problem;renderMaster();q('#ssRenameName')?.focus();return;}
+  if(norm(site.name)===norm(name)){editingId='';editName='';message='現場名は変更されていません。';renderMaster();return;}
+  if(!confirm('「'+site.name+'」を「'+name+'」へ変更しますか？\n\n過去の日報・写真・集計も同じ現場のまま引き継ぎます。確定済みの見積書・請求書の表記は変更しません。'))return;
+  writing=true;message='現場名を変更しています…';renderMaster();const mine=identity(),oldName=site.name;
+  try{
+   const result=await cloudClient.rpc('toya_rename_shared_site',{p_site_id:site.id,p_expected_version:site.lifecycle_version,p_name:name});
+   if(result.error)throw result.error;
+   const saved=Array.isArray(result.data)?result.data[0]:result.data;if(!saved?.id||saved.id!==site.id||saved.name!==name)throw new Error('変更結果を確認できませんでした。');
+   if(identity()!==mine)return;
+   rows=rows.map(r=>r.id===saved.id?{...r,...saved}:r);replaceOpenName(oldName,saved.name);
+   editingId='';editName='';renderMaster();
+   const readOK=await refresh(true);
+   if(typeof cloudFetchReports==='function')try{await cloudFetchReports();if(typeof renderHome==='function')renderHome();}catch{}
+   if(identity()!==mine)return;
+   message=saved.name+'：現場名を変更しました。'+(readOK?' 社員の画面にも反映されます。':' 一覧の更新だけ再度お試しください。');renderMaster();
+  }catch(e){if(identity()===mine){message='変更できませんでした：'+String(e.message||e);renderMaster();q('#ssRenameName')?.focus();}}
+  finally{writing=false;if(identity()===mine)renderMaster();}
  }
  async function readRows(company){
   const out=[];for(let offset=0;offset<100000;offset+=500){
-   const r=await cloudClient.from('sites').select('id,name,status,completed_on').eq('company_id',company).order('name').order('id').range(offset,offset+499);
+   const r=await cloudClient.from('sites').select('id,name,status,completed_on,lifecycle_version').eq('company_id',company).order('name').order('id').range(offset,offset+499);
    if(r.error)throw r.error;out.push(...arr(r.data));if(arr(r.data).length<500)return out;
   }throw new Error('現場が多いため一覧を最後まで確認できませんでした。');
  }
@@ -164,7 +214,7 @@
  function install(){
   if(installed||typeof window.renderSelectors!=='function'||typeof window.renderMasters!=='function'||!q('#site'))return;
   installed=true;
-  const style=document.createElement('style');style.textContent='#siteShareHint{font-size:12px;color:#666;line-height:1.6;margin:6px 0 12px}#siteShareHint .btn{font-size:13px;padding:7px 10px;margin-top:5px}#ssEditor input{width:100%;box-sizing:border-box;min-height:44px;font-size:16px}#ssRegister{width:100%;margin-top:8px}.ss-row{padding:12px;border:1px solid #ddd;border-radius:10px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:8px 0;overflow-wrap:anywhere}.ss-shared{font-size:12px;color:#446000;background:#eefbd7;padding:4px 8px;border-radius:8px}#ssEditor summary{font-weight:bold;padding:12px 0}.ss-history{margin:6px 0 10px;font-size:12px;color:#555}.ss-history label{display:flex;align-items:center;gap:7px;font-size:12px;min-height:36px;margin:0}.ss-history input[type=checkbox]{width:18px!important;height:18px!important;min-height:18px!important;flex:0 0 18px;margin:0}';document.head.appendChild(style);
+  const style=document.createElement('style');style.textContent='#siteShareHint{font-size:12px;color:#666;line-height:1.6;margin:6px 0 12px}#siteShareHint .btn{font-size:13px;padding:7px 10px;margin-top:5px}#ssEditor input{width:100%;box-sizing:border-box;min-height:44px;font-size:16px}#ssRegister{width:100%;margin-top:8px}.ss-row{padding:12px;border:1px solid #ddd;border-radius:10px;display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin:8px 0;overflow-wrap:anywhere}.ss-row b{flex:1;min-width:170px}.ss-row-actions,.ss-edit-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.ss-edit{display:block}.ss-edit label{margin-top:0}.ss-edit-actions{margin-top:8px}.ss-edit-actions .btn{flex:1}.ss-shared{font-size:12px;color:#446000;background:#eefbd7;padding:4px 8px;border-radius:8px}#ssEditor summary{font-weight:bold;padding:12px 0}.ss-history{margin:6px 0 10px;font-size:12px;color:#555}.ss-history label{display:flex;align-items:center;gap:7px;font-size:12px;min-height:36px;margin:0}.ss-history input[type=checkbox]{width:18px!important;height:18px!important;min-height:18px!important;flex:0 0 18px;margin:0}';document.head.appendChild(style);
   const render=window.renderSelectors;
   window.renderSelectors=function(){const selected=q('#site')?.value||'',out=render.apply(this,arguments);if(loaded&&owner===identity()){const sel=q('#site');if([...sel.options].some(o=>o.value===selected))sel.value=selected;setOptions(sel,'',selected);queueSync();}return out;};
   const master=window.renderMasters;
