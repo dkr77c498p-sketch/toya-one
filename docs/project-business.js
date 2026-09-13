@@ -312,6 +312,6 @@
   },
   openSettings(){if(!mount())return;q('nav [data-page="homePage"]')?.click();q('#pbCompany').open=true;q('#pbCompany').scrollIntoView({block:'start',behavior:'smooth'});}
  };
- const start=()=>{mount();const roleUI=window.applyCloudRoleUI;if(typeof roleUI==='function')window.applyCloudRoleUI=function(){const out=roleUI.apply(this,arguments);mount();return out;};document.addEventListener('click',e=>{if(e.target.closest('nav [data-page]'))mount();});setInterval(()=>{if(identity()!==owner)mount();},1000);};
+ const start=()=>{mount();const roleUI=window.applyCloudRoleUI;if(typeof roleUI==='function')window.applyCloudRoleUI=function(){const out=roleUI.apply(this,arguments);mount();return out;};document.addEventListener('click',e=>{if(e.target.closest('nav [data-page]'))mount();});document.addEventListener('toya-site-project-profile-saved',e=>{if(identity()&&(!e.detail?.siteId||e.detail.siteId===siteId))refresh();});setInterval(()=>{if(identity()!==owner)mount();},1000);};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(start,1000),{once:true});else setTimeout(start,1000);
 })();
