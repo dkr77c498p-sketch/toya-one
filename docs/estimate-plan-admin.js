@@ -85,17 +85,74 @@
  }
  function autoInput(){return copy(plan.groups.find(g=>g.auto_input)?.auto_input||A.defaults());}
  function autoBuilderHTML(){
-  const a=A.normalize(autoInput()),f=(label,id,key,unit)=>field(label+(unit?'（'+unit+'）':''),id,a[key],'number','data-auto-key="'+key+'" min="0" step="0.01" inputmode="decimal"');
-  return '<details class="ep-auto" open><summary>かんたん自動積算</summary><label for="epAutoKind">工事の種類</label><select id="epAutoKind" data-auto-key="kind"><option value="wood">木造解体</option><option value="lightSteel">軽量鉄骨造解体</option><option value="steel">鉄骨造（S造）解体</option><option value="rc">RC造解体</option><option value="interior">内部改修・内部解体・スケルトン解体</option></select><div class="ep-auto-grid">'+f('建物延床面積','epAutoM2','area_m2','㎡')+f('建物延床面積','epAutoTsubo','area_tsubo','坪')+f('階数','epAutoFloors','floors','階')+'</div><details open><summary>A 仮設・アスベスト</summary><div class="ep-auto-grid">'+f('養生足場','epAutoScaffold','scaffold_m2','㎡')+f('防音シート','epAutoSound','sound_m2','㎡')+f('メッシュシート','epAutoMesh','mesh_m2','㎡')+f('アスベスト調査','epAutoSamples','asbestos_samples','検体')+f('アスベスト含有スレート','epAutoSlate','slate_m2','㎡')+'</div></details><details open><summary>B 解体・外構</summary><div class="ep-auto-grid">'+f('基礎コンクリート','epAutoFoundation','foundation_m3','㎥')+f('土間コンクリート','epAutoSlab','slab_m3','㎥')+f('外構撤去','epAutoExterior','exterior_m2','㎡')+f('庭石撤去','epAutoGarden','garden_m3','㎥')+f('植栽撤去','epAutoPlants','plants_m3','㎥')+f('CB撤去','epAutoCB','cb_m2','㎡')+f('内部残置物撤去','epAutoResidual','residual_m3','㎥')+'</div></details><details><summary>内部改修・内部解体・スケルトン</summary><div class="ep-auto-grid">'+f('床・天井面積','epAutoInternal','internal_m2','㎡')+f('壁面積','epAutoWall','internal_wall_m2','㎡')+'</div></details><details open><summary>D 整地・土嚢</summary><div class="ep-auto-grid">'+f('解体跡整地','epAutoGrading','grading_m2','㎡')+f('土嚢積み','epAutoSandbag','sandbag_m','m')+'</div></details><details><summary>諸経費・法定福利費の自動計算率</summary><p class="note">直接工事費に対する率です。率は今回の見積で変更できます。</p><div class="ep-auto-grid">'+f('諸経費率','epAutoOverhead','overhead_rate','%')+f('法定福利費率','epAutoWelfare','welfare_rate','%')+'</div></details><button id="epAutoApply" type="button" class="btn lime pb-wide">この数量で明細を自動作成</button><p class="note">産廃数量は、御社の300㎡標準積算表を入力面積に比例させて計算します。現場条件に合わせて明細で直せます。</p></details>';
+  const a=A.normalize(autoInput());
+  const f=(label,id,key,unit)=>field(label+(unit?'（'+unit+'）':''),id,a[key],'number','data-auto-key="'+key+'" min="0" step="'+(key==='concrete_quantity'?'0.001':'0.01')+'" inputmode="decimal"');
+  const select=(label,id,key,choices)=>'<div class="pb-field" style="grid-column:1/-1"><label for="'+id+'">'+label+'</label><select id="'+id+'" data-auto-key="'+key+'">'+choices.map(([value,text])=>'<option value="'+value+'">'+text+'</option>').join('')+'</select></div>';
+  return [
+   '<details class="ep-auto" open><summary>かんたん自動積算</summary><div class="ep-auto-grid">',
+   select('工事の種類','epAutoKind','kind',[['wood','木造解体'],['lightSteel','軽量鉄骨造解体'],['steel','鉄骨造（S造）解体'],['rc','RC造解体'],['src','SRC造解体'],['interior','内部改修・内部解体・スケルトン解体']]),
+   select('建物用途','epAutoUse','use',Object.entries(A.Concrete.uses)),
+   select('面積の入力方法','epAutoAreaBasis','area_basis',[['gross','延床面積を入力'],['typical','各階の面積 × 階数で概算']]),
+   f('建物面積','epAutoM2','area_m2','㎡'),f('建物面積','epAutoTsubo','area_tsubo','坪'),
+   field('階数','epAutoFloors',a.floors,'number','data-auto-key="floors" min="1" step="1" inputmode="numeric"'),
+   '</div><p id="epAutoAreaSummary" class="note"></p><p class="note">各階の面積が違う場合は、合計した延床面積を入力してください。階数別の統計補正は行いません。</p>',
+   '<details open><summary>A 仮設・アスベスト</summary><div class="ep-auto-grid">',
+   f('養生足場','epAutoScaffold','scaffold_m2','㎡'),f('防音シート','epAutoSound','sound_m2','㎡'),f('メッシュシート','epAutoMesh','mesh_m2','㎡'),f('アスベスト調査','epAutoSamples','asbestos_samples','検体'),f('アスベスト含有スレート','epAutoSlate','slate_m2','㎡'),
+   '</div></details><details open><summary>B 解体・外構</summary>',
+   select('上屋の解体方法','epAutoUpperMethod','upper_method',[['ground','通常の上屋解体'],['elevated','階上解体あり']]),
+   '<div id="epAutoElevatedFields" class="ep-auto-grid">',
+   f('階上解体の対象面積（空欄は全体）','epAutoElevatedArea','elevated_m2','㎡'),f('階上解体の単価','epAutoElevatedPrice','elevated_price','円/㎡'),
+   '</div><p id="epAutoElevatedNote" class="note">階上解体の面積は通常の上屋解体から差し引きます。工法・揚重などの条件に合わせて単価を入力してください。</p><div class="ep-auto-grid">',
+   f('基礎コンクリート・実体積','epAutoFoundation','foundation_m3','m³'),f('土間コンクリート・実体積','epAutoSlab','slab_m3','m³'),f('外構撤去','epAutoExterior','exterior_m2','㎡'),f('庭石撤去','epAutoGarden','garden_m3','m³'),f('植栽撤去','epAutoPlants','plants_m3','m³'),f('CB撤去','epAutoCB','cb_m2','㎡'),f('内部残置物撤去','epAutoResidual','residual_m3','m³'),
+   '</div><p class="note">基礎・土間の解体数量は、図面や現場で確認した実体積を入力してください。</p></details>',
+   '<details open><summary>C コンクリート数量の概算</summary><div class="ep-auto-grid">',
+   select('コンクリートの対象範囲','epAutoConcreteScope','concrete_scope',[['whole','建物全体'],['partial','部分解体・上屋のみ・基礎のみ']]),
+   select('数量の決め方','epAutoConcreteMode','concrete_mode',[['reference','資料の構造・用途別平均から概算'],['manual','現場の拾い数量を入力']]),
+   '</div><div id="epAutoConcreteManual" class="ep-auto-grid">',
+   f('コンクリート数量（0も入力可）','epAutoConcreteQuantity','concrete_quantity',''),
+   select('数量の単位','epAutoConcreteUnit','concrete_unit',[['t','t（重量）'],['solid_m3','m³（実体積）'],['loose_m3','m³（搬出時のかさ体積）']]),
+   '</div><p id="epAutoConcreteSummary" class="note" role="status" aria-live="polite"></p>',
+   '<p class="note">建物全体の参考数量に基礎・土間を別加算しません。地下・杭・外構や部分解体は図面・現調で範囲を確認してください。</p>',
+   '<details><summary>係数の根拠・適用範囲</summary><p class="note"><a href="'+esc(A.Concrete.source.url)+'" target="_blank" rel="noopener noreferrer">橋本・寺島「建築物解体廃棄物の原単位設定」（1999年）Table 4</a>。解体廃棄物の平均を優先し、未掲載の構造・用途は資材投入量の平均で代用します。古い少数事例の参考値です。軽量鉄骨はS造を参照し、木造は用途区分がありません。階数別の平均値は未登録です。</p></details>',
+   '<div class="ep-auto-grid">',
+   f('コンクリート運搬単価','epAutoConcreteHaul','concrete_haul_price',''),f('コンクリート処分単価','epAutoConcreteDisposal','concrete_disposal_price',''),
+   '</div><input id="epAutoConcretePriceBasis" type="hidden" data-auto-key="concrete_price_basis" value="'+esc(a.concrete_price_basis||'t')+'"><p id="epAutoConcretePriceNote" class="note"></p></details>',
+   '<details><summary>内部改修・内部解体・スケルトン</summary><div class="ep-auto-grid">',
+   f('床・天井面積','epAutoInternal','internal_m2','㎡'),f('壁面積','epAutoWall','internal_wall_m2','㎡'),
+   '</div></details><details open><summary>D 整地・土嚢</summary><div class="ep-auto-grid">',
+   f('解体跡整地','epAutoGrading','grading_m2','㎡'),f('土嚢積み','epAutoSandbag','sandbag_m','m'),
+   '</div></details><details><summary>諸経費・法定福利費の自動計算率</summary><p class="note">直接工事費に対する率です。率は今回の見積で変更できます。</p><div class="ep-auto-grid">',
+   f('諸経費率','epAutoOverhead','overhead_rate','%'),f('法定福利費率','epAutoWelfare','welfare_rate','%'),
+   '</div></details><button id="epAutoApply" type="button" class="btn lime pb-wide">この数量で明細を自動作成</button><p class="note">コンクリート以外の産廃は従来の300㎡参考表から面積比例で計算します。SRC造のその他産廃は手入力してください。条件を変えたら明細を作り直し、現場に合わせて数量・単価を確認してください。</p></details>'
+  ].join('');
  }
  function bindAutoBuilder(){
-  q('#epAutoKind').value=A.normalize(autoInput()).kind;
-  const foundation=q('#epAutoFoundation'),refreshFoundation=()=>{if(foundation.dataset.manual==='1')return;foundation.value=A.autoFoundation(q('#epAutoKind').value,q('#epAutoM2').value,q('#epAutoFloors').value);foundation.dataset.auto='1';};
-  if(foundation.value)foundation.dataset.auto='1';foundation.oninput=()=>{foundation.dataset.manual='1';delete foundation.dataset.auto;};
-  q('#epAutoM2').oninput=()=>{const n=Number(q('#epAutoM2').value);q('#epAutoTsubo').value=n>0?A.round(n/A.TSUBO,2):'';refreshFoundation();};
-  q('#epAutoTsubo').oninput=()=>{const n=Number(q('#epAutoTsubo').value);q('#epAutoM2').value=n>0?A.round(n*A.TSUBO,2):'';refreshFoundation();};
-  q('#epAutoFloors').oninput=refreshFoundation;q('#epAutoKind').onchange=refreshFoundation;
-  q('#epAutoApply').onclick=()=>{gather();const input=Object.fromEntries([...q('.ep-auto').querySelectorAll('[data-auto-key]')].map(el=>[el.dataset.autoKey,el.value]));const existing=plan.groups.some(g=>(g.quote_lines||[]).some(r=>!r.auto_percent));if(existing&&!plan.groups.some(g=>g.auto_input)&&!confirm('現在の明細を、自動積算の明細へ入れ替えますか？'))return;const result=A.build(input);plan.groups=A.percentRows(result.groups,result.input);dirty=true;renderSimpleGroups(0);q('.ep-manual').open=true;updateTotals();note('数量から明細を作成しました。単価未登録の項目と産廃数量を確認してください。');q('#epGroups').scrollIntoView({block:'start',behavior:'smooth'});};
+  const a=A.normalize(autoInput()),host=q('.ep-auto');
+  host.querySelectorAll('select[data-auto-key]').forEach(el=>el.value=a[el.dataset.autoKey]);
+  const readInput=()=>Object.fromEntries([...host.querySelectorAll('[data-auto-key]')].map(el=>[el.dataset.autoKey,el.value]));
+  const refresh=()=>{
+   const input=readInput(),manual=input.concrete_mode==='manual',elevated=input.upper_method==='elevated'&&input.kind!=='interior';
+   q('#epAutoConcreteManual').hidden=!manual;q('#epAutoElevatedFields').hidden=!elevated;q('#epAutoElevatedNote').hidden=!elevated;
+   const basis=manual?input.concrete_unit:'t',priceBasis=q('#epAutoConcretePriceBasis');
+   if(priceBasis.value!==basis){q('#epAutoConcreteHaul').value='';q('#epAutoConcreteDisposal').value='';priceBasis.value=basis;}
+   q('#epAutoConcretePriceNote').textContent='単価は円/'+(basis==='t'?'t':basis==='solid_m3'?'m³（実体積）':'m³（搬出時のかさ体積）')+'で入力してください。体積と重量の単価は自動換算しません。';
+   try{
+    const c=A.Concrete.estimate(input);
+    q('#epAutoAreaSummary').textContent='計算に使う延床面積：'+A.round(c.area_m2,2)+'㎡'+(input.area_basis==='typical'?'（各階が同じ面積と仮定）':'（階数は重ねて掛けません）');
+    q('#epAutoConcreteSummary').textContent=c.reason||((c.source?'参考数量：':'入力数量：')+c.quantity+' '+c.unit+'。'+(c.source?c.label+'／'+c.factor_kg_m2+'kg/㎡ × '+c.area_m2+'㎡ ÷ 1000。'+c.description+'（1999年・'+c.sample_count+'件）。':c.description+'。'));
+    q('#epAutoConcreteSummary').classList.remove('pb-error');
+   }catch(e){q('#epAutoAreaSummary').textContent='';q('#epAutoConcreteSummary').textContent=e.message;q('#epAutoConcreteSummary').classList.add('pb-error');}
+  };
+  q('#epAutoM2').oninput=()=>{const n=Number(q('#epAutoM2').value);q('#epAutoTsubo').value=n>0?A.round(n/A.TSUBO,2):'';};
+  q('#epAutoTsubo').oninput=()=>{const n=Number(q('#epAutoTsubo').value);q('#epAutoM2').value=n>0?A.round(n*A.TSUBO,2):'';};
+  host.addEventListener('input',refresh);host.addEventListener('change',refresh);refresh();
+  q('#epAutoApply').onclick=()=>{
+   for(const el of host.querySelectorAll('input[type="number"]'))if(!el.closest('[hidden]')&&!el.reportValidity())return;
+   let result;try{result=A.build(readInput());}catch(e){note(e.message,true);return;}
+   gather();const existing=plan.groups.some(g=>(g.quote_lines||[]).some(r=>!r.auto_percent));
+   if(existing&&!confirm('入力済みの明細・単価を、この条件の自動積算で作り直しますか？'))return;
+   plan.groups=A.percentRows(result.groups,result.input);dirty=true;renderSimpleGroups(0);q('.ep-manual').open=true;updateTotals();note('数量から明細を作成しました。コンクリート数量・単価と階上解体の条件を確認してください。');q('#epGroups').scrollIntoView({block:'start',behavior:'smooth'});
+  };
  }
  function setSimpleStep(step,scroll=true){
   if(plan?.entry_mode!=='quote'||!q('#epStep1'))return;simpleStep=step;
@@ -106,7 +163,7 @@
  function focusInput(selector){const el=q(selector);if(!el)return;for(let p=el.parentElement;p;p=p.parentElement)if(p.tagName==='DETAILS')p.open=true;el.focus({preventScroll:true});el.scrollIntoView({block:'center',behavior:'smooth'});}
  function inputProblem(message,selector,step=2){setSimpleStep(step,false);note(message,true);q(selector)?.setAttribute('aria-invalid','true');focusInput(selector);return false;}
  function checkJobInfo(){gather();if(!plan.site_name)return inputProblem('工事名を入力してください。','#epJobName',1);if(!plan.customer_name)return inputProblem('見積先の会社名・お名前を入力してください。','#epCustomer',1);return true;}
- const quoteChoices=name=>/仮設/.test(name)?[['養生足場','㎡'],['防音シート張り','㎡'],['散水費','式'],['養生メッシュシート張り','㎡'],['アスベスト含有調査','検体'],['アスベスト含有スレート撤去・処分','㎡']]:/産業廃棄物|処分/.test(name)?[['木くず処分','m³'],['コンクリート処分','m³'],['混合廃棄物処分','m³'],['産業廃棄物運搬費','m³']]:/解体/.test(name)?[['内部解体','㎡'],['上屋解体','㎡'],['基礎コンクリート解体','m³'],['土間コンクリート解体','m³'],['外構撤去','㎡'],['庭石撤去','m³'],['植栽撤去','m³'],['CB撤去','㎡'],['内部残置物撤去','m³']]:/回送|諸経費|福利|値引/.test(name)?[['重機回送費','式'],['諸経費','式'],['値引き','式'],['法定福利費','式']]:/その他/.test(name)?[['解体跡整地','㎡'],['土嚢積み','m']]:[];
+ const quoteChoices=name=>/仮設/.test(name)?[['養生足場','㎡'],['防音シート張り','㎡'],['散水費','式'],['養生メッシュシート張り','㎡'],['アスベスト含有調査','検体'],['アスベスト含有スレート撤去・処分','㎡']]:/産業廃棄物|処分/.test(name)?[['木くず処分','m³'],['コンクリート処分','m³'],['混合廃棄物処分','m³'],['産業廃棄物運搬費','m³']]:/解体/.test(name)?[['内部解体','㎡'],['上屋解体','㎡'],['階上解体','㎡'],['基礎コンクリート解体','m³'],['土間コンクリート解体','m³'],['外構撤去','㎡'],['庭石撤去','m³'],['植栽撤去','m³'],['CB撤去','㎡'],['内部残置物撤去','m³']]:/回送|諸経費|福利|値引/.test(name)?[['重機回送費','式'],['諸経費','式'],['値引き','式'],['法定福利費','式']]:/その他/.test(name)?[['解体跡整地','㎡'],['土嚢積み','m']]:[];
  function choicePicker(g,i){const items=quoteChoices(g.name);return items.length?'<label for="epChoice'+i+'">よく使う品名から選ぶ</label><select id="epChoice'+i+'" data-quote-choice="'+i+'"><option value="">品名を選ぶと明細に追加します</option>'+items.map(([label],j)=>'<option value="'+j+'">'+esc(label)+'</option>').join('')+'</select>':'';}
  function checkQuoteItems(){
   let count=0;
