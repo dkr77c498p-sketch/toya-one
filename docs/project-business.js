@@ -49,7 +49,7 @@
  const summarySite=()=>q('#siteSummarySelect')?.value||'';
  const siteByName=name=>sites.find(s=>s.name===name);
  const documentReady=()=>!!editor&&(editor.kind==='estimate'&&!editor.site_id||siteLoaded);
- const note=(s,error=false)=>{const n=q('#pbStatus');if(n){n.textContent=s;n.classList.toggle('pb-error',error);}const local=q('#pbActionStatus');if(local){local.textContent=s;local.classList.toggle('pb-error',error);}};
+ const note=(s,error=false)=>{for(const selector of ['#pbStatus','#pbActionStatus','#pbDeleteStatus']){const n=q(selector);if(n){n.textContent=s;n.classList.toggle('pb-error',error);}}};
  const one=data=>Array.isArray(data)?data[0]:data;
  function issueAvailable(){
   if(!identity()){note('管理者としてログインし直してください。',true);return false;}
@@ -144,7 +144,7 @@
   try{
    const result=await Promise.all([read('project_documents','*',cloudProfile.company_id,sid),read('revenues','id,site_id,revenue_type,amount,updated_at',cloudProfile.company_id,sid)]);
    if(t!==ticket||identity()!==mine||siteId!==sid)return;docs=result[0];const contracts=result[1].filter(r=>r.revenue_type==='contract');if(contracts.length>1)throw new Error('請負金額が重複しています。確認してください。');contract=contracts[0]||null;siteLoaded=true;
-   renderOverview();renderCompletion();renderList();note('下書きは請求済額に含めず、確定した請求書だけ集計します。');
+   renderOverview();renderCompletion();renderList();if(editor)updateTotals();note('下書きは請求済額に含めず、確定した請求書だけ集計します。');
   }catch(e){if(t===ticket&&identity()===mine)note('書類を確認できませんでした：'+e.message,true);}
  }
  function renderOverview(){
@@ -216,7 +216,7 @@
   closeDeleteConfirmation?.();
   const home=q('#pbEditor'),estimateHost=q('#estimateDocumentHost');if(home)home.innerHTML='';if(estimateHost)estimateHost.innerHTML='';if(!editor)return;const host=editor.kind==='estimate'&&estimateHost?estimateHost:home;if(!host)return;const d=editor,locked=d.status!=='draft',estimate=d.kind==='estimate',progress=d.kind==='progress',linked=!!d.estimate_plan_id,simple=estimate&&linked&&d.estimate_snapshot?.entry_mode==='quote';
   host.innerHTML=simple?simpleEstimateHTML(d,locked):'<section class="pb-editor"><div class="pb-editor-heading"><h3>'+E.kinds[d.kind]+' '+esc(d.document_number||'下書き')+'</h3><button id="pbCloseEditor" class="btn light" type="button">閉じる</button></div>'+(linked?'<p class="note">積算表から作った見積書です。金額を変えるときは積算表を修正し、新しい見積書を作成してください。</p>':'')+'<fieldset id="pbFields" '+(locked?'disabled':'')+'><div class="pb-grid">'+field('発行日','pbDocumentDate',d.document_date,'date')+field(estimate?'見積有効期限':'支払期限',estimate?'pbValidUntil':'pbDueDate',estimate?d.valid_until:d.due_date,'date')+'</div>'+field('宛先（会社名・お名前）','pbCustomer',d.customer_name,'text','maxlength="160"')+field('宛先住所','pbCustomerAddress',d.customer_address,'text','maxlength="500"')+field('件名','pbSubject',d.subject,'text','maxlength="200"')+'<div class="pb-grid">'+field('工事期間・取引開始日','pbTransactionStart',d.transaction_start,'date')+field('工事期間・取引終了日','pbTransactionEnd',d.transaction_end,'date')+'</div><label for="pbTaxRate">消費税</label><select id="pbTaxRate"><option value="10">10%</option><option value="8">8%（軽減税率）</option><option value="0">非課税・対象外</option></select>'+(progress?'<div class="pb-progress"><p>請負金額：<b>'+ (contract?yen(contract.amount):'未登録')+'</b>（税別）<br>前回までの請求額：<b id="pbPrevious">'+yen(locked?d.previous_billed:E.billed(docs))+'</b>（税別）</p><div class="pb-grid">'+field('累計出来高率（%）','pbProgressPercent','','number','min="0" max="100" step="0.01" inputmode="decimal"')+'<div class="pb-align-bottom"><button id="pbUsePercent" class="btn light" type="button">率から金額を計算</button></div></div>'+field('累計出来高（円・税別）','pbCumulative',d.cumulative_amount,'number','min="0" step="1" inputmode="numeric"')+'<p class="note">今回分を含め、これまでに出来上がった工事の累計金額を入力します。</p></div>':'<h4>明細</h4><p class="note">数量 × 単価で計算（明細の1円未満は切捨て）。消費税は書類全体で1回計算します。</p><div id="pbLines"></div>'+(!linked?'<button id="pbAddLine" class="btn light pb-wide" type="button">＋ 明細を追加</button>':'')+(estimate&&!linked?'<details><summary>登録単価を原価に使う</summary><select id="pbRate">'+rateOptions()+'</select><button id="pbAddRate" type="button" class="btn light pb-wide">原価付きの明細を追加</button><p class="note">見積先へ出す単価は、明細の「見積単価」に入力してください。</p></details>':''))+'<label for="pbNotes">備考・条件</label><textarea id="pbNotes" maxlength="3000">'+esc(d.notes)+'</textarea></fieldset><div id="pbTotals" aria-live="polite"></div><p id="pbEditorStatus" class="note" role="status"></p><p id="pbActionStatus" class="note" role="status"></p><details><summary>この書類の発行者</summary><div id="pbIssuerView"></div>'+(!locked?'<button id="pbApplyIssuer" class="btn light pb-wide" type="button">保存済みの発行者情報を反映</button>':'')+'</details><div class="pb-actions">'+(!locked?'<button id="pbSaveDoc" class="btn dark" type="button">下書きを保存</button>':'')+'<button id="pbShowPreview" class="btn light" type="button">プレビュー・印刷</button></div>'+(!locked?'<button id="pbIssueDoc" class="btn lime pb-wide" type="button">内容を確定・採番</button><p class="note">下書きを保存し、内容を確認してから確定します。</p>':(!estimate?'<button id="pbCopyDoc" class="btn light pb-wide" type="button">複製して新規作成</button>':''))+(locked&&d.kind==='estimate'&&d.status==='issued'&&d.site_id?'<button id="pbAcceptEstimate" class="btn dark pb-wide" type="button">この見積額を請負金額に設定</button><div class="pb-actions"><button id="pbInvoiceFromEstimate" class="btn light" type="button">請求書に引き継ぐ</button><button id="pbProgressFromEstimate" class="btn light" type="button">出来高請求に引き継ぐ</button></div>':'')+(d.id&&d.status!=='void'?'<details><summary>この書類を取り消す</summary>'+field('取消理由','pbVoidReason','','text','maxlength="500"')+'<button id="pbVoidDoc" class="btn danger pb-wide" type="button">取消として保存</button></details>':'')+'</section>';
-  if(canDeleteInvoice(d))host.querySelector('.pb-editor').insertAdjacentHTML('beforeend','<details id="pbDeleteSection"><summary>サンプル・不要な下書きを完全削除</summary><p class="note">一度も確定していない請求書を削除できます。取消の履歴も残らず、元には戻せません。変更中の場合は下書きを保存してから削除してください。</p><button id="pbDeleteDoc" class="btn danger pb-wide" type="button">この請求書を完全削除</button></details>');
+  if(canDeleteInvoice(d))host.querySelector('.pb-editor').insertAdjacentHTML('beforeend','<details id="pbDeleteSection"><summary>サンプル・不要な下書きを完全削除</summary><p class="note">一度も確定していない請求書を削除できます。保存し直さずに削除へ進めます。取消の履歴も残らず、元には戻せません。</p><button id="pbDeleteDoc" class="btn danger pb-wide" type="button">この請求書を完全削除</button><p id="pbDeleteStatus" class="note" role="status" aria-live="polite"></p></details>');
   q('#pbTaxRate').value=String(d.tax_rate);if(linked)q('#pbTaxRate').disabled=true;renderLines();renderIssuer();updateTotals();
   q('#pbCloseEditor').onclick=()=>{if(discard()){editor=null;dirty=false;host.innerHTML='';if(simple)window.ToyaEstimatePlanUI?.returnToInput(d);}};
   q('#pbFields').addEventListener('input',()=>{dirty=true;updateTotals();});q('#pbFields').addEventListener('change',()=>{dirty=true;updateTotals();});
@@ -259,13 +259,13 @@
   if(!editor)return;const host=q('#pbTotals');try{const {d,totals:t}=calculatedDocument();host.innerHTML='<div class="pb-metrics"><div><small>'+(d.kind==='progress'?'今回請求額（税別）':'小計（税別）')+'</small><b>'+yen(t.subtotal)+'</b></div><div><small>消費税 '+d.tax_rate+'%</small><b>'+yen(t.tax)+'</b></div><div><small>合計（税込）</small><b>'+yen(t.total)+'</b></div></div>'+(d.kind==='estimate'&&d.estimate_snapshot?.entry_mode!=='quote'?'<p class="pb-estimate-profit">'+(t.cost===null?'原価未入力 '+t.missingCost+'項目／入力済み原価 '+yen(t.enteredCost):'見込原価 '+yen(t.cost)+' ／ 見込利益 '+yen(t.profit))+'</p>':'');if(q('#pbReviewCustomer'))q('#pbReviewCustomer').textContent='見積先：'+d.customer_name;t.lines.forEach((r,i)=>{const x=q('[data-amount="'+i+'"]');if(x)x.textContent='金額 '+yen(r.amount);});}
   catch(e){host.textContent=e.message;}
   if(q('#pbIssueDoc'))q('#pbIssueDoc').disabled=editor.estimate_snapshot?.entry_mode==='quote'?busy||!documentReady():!editor.id||dirty||busy||!documentReady();
-  if(q('#pbDeleteDoc'))q('#pbDeleteDoc').disabled=dirty||busy||!documentReady();
+  if(q('#pbDeleteDoc'))q('#pbDeleteDoc').disabled=busy;
   if(q('#pbEditorStatus'))q('#pbEditorStatus').textContent=editor.estimate_snapshot?.entry_mode==='quote'&&editor.status==='draft'?(dirty?'変更した内容も「完成して印刷・PDFへ」で保存します。':'見積は保存済みです。仕上がりを確認して完成してください。'):editor.status==='void'?'取消済み：'+editor.void_reason:editor.status==='issued'?'確定済みの内容を表示しています。':dirty?'未保存の変更があります。':'下書きを保存済みです。内容を確認して確定できます。';
  }
  async function action(fn,operation='保存'){
   if(busy||!identity()||window.ToyaEstimatePlanUI?.isBusy())return;busy=true;const mine=owner;
   document.querySelectorAll('#projectBusinessCard button,#projectBusinessCard input,#projectBusinessCard select,#projectBusinessCard textarea,#estimatePlanCard button,#estimatePlanCard input,#estimatePlanCard select,#estimatePlanCard textarea').forEach(b=>{b.dataset.pbWasDisabled=String(b.disabled);b.disabled=true;});
-  try{await fn();}catch(e){if(identity()===mine){note(operation+'できませんでした：'+String(e.message||e),true);if(operation==='確定')q('#pbActionStatus')?.scrollIntoView({block:'center',behavior:'smooth'});}}
+  try{await fn();}catch(e){if(identity()===mine){note(operation+'できませんでした：'+String(e.message||e),true);if(operation==='確定')q('#pbActionStatus')?.scrollIntoView({block:'center',behavior:'smooth'});if(operation.startsWith('削除'))q('#pbDeleteStatus')?.scrollIntoView({block:'center',behavior:'smooth'});}}
   finally{busy=false;if(identity()===mine){document.querySelectorAll('[data-pb-was-disabled]').forEach(b=>{b.disabled=b.dataset.pbWasDisabled==='true';delete b.dataset.pbWasDisabled;});if(editor)updateTotals();}}
  }
  function adoptDocument(row){if(!row?.id)throw new Error('保存結果を確認できません。');docs=[...docs.filter(d=>d.id!==row.id),row].filter(d=>d.site_id===siteId);editor=copy(row);dirty=false;renderOverview();renderList();renderEditor();if(row.kind==='estimate')document.dispatchEvent(new CustomEvent('toya-estimate-document-changed',{detail:copy(row)}));}
@@ -284,32 +284,44 @@
   if(!issueAvailable())return;
   await action(async()=>{note(E.kinds[d.kind]+'を確定しています…');const r=await cloudClient.rpc('toya_issue_project_document',{p_id:d.id,p_expected_updated_at:d.updated_at});if(r.error)throw r.error;if(identity()!==mine)return;adoptDocument(one(r.data));note('確定しました。書類番号：'+editor.document_number+'。プレビューから印刷・PDF保存できます。');},'確定');
  }
- function confirmInvoiceDeletion(d){
+ function confirmInvoiceDeletion(d,hasUnsavedChanges){
   if(closeDeleteConfirmation)return Promise.resolve(false);
   return new Promise(resolve=>{
    const opener=q('#pbDeleteDoc'),dialog=document.createElement('dialog');let finished=false;
    dialog.id='pbDeleteConfirmation';dialog.setAttribute('aria-labelledby','pbDeleteTitle');dialog.setAttribute('aria-describedby','pbDeleteExplanation');
-   dialog.innerHTML='<h3 id="pbDeleteTitle">この請求書を完全削除しますか？</h3><dl><dt>宛先</dt><dd>'+esc(d.customer_name||'未入力')+'</dd><dt>件名</dt><dd>'+esc(d.subject)+'</dd><dt>発行日</dt><dd>'+esc(d.document_date)+'</dd></dl><div class="pb-metrics"><div><small>合計（税込）</small><b>'+yen(d.total)+'</b></div></div><p id="pbDeleteExplanation">この書類の入力内容と取消履歴を完全に削除します。元には戻せません。</p><button id="pbDeleteApprove" class="btn danger pb-wide" type="button">確認した請求書を完全削除する</button><button id="pbDeleteCancel" class="btn light pb-wide" type="button" autofocus>削除せず戻る</button>';
+   dialog.innerHTML='<h3 id="pbDeleteTitle">この請求書を完全削除しますか？</h3><p class="note">保存されている請求書の内容です。</p><dl><dt>宛先</dt><dd>'+esc(d.customer_name||'未入力')+'</dd><dt>件名</dt><dd>'+esc(d.subject)+'</dd><dt>発行日</dt><dd>'+esc(d.document_date)+'</dd></dl><div class="pb-metrics"><div><small>合計（税込）</small><b>'+yen(d.total)+'</b></div></div><p id="pbDeleteExplanation">この書類の入力内容と取消履歴を完全に削除します。'+(hasUnsavedChanges?'画面で変更中の内容も破棄されます。':'')+'元には戻せません。</p><button id="pbDeleteApprove" class="btn danger pb-wide" type="button">確認した請求書を完全削除する</button><button id="pbDeleteCancel" class="btn light pb-wide" type="button" autofocus>削除せず戻る</button>';
    const finish=accepted=>{if(finished)return;finished=true;closeDeleteConfirmation=null;if(dialog.open)dialog.close();dialog.remove();if(opener?.isConnected)opener.focus({preventScroll:true});resolve(accepted);};
    closeDeleteConfirmation=()=>finish(false);
    q('#pbDeleteApprove',dialog).onclick=()=>finish(true);q('#pbDeleteCancel',dialog).onclick=()=>finish(false);
    dialog.addEventListener('cancel',e=>{e.preventDefault();finish(false);});dialog.addEventListener('close',()=>finish(false));document.body.append(dialog);
-   try{dialog.showModal();q('#pbDeleteCancel',dialog).focus();}catch(e){finish(false);note('確認画面を開けませんでした。画面を再読み込みしてください。',true);}
+   try{dialog.showModal();q('#pbDeleteCancel',dialog).focus();}catch(e){finish(null);note('確認画面を開けませんでした。画面を再読み込みしてください。',true);}
   });
  }
  async function deleteInvoice(){
   if(!issueAvailable())return;
   if(!canDeleteInvoice(editor))return note('完全削除できるのは、一度も確定していない請求書です。',true);
-  if(dirty||!documentReady())return note('先に下書きを保存し、削除する内容を確認してください。',true);
-  const d=copy(editor),mine=owner;
-  if(!await confirmInvoiceDeletion(d))return;
-  if(identity()!==mine||!editor)return;
-  if(dirty||!documentReady()||editor.id!==d.id||editor.updated_at!==d.updated_at||!canDeleteInvoice(editor))return note('内容が変わりました。開き直してから削除してください。',true);
+  const id=editor.id,mine=owner;let d;
   await action(async()=>{
+   note('削除する請求書を確認しています…');
+   const r=await cloudClient.from('project_documents').select('*').eq('company_id',cloudProfile.company_id).eq('id',id);
+   if(r.error)throw r.error;if(identity()!==mine||editor?.id!==id)return;
+   const saved=one(r.data);if(!saved)throw new Error('書類を確認できません。一覧を更新してください。');
+   if(!canDeleteInvoice(saved))throw new Error('この請求書は確定済みのため完全削除できません。一覧を更新して確認してください。');
+   d=copy(saved);
+  },'削除の確認');
+  if(!d||identity()!==mine||editor?.id!==id)return;
+  const approved=await confirmInvoiceDeletion(d,dirty);
+  if(!approved){if(approved===false&&identity()===mine&&editor?.id===id)note('削除を中止しました。請求書と変更中の内容は残っています。');return;}
+  if(identity()!==mine||!editor)return;
+  if(editor.id!==d.id||!canDeleteInvoice(editor))return note('選択した請求書が変わりました。開き直してから削除してください。',true);
+  if(!issueAvailable())return;
+  await action(async()=>{
+   note('請求書を削除しています…');
    const r=await cloudClient.rpc('toya_delete_unissued_invoice',{p_id:d.id,p_expected_updated_at:d.updated_at});if(r.error)throw r.error;if(identity()!==mine)return;
    if(one(r.data)!==d.id)throw new Error('削除結果を確認できません。一覧を更新してください。');
-   closeDocumentPreview?.();ticket++;docs=docs.filter(row=>row.id!==d.id);editor=null;dirty=false;renderOverview();renderList();renderEditor();note('「'+d.subject+'」を完全削除しました。');q('#pbDocuments')?.scrollIntoView({block:'start',behavior:'smooth'});
+   closeDocumentPreview?.();ticket++;docs=docs.filter(row=>row.id!==d.id);editor=null;dirty=false;renderOverview();renderList();renderEditor();if(!siteLoaded)await loadSite();if(identity()!==mine)return;note('「'+d.subject+'」を完全削除しました。'+(siteLoaded?'':'一覧を更新して確認してください。'));q('#pbDocuments')?.scrollIntoView({block:'start',behavior:'smooth'});
   },'削除');
+  if(identity()===mine&&!editor)renderOverview();
  }
  async function voidDocument(){
   const d=copy(editor),mine=owner,reason=q('#pbVoidReason').value.trim();if(!reason)return note('取消理由を入力してください。',true);
