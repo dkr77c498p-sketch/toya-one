@@ -1,0 +1,32 @@
+const assert=require('node:assert/strict');
+const {setup,pause}=require('./project-business-ui.cjs');
+(async()=>{
+ const {dom,w,db,calls}=await setup('admin'),q=s=>w.document.querySelector(s);
+ const set=(s,v)=>{q(s).value=v;q(s).dispatchEvent(new w.Event('input',{bubbles:true}));};
+ const rpc=w.cloudClient.rpc.bind(w.cloudClient);let fail=false,release;
+ w.cloudClient.rpc=async(name,p)=>{
+  if(name!=='toya_delete_unissued_invoice')return rpc(name,p);
+  calls.push([name,p]);if(fail)return {error:{message:'書類が更新されています。開き直してください。'}};
+  await new Promise(resolve=>{release=resolve;});db.project_documents=db.project_documents.filter(d=>d.id!==p.p_id);return {data:p.p_id};
+ };
+ q('#pbSite').value='site-1';q('#pbSite').dispatchEvent(new w.Event('change'));await pause();
+ q('#pbNew').click();assert.equal(q('#pbDeleteDoc'),null,'未保存は削除対象なし');
+ set('#pbCustomer','サンプル宛先');set('#pbSubject','削除サンプル <test>');q('#pbSaveDoc').click();await pause();
+ assert.ok(q('#pbDeleteDoc'));const id=db.project_documents[0].id,version=db.project_documents[0].updated_at;
+ set('#pbSubject','未保存の変更');assert.equal(q('#pbDeleteDoc').disabled,true);
+ q('#pbSaveDoc').click();await pause();
+ q('#pbDeleteDoc').click();assert.ok(q('#pbDeleteConfirmation').open);assert.equal(w.document.activeElement,q('#pbDeleteCancel'));
+ assert.match(q('#pbDeleteConfirmation').textContent,/サンプル宛先/);assert.match(q('#pbDeleteConfirmation').textContent,/110,000円/);
+ q('#pbDeleteCancel').click();await pause();assert.equal(db.project_documents.length,1);assert.equal(calls.filter(x=>x[0]==='toya_delete_unissued_invoice').length,0);
+ fail=true;q('#pbDeleteDoc').click();q('#pbDeleteApprove').click();await pause();assert.equal(db.project_documents.length,1);assert.ok(q('#pbDeleteDoc'));assert.match(q('#pbActionStatus').textContent,/更新/);
+ fail=false;q('#pbDeleteDoc').click();q('#pbDeleteApprove').click();await pause();assert.equal(q('#pbDeleteDoc').disabled,true);
+ release();await pause();assert.equal(db.project_documents.length,0);assert.equal(q('#pbEditor').textContent,'');assert.match(q('#pbStatus').textContent,/完全削除しました/);
+ const request=calls.filter(x=>x[0]==='toya_delete_unissued_invoice').at(-1)[1];assert.equal(request.p_id,id);assert.notEqual(request.p_expected_updated_at,version);
+ q('#pbNew').click();set('#pbCustomer','履歴確認');q('#pbSaveDoc').click();await pause();
+ const row=db.project_documents[0];row.status='void';row.issued_at='2026-09-13T00:00:00Z';row.document_number='INV-2026-9999';
+ q('#pbCloseEditor').click();q('#pbReload').click();await pause();
+ const open=[...q('#pbDocuments').querySelectorAll('button')].find(b=>b.textContent.includes('開く'));open.click();assert.equal(q('#pbDeleteDoc'),null,'一度確定した取消は削除不可');
+ q('#pbCloseEditor').click();row.issued_at=null;row.document_number=null;q('#pbReload').click();await pause();q('#pbDocuments button').click();assert.ok(q('#pbDeleteDoc'),'未確定の取消は削除可');
+ q('#pbDeleteDoc').click();w.cloudProfile=null;w.applyCloudRoleUI();await pause();assert.equal(q('#pbDeleteConfirmation'),null,'ログアウトで確認を閉じる');
+ dom.window.close();console.log('PASS deletion UI: explicit confirmation, cancellation, stale/error preservation, exact ID/version, success, issued protection, logout');
+})().catch(e=>{console.error(e);process.exitCode=1;});
