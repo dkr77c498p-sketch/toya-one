@@ -23,6 +23,9 @@ const read=d=>{const doc=new JSDOM(E.printHTML(d).replace(/<style>[\s\S]*?<\/sty
  assert.equal(q('.invoice-logo').getAttribute('src'),'toya-document-logo.svg');
  assert.equal(q('.invoice-totals').textContent,'税抜額6,360,000消費税額636,000合計6,996,000');
  assert.equal(q('.invoice-state').textContent,'下書き');
+ assert.equal(q('.invoice-project b').textContent,'テスト解体工事');
+ assert.match(q('.invoice-project').textContent,/取引日・工事期間：2026-09-11/);
+ assert.equal(q('.invoice-meta').textContent,'未採番');
  assert.match(q('.invoice-terms').textContent,/2026-10-31/);dom.window.close();
  const before=JSON.stringify(base);E.printHTML(base);assert.equal(JSON.stringify(base),before);
  const escaped=read({...base,issuer:{issuer_name:'別会社'},items:[{name:'<script>bad()</script>',spec:'<img src=x>',code:'<b>code</b>',remark:'<svg onload=x>',quantity:'2.125',unit:'m²',unitPrice:'100.25'}]});
@@ -32,7 +35,7 @@ const read=d=>{const doc=new JSDOM(E.printHTML(d).replace(/<style>[\s\S]*?<\/sty
  for(const tax_rate of [0,8]){const d=read({...base,tax_rate});assert.match(d.q('.invoice-tax-detail').textContent,tax_rate===0?/非課税・対象外/:/軽減税率/);d.dom.window.close();}
  const many=read({...base,items:Array.from({length:48},(_,i)=>({name:'明細'+i,quantity:'1',unit:'式',unitPrice:'1000'}))});assert.equal(many.q('.invoice-lines tbody').children.length,48);assert.equal(many.dom.window.document.querySelectorAll('.invoice-totals').length,1);many.dom.window.close();
  assert.ok(!E.printHTML({...base,kind:'estimate'}).includes('invoice-document'));
- const issued=read({...base,status:'issued',document_number:'INV-TEST-0001'});assert.equal(issued.q('.invoice-state'),null);assert.match(issued.q('.invoice-meta').textContent,/INV-TEST-0001/);issued.dom.window.close();
+ const issued=read({...base,status:'issued',document_number:'INV-TEST-0001'});assert.equal(issued.q('.invoice-state'),null);assert.equal(issued.q('.invoice-meta').textContent,'INV-TEST-0001');issued.dom.window.close();
  console.log('PASS invoice columns, amounts, company header, safety, tax, progress and multi-page structure');
  const ui=await setup('admin'),w=ui.w,find=s=>w.document.querySelector(s),put=(s,v)=>{find(s).value=v;find(s).dispatchEvent(new w.Event('input',{bubbles:true}));};
  put('#pbIssuerPostal','1234567');put('#pbIssuerFax','000-1111-2222');put('#pbIssuerRepresentative','代表取締役 テスト');put('#pbIssuerLogo','toya');find('#pbCompanySave').click();await pause();
