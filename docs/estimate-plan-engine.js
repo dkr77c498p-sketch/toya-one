@@ -101,3 +101,4 @@
  }
  return {categories,line,calculate,blankLine,draft,duplicate,printHTML,quoteLine,calculateQuote,blankQuoteLine,quoteDraft};
 });
+

@@ -6,7 +6,7 @@
   'use strict';
  const dispatchCatalog=typeof module==='object'&&module.exports?require('./dispatch-catalog.js'):window.ToyaDispatchCatalog;
   const codes = ['meiken', 'asahi'];
-  const labels = {meiken:'明建', asahi:'朝日'};
+  const labels = {meiken:'旧派遣枠1', asahi:'旧派遣枠2'};
   const list = v => Array.isArray(v) ? v : [];
   const number = v => v == null || String(v).trim() === '' ? null : typeof v === 'boolean' ? NaN : Number(v);
   const round = v => Math.round((v + Number.EPSILON) * 100) / 100;
@@ -68,7 +68,7 @@
     const prefix='dt-'+code;
     return '<div class="dt-group" id="'+prefix+'"><label for="'+prefix+'-vehicles">通勤台数（人数とは別）</label>'+ 
       '<div class="dt-step"><button type="button" data-dt-delta="-1" aria-label="'+labels[code]+'の通勤台数を減らす">−</button><input id="'+prefix+'-vehicles" data-stepper="1" data-dt-key="vehicles" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="未入力"><button type="button" data-dt-delta="1" aria-label="'+labels[code]+'の通勤台数を増やす">＋</button></div>'+
-      '<div class="dt-area" role="group" aria-label="'+labels[code]+'の通勤区分"><button type="button" data-dt-area="city">鹿児島市内</button><button type="button" data-dt-area="outside">市外</button></div>'+
+      '<div class="dt-area" role="group" aria-label="'+labels[code]+'の通勤区分"><button type="button" data-dt-area="city">市内</button><button type="button" data-dt-area="outside">市外</button></div>'+
       '<p class="note dt-preview" role="status"></p><details class="dt-options"><summary>高速代・市外料金・金額の調整</summary>'+ 
       '<label for="'+prefix+'-highway">高速代の合計（円・別途）</label><input id="'+prefix+'-highway" data-stepper="1" data-dt-key="highway" type="number" inputmode="decimal" min="0" step="0.01" placeholder="未確認"><p class="note">高速を使わなければ0円。その会社の合計額です。</p>'+ 
       '<label for="'+prefix+'-manualTravel">交通費の合計を手入力（円・任意）</label><input id="'+prefix+'-manualTravel" data-stepper="1" data-dt-key="manualTravel" type="number" inputmode="decimal" min="0" step="0.01" placeholder="市内は空欄で自動、市外は入力"><p class="note">市外・特別料金は合計額を入力。0円も指定できます。高速代は含めません。半日でも通勤費は半額にしません。</p>'+ 
@@ -125,7 +125,7 @@
     const originalValidate=window.validate;
     window.validate=function(d){if(!originalValidate.apply(this,arguments))return false;for(const code of codes){if(Number(d[code+'Count']||0)<=0)continue;const p=invalid(decode(d.dispatchTravel?.[code]));if(p){alert(labels[code]+'：'+p);return false;}}return true;};
     const originalText=window.lineText;
-    window.lineText=function(d){let text=originalText.apply(this,arguments);const parts=codes.filter(code=>Number(d[code+'Count']||0)>0&&d.dispatchTravel?.[code]).map(code=>{const v=decode(d.dispatchTravel[code]);return '・'+labels[code]+' '+(v.area==='city'?'鹿児島市内':v.area==='outside'?'市外':'区分未確認')+'／通勤 '+(v.vehicles===null?'未確認':v.vehicles+'台')+'／高速代 '+(v.highway===null?'未確認':yen(v.highway))+(v.manualTravel!==null?'／交通費合計 '+yen(v.manualTravel):'')+(v.memo?'／'+v.memo:'');});if(parts.length){const extra='\n\n■通勤・交通費\n'+parts.join('\n'),pos=text.lastIndexOf('\n\n※');text=pos<0?text+extra:text.slice(0,pos)+extra+text.slice(pos);}return text;};
+    window.lineText=function(d){let text=originalText.apply(this,arguments);const parts=codes.filter(code=>Number(d[code+'Count']||0)>0&&d.dispatchTravel?.[code]).map(code=>{const v=decode(d.dispatchTravel[code]);return '・'+labels[code]+' '+(v.area==='city'?'市内':v.area==='outside'?'市外':'区分未確認')+'／通勤 '+(v.vehicles===null?'未確認':v.vehicles+'台')+'／高速代 '+(v.highway===null?'未確認':yen(v.highway))+(v.manualTravel!==null?'／交通費合計 '+yen(v.manualTravel):'')+(v.memo?'／'+v.memo:'');});if(parts.length){const extra='\n\n■通勤・交通費\n'+parts.join('\n'),pos=text.lastIndexOf('\n\n※');text=pos<0?text+extra:text.slice(0,pos)+extra+text.slice(pos);}return text;};
     installed=true;
   }
   async function loadRates() {

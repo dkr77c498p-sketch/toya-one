@@ -159,7 +159,7 @@
   }
   const numberInput=(i,key,value,label,step='1',placeholder='')=>`<div><label for="lc-${i}-${key}">${label}</label><input id="lc-${i}-${key}" data-lc-key="${key}" type="number" inputmode="decimal" min="0" step="${step}" value="${esc(value??'')}" placeholder="${esc(placeholder)}"></div>`;
   const counter=(i,key,value,label)=>`<div><label for="lc-${i}-${key}">${label}</label><div class="lc-stepper"><button type="button" data-lc-step="-1" data-lc-field="${key}" aria-label="${label}を1減らす">−</button><input id="lc-${i}-${key}" data-lc-key="${key}" type="number" inputmode="numeric" min="0" step="1" value="${esc(value)}"><button type="button" data-lc-step="1" data-lc-field="${key}" aria-label="${label}を1増やす">＋</button></div></div>`;
-  const travelArea=r=>`<div><label>交通費の区分</label><select data-lc-key="area" aria-label="交通費の区分"><option value="city" ${r.area==='city'?'selected':''}>鹿児島市内</option><option value="outside" ${r.area==='outside'?'selected':''}>市外（交通費を手入力）</option></select></div>`;
+  const travelArea=r=>`<div><label>交通費の区分</label><select data-lc-key="area" aria-label="交通費の区分"><option value="city" ${r.area==='city'?'selected':''}>市内</option><option value="outside" ${r.area==='outside'?'selected':''}>市外（交通費を手入力）</option></select></div>`;
   function adjustment(i,r){
     const c=calculate(r), hasAdjust=c.manual||r.area==='outside'||num(r.highway)>0||num(r.extra)>0||!!r.memo;
     const label=r.kind==='outgoing'?'常用代・売上 合計（円）':r.kind==='own'?'この人の人件費 合計（円）':'人件費・常用代 合計（円）';

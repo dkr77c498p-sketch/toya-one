@@ -1,6 +1,6 @@
 (() => {
- 'use strict';
- const client=window.supabase.createClient(window.ToyaSignupConfig.url,window.ToyaSignupConfig.key);
+ 'use strict';if(!window.ToyaSalesRuntime.ready)return;
+ const client=window.ToyaSalesRuntime.createClient();
  const q=s=>document.querySelector(s);let busy=false,user=null,state=null;
  const fromLink=new URLSearchParams(location.hash.slice(1)).get('join');
  if(fromLink&&/^[a-f0-9]{64}$/.test(fromLink)){sessionStorage.setItem('toya_pending_join',fromLink);history.replaceState(null,'',location.pathname);}

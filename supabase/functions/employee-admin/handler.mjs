@@ -1,7 +1,8 @@
 // Kept dependency-free so authorization/error paths can be exercised with a mocked Auth service.
 export function createHandler({createClient,env,random=crypto}) {
- const origin='https://dkr77c498p-sketch.github.io';
+ const origin=env('SALES_APP_ORIGIN');
  return async req=>{
+  if(!origin)return new Response(JSON.stringify({error:'販売用の公開設定が未完了です。'}),{status:503,headers:{'Content-Type':'application/json'}});
   const cors={'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Headers':'authorization, apikey, content-type, x-client-info','Access-Control-Allow-Methods':'POST, OPTIONS','Vary':'Origin','Cache-Control':'no-store'};
   const reply=(status,data)=>new Response(JSON.stringify(data),{status,headers:{...cors,'Content-Type':'application/json'}});
   if(req.headers.get('origin')&&req.headers.get('origin')!==origin)return reply(403,{error:'この画面からは操作できません。'});

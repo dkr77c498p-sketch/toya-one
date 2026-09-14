@@ -79,3 +79,4 @@
  document.addEventListener('toya-shared-sites-updated',()=>load(true));
  const start=()=>{mount();setInterval(()=>{if(identity())mount();else{owner='';siteId='';profile=blank();contract=null;token++;}},1000);};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
 })();
+

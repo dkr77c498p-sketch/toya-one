@@ -48,12 +48,8 @@
   const yen = n => Number(n).toLocaleString('ja-JP', {maximumFractionDigits:2}) + '円';
   const identity = () => typeof cloudProfile !== 'undefined' && cloudProfile?.active === true && cloudProfile.company_id && typeof cloudClient !== 'undefined' && cloudClient ? cloudProfile.id + ':' + cloudProfile.company_id + ':' + cloudProfile.role : '';
   const isAdmin = () => !!identity() && cloudProfile.role === 'admin';
-  // TOYA's input labels contain no prices. They remain usable for a draft while
-  // authentication/catalog loading is pending; authenticated rates stay private.
-  const draftCatalog = () => ['宝友','横手重機'].flatMap(carrier =>
-    ['SK55SR','SK135（1号機）','SK135（2号機）'].flatMap(machine_name =>
-      ['近距離運搬','遠方運搬','鹿児島市内運搬','鹿児島市外運搬'].map(distance_label =>
-        ({carrier,machine_name,distance_label,price_basis:'one_way_per_machine'}))));
+  // Customer equipment and carriers are loaded only after authentication.
+  const draftCatalog = () => [];
   let owner = '', catalog = draftCatalog(), rates = [], loading = false, loaded = false, ticket = 0;
   const rowData = row => ({name:q('.i-name',row).value,unit:q('.i-unit',row).value,qty:q('.i-qty',row).value,price:q('.i-price',row).value,company:q('.i-company',row).value});
   function paintRow(row) {
@@ -135,7 +131,7 @@
   function ui() {
     if(q('#etCard')||!q('#items'))return;
     const card=document.createElement('div');card.id='etCard';card.className='card';
-    card.innerHTML='<h2>重機回送（宝友・横手重機など）</h2><p class="note">運搬会社・重機・距離・回数を選びます。重機1台・片道1回が基準です。往復は2回。同じ運搬を複数人の日報に重ねて入力しないでください。</p>'+
+    card.innerHTML='<h2>重機回送</h2><p class="note">運搬会社・重機・距離・回数を選びます。重機1台・片道1回が基準です。往復は2回。同じ運搬を複数人の日報に重ねて入力しないでください。</p>'+
       '<label for="etCarrier">運搬会社</label><select id="etCarrier"></select><label for="etMachine">運ぶ重機</label><select id="etMachine"></select><label for="etDistance">距離区分</label><select id="etDistance"></select>'+
       '<label for="etCount">片道の回数（この重機1台分）</label><input id="etCount" type="number" inputmode="numeric" min="1" max="1000" step="1" value="1"><div class="et-count" style="margin-top:8px"><button type="button" class="btn light" data-et-count="1">片道1回</button><button type="button" class="btn light" data-et-count="2">往復2回</button></div>'+
       '<p id="etPreview" class="note" role="status"></p><button id="etAdd" type="button" class="btn dark et-wide" disabled>＋ この回送を日報へ追加</button><p id="etMessage" class="note" role="status"></p><p id="etConnection" class="note" role="status" aria-live="polite"></p><div class="et-count"><button id="etReload" class="btn light" type="button">選択肢を更新</button><button id="etLogin" class="btn light" type="button" hidden>ログイン画面へ</button></div><p class="note">選択後に「この回送を日報へ追加」を押し、最後に日報を保存してください。入庫日と出庫日が違う場合は各日に1回ずつ入力します。</p>';

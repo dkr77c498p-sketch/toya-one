@@ -1,12 +1,12 @@
 <!doctype html>
 <html lang="ja">
-<head><script src="company-access.js?v=20260914-plans-v1"></script>
+<head><script src="sales-config.js"></script><script src="sales-runtime.js"></script><script src="company-access.js?v=20260914-plans-v1"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0b">
 <link rel="manifest" href="manifest.json">
 <link rel="stylesheet" href="project-business.css?v=20260913-delete-draft-v1">
-<title>TOYA One</title>
+<title>TOYA One 販売用</title>
 <style>
 :root{--lime:#b8ff00;--black:#0b0b0b;--bg:#f2f3f3;--card:#fff;--line:#d9d9d9;--muted:#707070;--danger:#d92d20}
 *{box-sizing:border-box}
@@ -140,7 +140,7 @@ textarea{min-height:105px;resize:vertical}
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.20 請求書配置統一版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span></div><div class="sub">これひとつで、現場から経営まで。｜販売用｜日報・請求・見積</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
@@ -197,7 +197,7 @@ textarea{min-height:105px;resize:vertical}
 
 <div class="card no-print" id="siteMoveCard"><h2>現場移動</h2><div class="note">午前と午後など、同じ日に別の現場へ移動したときに使います。現在の入力を引き継いで2現場目・3現場目の日報を作れます。</div><button type="button" class="btn dark" style="width:100%;margin-top:10px;font-size:16px" onclick="createMovedSiteReport()">＋ 現場移動・次の現場を追加</button></div><div class="card"><h2>現場作業者</h2>
 <div class="choice-grid" id="companyWorkerChoices"></div>
-<div class="row"><div class="rowhead"><b>派遣人数</b></div><div class="grid2"><div><label>明建</label><input id="meikenCount" type="number" min="0" step="1" value="0"></div><div><label>朝日</label><input id="asahiCount" type="number" min="0" step="1" value="0"></div></div></div>
+<div class="row"><div class="rowhead"><b>派遣人数</b></div><div class="grid2"><div><label>旧派遣枠1</label><input id="meikenCount" type="number" min="0" step="1" value="0"></div><div><label>旧派遣枠2</label><input id="asahiCount" type="number" min="0" step="1" value="0"></div></div></div>
 <div class="grid3"><div><label>開始</label><input id="start" type="time" value="08:00"><div class="quick-row"><button type="button" class="quick-btn" onclick="setTimeQuick('start','07:00')">7:00</button><button type="button" class="quick-btn" onclick="setTimeQuick('start','08:00')">8:00</button></div></div><div><label>終了</label><input id="end" type="time" value="17:00"><div class="quick-row"><button type="button" class="quick-btn" onclick="setTimeQuick('end','16:00')">16:00</button><button type="button" class="quick-btn" onclick="setTimeQuick('end','17:00')">17:00</button><button type="button" class="quick-btn" onclick="setTimeQuick('end','18:00')">18:00</button></div></div><div><label>残業</label><input id="overtime" type="number" min="0" step="0.5" value="0"></div></div>
 <label>その他の作業者</label><input id="otherWorker" type="text">
 </div>
@@ -357,17 +357,13 @@ textarea{min-height:105px;resize:vertical}
 
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 
-const SUPABASE_URL='https://hmxntxrxelswjmzghoxf.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY='sb_publishable_7wfw7ZTDsDRH0QVUuWK0mg_AVJPnffC';
-const cloudClient=(window.supabase&&window.supabase.createClient)
-  ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY)
-  : null;
+const cloudClient=(window.ToyaSalesRuntime.ready&&window.supabase)?window.ToyaSalesRuntime.createClient():null;
 let cloudProfile=null;
 let companyTransition=false;
 function isToyaCompany(){return !companyTransition&&window.ToyaCompanyScope.isLegacy(cloudProfile);}
 function localCompanyKey(){return window.ToyaCompanyScope.company(cloudProfile);}
 let activityOpenedLogged=false;
-const TOYA_APP_URL='https://dkr77c498p-sketch.github.io/toya-one/';
+const TOYA_APP_URL=window.ToyaSalesConfig.appUrl;
 let cloudReportsCache=[];
 let cloudPhotoCount={};
 let cloudProfilesCache={};
@@ -942,18 +938,7 @@ function printCloudReport(cloudId){
 const legacyLocalKeys={reports:'toya_reports_v5',draft:'toya_draft_v5',sites:'toya_sites_v5',vehicles:'toya_vehicles_v5',machines:'toya_machines_v5',attachments:'toya_attachments_v1'};
 const LS=Object.fromEntries(Object.keys(legacyLocalKeys).map(k=>[k,null]));
 for(const k of Object.keys(LS))Object.defineProperty(LS,k,{enumerable:true,get:()=>window.ToyaCompanyScope.key(legacyLocalKeys[k],cloudProfile)});
-const legacyDefaults={sites:['現場名をあとで変更'],vehicles:['軽トラ','ハイエース','3tダンプ','4tダンプ','4tアームロール','10tダンプ'],machines:['SK55SR','SK135（1号機）','SK135（2号機）'],
-attachments:[
- {name:'オカダ TSWB950V',category:'大割機',location:'',mountedOn:'',memo:''},
- {name:'坂戸 SDS150SRC',category:'カッター',location:'',mountedOn:'',memo:''},
- {name:'坂戸 Magnum 800',category:'小割機',location:'',mountedOn:'',memo:''},
- {name:'古河 VS15',category:'マグネット',location:'',mountedOn:'',memo:''},
- {name:'ASG-130R',category:'0.45用フォーク',location:'',mountedOn:'',memo:''},
- {name:'ASG-35R',category:'0.2用フォーク',location:'',mountedOn:'',memo:''},
- {name:'スケルトンバケット',category:'バケット',location:'',mountedOn:'',memo:''},
- {name:'スケルトンバケット1号機用',category:'MAC',location:'',mountedOn:'',memo:''},
- {name:'スケルトンバケット2号機用',category:'MAC',location:'',mountedOn:'',memo:''}
-]};
+const legacyDefaults={sites:[],vehicles:[],machines:[],attachments:[]};
 const defaults={};for(const k of Object.keys(legacyDefaults))Object.defineProperty(defaults,k,{enumerable:true,get:()=>isToyaCompany()?structuredClone(legacyDefaults[k]):[]});
 function get(k,d=[]){if(companyTransition)return d;try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(e){return d}}
 function set(k,v){if(companyTransition)throw new Error('ログイン切替中です。画面の読み込みをお待ちください。');localStorage.setItem(k,JSON.stringify(v))}
@@ -961,7 +946,6 @@ function initializeCompanyDefaults(){if(!localCompanyKey())return;Object.entries
 function companyPeople(){
   if(!localCompanyKey())return [];
   const registered=window.ToyaCompanyRegistry?.people();if(registered)return [...new Set([...registered,...Object.values(cloudProfilesCache).filter(p=>p.active===true).map(p=>p.name),cloudProfile.name].filter(Boolean))];
-  if(isToyaCompany())return ['宮下 直也','上村 凌太','宮下 哲也'];
   return [...new Set([...Object.values(cloudProfilesCache).filter(p=>p.active!==false).map(p=>p.name),cloudProfile.name].map(n=>String(n||'').trim()).filter(Boolean))];
 }
 function renderCompanyPeople(){
@@ -1718,7 +1702,7 @@ function validate(d){
   }
   return true;
 }
-function lineText(d){let p=[...(d.workers||[])];if(d.meikenCount>0)p.push(`明建 ${d.meikenCount}名`);if(d.asahiCount>0)p.push(`朝日 ${d.asahiCount}名`);for(const e of d.dispatchWorkers||[])if(e.count>0)p.push(`${e.name} ${e.count}名`);if(d.otherWorker)p.push(d.otherWorker);const vl=[...(d.vehicles||[]).map(x=>`・${x}（自社）`),...(d.leaseVehicles||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];const ml=[...(d.machines||[]).map(x=>`・${x.name}${x.hours?` ${x.hours}時間`:''}（自社）`),...(d.leaseMachines||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];let t=`【${isToyaCompany()?'TOYA ':''}作業日報】\n日付：${d.date.replaceAll('-','/')}\n現場名：${d.site}\n記入者：${d.writer}\n天気：${d.weather}\n\n■作業者\n${p.length?p.map(x=>'・'+x).join('\n'):'・なし'}\n作業時間：${d.start}〜${d.end}${Number(d.overtime)>0?`（残業 ${d.overtime}時間）`:''}\n\n■作業内容\n${d.workTypes.length?d.workTypes.map(x=>'・'+x).join('\n')+'\n':''}${d.details||'記載なし'}\n\n■使用車両\n${vl.length?vl.join('\n'):'・なし'}\n\n■使用重機\n${ml.length?ml.join('\n'):'・なし'}`;const al=[...(d.attachments||[]).map(x=>`・${x}（自社）`),...(d.leaseAttachments||[]).map(x=>`・${x.name}${x.model?` ${x.model}`:''}（リース${x.company?`／${x.company}`:''}${x.machine?`／${x.machine}装着`:''}）`)];
+function lineText(d){let p=[...(d.workers||[])];if(d.meikenCount>0)p.push(`旧派遣枠1 ${d.meikenCount}名`);if(d.asahiCount>0)p.push(`旧派遣枠2 ${d.asahiCount}名`);for(const e of d.dispatchWorkers||[])if(e.count>0)p.push(`${e.name} ${e.count}名`);if(d.otherWorker)p.push(d.otherWorker);const vl=[...(d.vehicles||[]).map(x=>`・${x}（自社）`),...(d.leaseVehicles||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];const ml=[...(d.machines||[]).map(x=>`・${x.name}${x.hours?` ${x.hours}時間`:''}（自社）`),...(d.leaseMachines||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];let t=`【${isToyaCompany()?'TOYA ':''}作業日報】\n日付：${d.date.replaceAll('-','/')}\n現場名：${d.site}\n記入者：${d.writer}\n天気：${d.weather}\n\n■作業者\n${p.length?p.map(x=>'・'+x).join('\n'):'・なし'}\n作業時間：${d.start}〜${d.end}${Number(d.overtime)>0?`（残業 ${d.overtime}時間）`:''}\n\n■作業内容\n${d.workTypes.length?d.workTypes.map(x=>'・'+x).join('\n')+'\n':''}${d.details||'記載なし'}\n\n■使用車両\n${vl.length?vl.join('\n'):'・なし'}\n\n■使用重機\n${ml.length?ml.join('\n'):'・なし'}`;const al=[...(d.attachments||[]).map(x=>`・${x}（自社）`),...(d.leaseAttachments||[]).map(x=>`・${x.name}${x.model?` ${x.model}`:''}（リース${x.company?`／${x.company}`:''}${x.machine?`／${x.machine}装着`:''}）`)];
  t+=`\n\n■使用アタッチメント\n${al.length?al.join('\n'):'・なし'}`;
  if((d.fuels||[]).length)t+=`\n\n■燃料・油脂\n`+d.fuels.map(x=>`・${x.asset||'未設定'} ${x.source||''}${x.outlet?`（${x.outlet}）`:''} ${x.type||''} ${Number((x.qty??x.liters)||0).toLocaleString()}${x.unit||'L'}${x.unitPrice?` @￥${Number(x.unitPrice).toLocaleString()}`:''} ／ ￥${Math.round(fuelAmount(x)).toLocaleString()}${x.note?`（${x.note}）`:''}`).join('\n');
  if(d.items.length)t+=`\n\n■材料・処分・経費\n`+d.items.map(x=>`・${x.name} ${x.qty||''}${x.unit||''}${x.price?` ￥${Number(x.price).toLocaleString()}`:''}${x.company?`（${x.company}）`:''}${x.isWaste?`［マニフェスト：${x.manifestType==='paper'?'紙':x.manifestType==='electronic'?'電子':'なし'}］`:''}`).join('\n');if(d.memo)t+=`\n\n■メモ・明日の予定\n${d.memo}`;return t+`\n\n※現場写真分類：${d.photoCategory||'未分類'}（写真は別途添付）`}
@@ -2186,8 +2170,8 @@ async function deleteSaved(id){
     renderRecords();
   }
 }
-async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const includePremiumRates=cloudProfile?.active===true&&cloudProfile.role==='admin';const rows=[['日付','現場','記入者','クラウド登録者','天気',isToyaCompany()?'明建人数':'旧派遣枠1人数',isToyaCompany()?'朝日人数':'旧派遣枠2人数','登録派遣会社・人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ','終了日区分','勤務日区分','休憩（分）','実働（分）','夜間（分）','休日夜間（分）',...(includePremiumRates?['残業倍率']:[])]];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,(d.dispatchWorkers||[]).map(e=>`${e.name} ${e.count}名`).join('・'),[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo,...(window.ToyaWorkTimeEngine?.exportColumns(d,{includeRates:includePremiumRates})||Array(includePremiumRates?7:6).fill(''))]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
-function dailyReportStaff(){return isToyaCompany()?['上村 凌太','宮下 哲也']:Object.values(cloudProfilesCache).filter(p=>p.active!==false&&p.role==='employee').map(p=>String(p.name||'').trim()).filter(Boolean);}
+async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const includePremiumRates=cloudProfile?.active===true&&cloudProfile.role==='admin';const rows=[['日付','現場','記入者','クラウド登録者','天気',isToyaCompany()?'旧派遣枠1人数':'旧派遣枠1人数',isToyaCompany()?'旧派遣枠2人数':'旧派遣枠2人数','登録派遣会社・人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ','終了日区分','勤務日区分','休憩（分）','実働（分）','夜間（分）','休日夜間（分）',...(includePremiumRates?['残業倍率']:[])]];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,(d.dispatchWorkers||[]).map(e=>`${e.name} ${e.count}名`).join('・'),[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo,...(window.ToyaWorkTimeEngine?.exportColumns(d,{includeRates:includePremiumRates})||Array(includePremiumRates?7:6).fill(''))]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
+function dailyReportStaff(){return Object.values(cloudProfilesCache).filter(p=>p.active!==false&&p.role==='employee').map(p=>String(p.name||'').trim()).filter(Boolean);}
 async function renderHome(){
   const DAILY_REPORT_STAFF=dailyReportStaff();
   let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);
@@ -2230,7 +2214,7 @@ function renderAttachmentMaster(){
  <div class="rowhead"><b>${x.category||'アタッチメント'}</b><button class="btn danger" onclick="deleteAttachment(${i})">削除</button></div>
  ${isLegacyMacBucket(x)?'<p class="note">旧登録です。新しい日報では、MACの1号機用・2号機用を選んでください。</p>':''}
  <div class="grid2"><div><label>名称・型式</label><input value="${x.name||''}" onchange="updateAttachment(${i},'name',this.value)"></div><div><label>種類</label><input value="${x.category||''}" onchange="updateAttachment(${i},'category',this.value)"></div></div>
- <div class="grid2"><div><label>保管場所</label><input value="${x.location||''}" placeholder="第1ヤード・現場など" onchange="updateAttachment(${i},'location',this.value)"></div><div><label>装着中の重機</label><input value="${x.mountedOn||''}" placeholder="SK135（1号機）など" onchange="updateAttachment(${i},'mountedOn',this.value)"></div></div>
+ <div class="grid2"><div><label>保管場所</label><input value="${x.location||''}" placeholder="第1ヤード・現場など" onchange="updateAttachment(${i},'location',this.value)"></div><div><label>装着中の重機</label><input value="${x.mountedOn||''}" placeholder="重機名など" onchange="updateAttachment(${i},'mountedOn',this.value)"></div></div>
  <label>メモ・整備内容</label><input value="${x.memo||''}" onchange="updateAttachment(${i},'memo',this.value)">
  </div>`).join('');
 }

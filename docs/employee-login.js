@@ -1,5 +1,5 @@
 (() => {
- 'use strict';const q=s=>document.querySelector(s),client=supabase.createClient(ToyaSignupConfig.url,ToyaSignupConfig.key);let busy=false;
+ 'use strict';if(!window.ToyaSalesRuntime.ready)return;const q=s=>document.querySelector(s),client=window.ToyaSalesRuntime.createClient();let busy=false;
  const code=new URLSearchParams(location.search).get('company');
  if(/^[a-f0-9]{12}$/i.test(code||''))q('#employeeCompany').value=code.toUpperCase();
  q('#employeeForm').onsubmit=async e=>{e.preventDefault();if(busy)return;busy=true;q('#employeeSubmit').disabled=true;q('#employeeStatus').textContent='ログインしています…';try{
