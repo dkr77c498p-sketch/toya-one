@@ -3,7 +3,7 @@
   function escHtml(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
   function reportSites(data=recordsSnapshot){return [...new Set((data||[]).flatMap(d=>[d.site,...((d.siteMoves||[]).map(m=>m&&m.site))]).filter(x=>x&&x!=='新しい現場'&&x!=='現場名をあとで変更'&&x!=='未登録現場'))].sort()}
   function allSites(){const sel=document.querySelector('#site'),current=sel?sel.value:'',arr=sel?[...sel.options].map(o=>o.value):[];return [...new Set(arr.filter(x=>x&&x!==current&&x!=='新しい現場'&&x!=='現場名をあとで変更'&&x!=='未登録現場'))]}
-  function vehicles(){try{return (window.defaults&&window.LS&&typeof window.get==='function')?get(LS.vehicles,defaults.vehicles):['軽トラ','ハイエース','3tダンプ','4tダンプ','4tアームロール','10tダンプ']}catch(e){return ['軽トラ','ハイエース','3tダンプ','4tダンプ','4tアームロール','10tダンプ']}}
+  function vehicles(){try{return typeof LS!=='undefined'&&typeof get==='function'?get(LS.vehicles,[]):[]}catch(e){return []}}
   const wasteTypes=['なし','木くず','コンクリートがら','アスファルトがら','廃プラスチック','金属くず','石膏ボード','混合廃棄物','その他'];
   function refillSiteSelect(sel,allLabel,data=recordsSnapshot){if(window.ToyaSharedSiteUI?.ready()){window.ToyaSharedSiteUI.syncBrowse(sel);return}if(!sel)return;const current=sel.value,names=reportSites(data);sel.innerHTML=(allLabel?`<option value="">${allLabel}</option>`:'')+names.map(n=>`<option>${escHtml(n)}</option>`).join('');if(current&&names.includes(current))sel.value=current}
   function refreshFilters(data=recordsSnapshot){if(data&&data.length)recordsSnapshot=data;refillSiteSelect(document.querySelector('#recordSiteFilter'),'全現場',recordsSnapshot);refillSiteSelect(document.querySelector('#ledgerSite'),'',recordsSnapshot);refillSiteSelect(document.querySelector('#siteSummarySelect'),'',recordsSnapshot)}

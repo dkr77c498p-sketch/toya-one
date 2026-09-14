@@ -191,15 +191,11 @@ textarea{min-height:105px;resize:vertical}
 <div class="card"><h2>基本情報</h2>
 <div class="grid2"><div><label>日付</label><input id="date" type="date"><div class="quick-row"><button type="button" class="quick-btn" onclick="setReportDateOffset(0)">今日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-1)">昨日</button><button type="button" class="quick-btn" onclick="setReportDateOffset(-3)">3日前</button></div><div class="note">忘れた日報は過去の日付を選んで後から登録できます。</div></div><div><label>天気</label><select id="weather"><option>晴れ</option><option>曇り</option><option>雨</option><option>その他</option></select></div></div>
 <label>現場名</label><select id="site"></select>
-<label>記入者</label><select id="writer"><option value="">選択してください</option><option>宮下 直也</option><option>上村 凌太</option><option>宮下 哲也</option></select>
+<label>記入者</label><select id="writer"><option value="">ログインして選択してください</option></select>
 </div>
 
 <div class="card no-print" id="siteMoveCard"><h2>現場移動</h2><div class="note">午前と午後など、同じ日に別の現場へ移動したときに使います。現在の入力を引き継いで2現場目・3現場目の日報を作れます。</div><button type="button" class="btn dark" style="width:100%;margin-top:10px;font-size:16px" onclick="createMovedSiteReport()">＋ 現場移動・次の現場を追加</button></div><div class="card"><h2>現場作業者</h2>
-<div class="choice-grid">
-<label class="choice"><input type="checkbox" name="worker" value="宮下 直也">宮下 直也</label>
-<label class="choice"><input type="checkbox" name="worker" value="上村 凌太">上村 凌太</label>
-<label class="choice"><input type="checkbox" name="worker" value="宮下 哲也">宮下 哲也</label>
-</div>
+<div class="choice-grid" id="companyWorkerChoices"></div>
 <div class="row"><div class="rowhead"><b>派遣人数</b></div><div class="grid2"><div><label>明建</label><input id="meikenCount" type="number" min="0" step="1" value="0"></div><div><label>朝日</label><input id="asahiCount" type="number" min="0" step="1" value="0"></div></div></div>
 <div class="grid3"><div><label>開始</label><input id="start" type="time" value="08:00"><div class="quick-row"><button type="button" class="quick-btn" onclick="setTimeQuick('start','07:00')">7:00</button><button type="button" class="quick-btn" onclick="setTimeQuick('start','08:00')">8:00</button></div></div><div><label>終了</label><input id="end" type="time" value="17:00"><div class="quick-row"><button type="button" class="quick-btn" onclick="setTimeQuick('end','16:00')">16:00</button><button type="button" class="quick-btn" onclick="setTimeQuick('end','17:00')">17:00</button><button type="button" class="quick-btn" onclick="setTimeQuick('end','18:00')">18:00</button></div></div><div><label>残業</label><input id="overtime" type="number" min="0" step="0.5" value="0"></div></div>
 <label>その他の作業者</label><input id="otherWorker" type="text">
@@ -353,6 +349,7 @@ textarea{min-height:105px;resize:vertical}
 
 <div id="printLedgerArea"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="company-scope.js?v=20260914-company-v1"></script>
 <script>
 
 
@@ -364,6 +361,9 @@ const cloudClient=(window.supabase&&window.supabase.createClient)
   ? window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY)
   : null;
 let cloudProfile=null;
+let companyTransition=false;
+function isToyaCompany(){return !companyTransition&&window.ToyaCompanyScope.isLegacy(cloudProfile);}
+function localCompanyKey(){return window.ToyaCompanyScope.company(cloudProfile);}
 let activityOpenedLogged=false;
 const TOYA_APP_URL='https://dkr77c498p-sketch.github.io/toya-one/';
 let cloudReportsCache=[];
@@ -458,6 +458,20 @@ function cloudSessionTimeout(promise){
 }
 function cloudSetSessionState(state,session=null){
   const previous=cloudProfile;
+  const next=state.status==='ready'?state.profile:null;
+  if(companyTransition)return;
+  // A temporary network failure is not an account switch. Keep the open form
+  // and its storage namespace; server writes still require verified authentication.
+  if(previous&&state.status==='error'&&(!session?.user?.id||session.user.id===previous.id)){
+    cloudSessionState=state;cloudMsg(state.message||'接続を確認してください。','warn');return;
+  }
+  // Reload on logout/account switches to discard all module caches and pending callbacks.
+  // New tabs start signed out and cannot read the original TOYA browser namespace.
+  if(previous&&(previous.id!==next?.id||previous.company_id!==next?.company_id)){
+    companyTransition=true;cloudProfile=null;
+    document.documentElement.style.visibility='hidden';
+    location.reload();return;
+  }
   cloudSessionState=state;cloudProfile=state.status==='ready'?state.profile:null;
   if(previous&&(previous.id!==cloudProfile?.id||previous.company_id!==cloudProfile?.company_id)){
     cloudReportsCache=[];cloudPhotoCount={};cloudProfilesCache={};cloudSitesCache=[];
@@ -467,6 +481,8 @@ function cloudSetSessionState(state,session=null){
   $('#cloudLoggedOut').style.display=cloudProfile?'none':'block';
   $('#cloudLoggedIn').style.display=cloudProfile?'block':'none';
   if(cloudProfile){
+    initializeCompanyDefaults();renderCompanyPeople();renderSelectors();
+    localStorage.setItem('toya_last_company_for_ui',cloudProfile.company_id);
     $('#cloudUserName').textContent=cloudProfile.name||session?.user?.email||'ログイン中';
     $('#cloudUserMeta').textContent=`${session?.user?.email||''}｜権限：${cloudProfile.role}`;
     cloudMsg('クラウドに接続済み','ok');
@@ -851,12 +867,14 @@ function cloudNormalizeReport(r){
 
 async function cloudFetchReports(){
   if(!cloudProfile)return [];
+  const company=cloudProfile.company_id,user=cloudProfile.id;
   const [{data:profiles,error:pErr},{data:sites,error:sErr},{data:rows,error:rErr}]=await Promise.all([
-    cloudClient.from('profiles').select('id,name,role').eq('company_id',cloudProfile.company_id),
+    cloudClient.from('profiles').select('id,name,role,active').eq('company_id',cloudProfile.company_id),
     cloudClient.from('sites').select('id,name,status').eq('company_id',cloudProfile.company_id).order('name'),
     cloudClient.from('daily_reports').select('id,source_report_id,created_by,created_at,updated_at,report_data,report_date,recorder_name,weather,work_content,worker_count,dispatch_count,start_time,end_time,overtime_hours,notes,sites(name)').eq('company_id',cloudProfile.company_id).order('report_date',{ascending:false}).order('created_at',{ascending:false}).limit(500)
   ]);
   if(pErr)throw pErr;if(sErr)throw sErr;if(rErr)throw rErr;
+  if(companyTransition||cloudProfile?.company_id!==company||cloudProfile?.id!==user)throw new Error('ログインが切り替わりました。読み込みを中止しました。');
   cloudProfilesCache=Object.fromEntries((profiles||[]).map(p=>[p.id,p]));
   cloudSitesCache=sites||[];
   cloudPhotoCount={};
@@ -864,9 +882,11 @@ async function cloudFetchReports(){
   if(ids.length){
     const {data:photos,error}=await cloudClient.from('report_photos').select('report_id').eq('company_id',cloudProfile.company_id).in('report_id',ids);
     if(error)throw error;
+    if(companyTransition||cloudProfile?.company_id!==company||cloudProfile?.id!==user)throw new Error('ログインが切り替わりました。読み込みを中止しました。');
     (photos||[]).forEach(p=>cloudPhotoCount[p.report_id]=(cloudPhotoCount[p.report_id]||0)+1);
   }
   cloudReportsCache=(rows||[]).map(cloudNormalizeReport);
+  renderCompanyPeople();
   renderSelectors();
   populateLedgerSites();
   return cloudReportsCache;
@@ -909,8 +929,10 @@ function printCloudReport(cloudId){
   printReportObject(d);
 }
 
-const LS={reports:'toya_reports_v5',draft:'toya_draft_v5',sites:'toya_sites_v5',vehicles:'toya_vehicles_v5',machines:'toya_machines_v5',attachments:'toya_attachments_v1'};
-const defaults={sites:['現場名をあとで変更'],vehicles:['軽トラ','ハイエース','3tダンプ','4tダンプ','4tアームロール','10tダンプ'],machines:['SK55SR','SK135（1号機）','SK135（2号機）'],
+const legacyLocalKeys={reports:'toya_reports_v5',draft:'toya_draft_v5',sites:'toya_sites_v5',vehicles:'toya_vehicles_v5',machines:'toya_machines_v5',attachments:'toya_attachments_v1'};
+const LS=Object.fromEntries(Object.keys(legacyLocalKeys).map(k=>[k,null]));
+for(const k of Object.keys(LS))Object.defineProperty(LS,k,{enumerable:true,get:()=>window.ToyaCompanyScope.key(legacyLocalKeys[k],cloudProfile)});
+const legacyDefaults={sites:['現場名をあとで変更'],vehicles:['軽トラ','ハイエース','3tダンプ','4tダンプ','4tアームロール','10tダンプ'],machines:['SK55SR','SK135（1号機）','SK135（2号機）'],
 attachments:[
  {name:'オカダ TSWB950V',category:'大割機',location:'',mountedOn:'',memo:''},
  {name:'坂戸 SDS150SRC',category:'カッター',location:'',mountedOn:'',memo:''},
@@ -922,11 +944,25 @@ attachments:[
  {name:'スケルトンバケット1号機用',category:'MAC',location:'',mountedOn:'',memo:''},
  {name:'スケルトンバケット2号機用',category:'MAC',location:'',mountedOn:'',memo:''}
 ]};
-function get(k,d=[]){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(e){return d}}
-function set(k,v){localStorage.setItem(k,JSON.stringify(v))}
+const defaults={};for(const k of Object.keys(legacyDefaults))Object.defineProperty(defaults,k,{enumerable:true,get:()=>isToyaCompany()?structuredClone(legacyDefaults[k]):[]});
+function get(k,d=[]){if(companyTransition)return d;try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(e){return d}}
+function set(k,v){if(companyTransition)throw new Error('ログイン切替中です。画面の読み込みをお待ちください。');localStorage.setItem(k,JSON.stringify(v))}
+function initializeCompanyDefaults(){if(!localCompanyKey())return;Object.entries({sites:LS.sites,vehicles:LS.vehicles,machines:LS.machines,attachments:LS.attachments}).forEach(([n,k])=>{if(localStorage.getItem(k)===null)set(k,defaults[n]);});}
+function companyPeople(){
+  if(!localCompanyKey())return [];
+  if(isToyaCompany())return ['宮下 直也','上村 凌太','宮下 哲也'];
+  return [...new Set([...Object.values(cloudProfilesCache).filter(p=>p.active!==false).map(p=>p.name),cloudProfile.name].map(n=>String(n||'').trim()).filter(Boolean))];
+}
+function renderCompanyPeople(){
+  const names=companyPeople(),writer=$('#writer'),selected=writer.value,workers=checked('worker');
+  writer.replaceChildren(new Option('選択してください',''),...names.map(n=>new Option(n,n)));
+  if(names.includes(selected))writer.value=selected;
+  const host=$('#companyWorkerChoices');host.replaceChildren();
+  for(const name of names){const label=document.createElement('label'),input=document.createElement('input');label.className='choice';input.type='checkbox';input.name='worker';input.value=name;input.checked=workers.includes(name);label.append(input,document.createTextNode(name));host.append(label);}
+}
 function today(){const d=new Date(),z=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`}
 $('#date').value=today();
-Object.entries({sites:LS.sites,vehicles:LS.vehicles,machines:LS.machines,attachments:LS.attachments}).forEach(([n,k])=>{if(!localStorage.getItem(k))set(k,defaults[n])});
+initializeCompanyDefaults();
 // Keep the two MAC buckets distinct: these names also identify their private hourly rates.
 function isLegacyMacBucket(x){
  const norm=v=>String(v||'').normalize('NFKC').replace(/[\s　]/g,'').toUpperCase();
@@ -1129,8 +1165,10 @@ function addWasteItem(name,unit){
 let stagedPhotos=[];
 
 function openPhotoDB(){
+  if(companyTransition)return Promise.reject(new Error('ログイン切替中です。'));
+  const company=localCompanyKey();
   return new Promise((resolve,reject)=>{
-    const req=indexedDB.open('TOYAOnePhotoDB',1);
+    const req=indexedDB.open(window.ToyaCompanyScope.photoDB(cloudProfile),1);
     req.onupgradeneeded=()=>{
       const db=req.result;
       if(!db.objectStoreNames.contains('photos')){
@@ -1138,7 +1176,7 @@ function openPhotoDB(){
         store.createIndex('reportId','reportId',{unique:false});
       }
     };
-    req.onsuccess=()=>resolve(req.result);
+    req.onsuccess=()=>{if(companyTransition||localCompanyKey()!==company){req.result.close();reject(new Error('ログインが切り替わりました。'));}else resolve(req.result);};
     req.onerror=()=>reject(req.error);
   });
 }
@@ -1209,12 +1247,14 @@ function renderStagedPhotos(){
 }
 
 $('#photos').onchange=async e=>{
+  const company=localCompanyKey();
   const files=[...e.target.files];
   if(!files.length)return;
   const category=$('#photoCategory').value;
   for(const f of files){
     try{
       const blob=await compressPhoto(f);
+      if(companyTransition||localCompanyKey()!==company)return;
       stagedPhotos.push({blob,category,name:f.name});
     }catch(err){
       alert('写真の読み込みに失敗しました。');
@@ -1667,7 +1707,7 @@ function validate(d){
   }
   return true;
 }
-function lineText(d){let p=[...(d.workers||[])];if(d.meikenCount>0)p.push(`明建 ${d.meikenCount}名`);if(d.asahiCount>0)p.push(`朝日 ${d.asahiCount}名`);if(d.otherWorker)p.push(d.otherWorker);const vl=[...(d.vehicles||[]).map(x=>`・${x}（自社）`),...(d.leaseVehicles||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];const ml=[...(d.machines||[]).map(x=>`・${x.name}${x.hours?` ${x.hours}時間`:''}（自社）`),...(d.leaseMachines||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];let t=`【TOYA 作業日報】\n日付：${d.date.replaceAll('-','/')}\n現場名：${d.site}\n記入者：${d.writer}\n天気：${d.weather}\n\n■作業者\n${p.length?p.map(x=>'・'+x).join('\n'):'・なし'}\n作業時間：${d.start}〜${d.end}${Number(d.overtime)>0?`（残業 ${d.overtime}時間）`:''}\n\n■作業内容\n${d.workTypes.length?d.workTypes.map(x=>'・'+x).join('\n')+'\n':''}${d.details||'記載なし'}\n\n■使用車両\n${vl.length?vl.join('\n'):'・なし'}\n\n■使用重機\n${ml.length?ml.join('\n'):'・なし'}`;const al=[...(d.attachments||[]).map(x=>`・${x}（自社）`),...(d.leaseAttachments||[]).map(x=>`・${x.name}${x.model?` ${x.model}`:''}（リース${x.company?`／${x.company}`:''}${x.machine?`／${x.machine}装着`:''}）`)];
+function lineText(d){let p=[...(d.workers||[])];if(d.meikenCount>0)p.push(`明建 ${d.meikenCount}名`);if(d.asahiCount>0)p.push(`朝日 ${d.asahiCount}名`);if(d.otherWorker)p.push(d.otherWorker);const vl=[...(d.vehicles||[]).map(x=>`・${x}（自社）`),...(d.leaseVehicles||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];const ml=[...(d.machines||[]).map(x=>`・${x.name}${x.hours?` ${x.hours}時間`:''}（自社）`),...(d.leaseMachines||[]).map(x=>`・${x.name} ${x.count}台${x.hours?` ${x.hours}時間`:''}（リース${x.company?`／${x.company}`:''}）`)];let t=`【${isToyaCompany()?'TOYA ':''}作業日報】\n日付：${d.date.replaceAll('-','/')}\n現場名：${d.site}\n記入者：${d.writer}\n天気：${d.weather}\n\n■作業者\n${p.length?p.map(x=>'・'+x).join('\n'):'・なし'}\n作業時間：${d.start}〜${d.end}${Number(d.overtime)>0?`（残業 ${d.overtime}時間）`:''}\n\n■作業内容\n${d.workTypes.length?d.workTypes.map(x=>'・'+x).join('\n')+'\n':''}${d.details||'記載なし'}\n\n■使用車両\n${vl.length?vl.join('\n'):'・なし'}\n\n■使用重機\n${ml.length?ml.join('\n'):'・なし'}`;const al=[...(d.attachments||[]).map(x=>`・${x}（自社）`),...(d.leaseAttachments||[]).map(x=>`・${x.name}${x.model?` ${x.model}`:''}（リース${x.company?`／${x.company}`:''}${x.machine?`／${x.machine}装着`:''}）`)];
  t+=`\n\n■使用アタッチメント\n${al.length?al.join('\n'):'・なし'}`;
  if((d.fuels||[]).length)t+=`\n\n■燃料・油脂\n`+d.fuels.map(x=>`・${x.asset||'未設定'} ${x.source||''}${x.outlet?`（${x.outlet}）`:''} ${x.type||''} ${Number((x.qty??x.liters)||0).toLocaleString()}${x.unit||'L'}${x.unitPrice?` @￥${Number(x.unitPrice).toLocaleString()}`:''} ／ ￥${Math.round(fuelAmount(x)).toLocaleString()}${x.note?`（${x.note}）`:''}`).join('\n');
  if(d.items.length)t+=`\n\n■材料・処分・経費\n`+d.items.map(x=>`・${x.name} ${x.qty||''}${x.unit||''}${x.price?` ￥${Number(x.price).toLocaleString()}`:''}${x.company?`（${x.company}）`:''}${x.isWaste?`［マニフェスト：${x.manifestType==='paper'?'紙':x.manifestType==='electronic'?'電子':'なし'}］`:''}`).join('\n');if(d.memo)t+=`\n\n■メモ・明日の予定\n${d.memo}`;return t+`\n\n※現場写真分類：${d.photoCategory||'未分類'}（写真は別途添付）`}
@@ -2124,7 +2164,7 @@ function printReportObject(d){
   const w=window.open('','_blank');
   if(!w){alert('日報PDFを開けませんでした。Safariのポップアップ設定をご確認ください。');return;}
   const safe=lineText(d).replaceAll('&','&amp;').replaceAll('<','&lt;');
-  w.document.write(`<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${(d.site||'TOYA').replaceAll('/','-')}_作業日報_${d.date}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:22px;white-space:pre-wrap;line-height:1.7;color:#111}.top{position:sticky;top:0;background:#fff;padding:8px 0 12px;white-space:normal}.back{display:inline-block;border:0;border-radius:10px;background:#111;color:#fff;padding:12px 16px;font-weight:900;font-size:16px}h1{border-bottom:4px solid #b8ff00}@media print{.top{display:none}}</style></head><body><div class="top"><button class="back" onclick="if(window.opener){window.close()}else{location.href='${TOYA_APP_URL}'}">← TOYA Oneに戻る</button></div><h1>TOYA 作業日報</h1>${safe}</body></html>`);
+  w.document.write(`<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${(d.site||'TOYA').replaceAll('/','-')}_作業日報_${d.date}</title><style>body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:22px;white-space:pre-wrap;line-height:1.7;color:#111}.top{position:sticky;top:0;background:#fff;padding:8px 0 12px;white-space:normal}.back{display:inline-block;border:0;border-radius:10px;background:#111;color:#fff;padding:12px 16px;font-weight:900;font-size:16px}h1{border-bottom:4px solid #b8ff00}@media print{.top{display:none}}</style></head><body><div class="top"><button class="back" onclick="if(window.opener){window.close()}else{location.href='${TOYA_APP_URL}'}">← TOYA Oneに戻る</button></div><h1>${isToyaCompany()?'TOYA ':''}作業日報</h1>${safe}</body></html>`);
   w.document.close();
   setTimeout(()=>{try{w.print()}catch(e){}},250);
 }
@@ -2136,8 +2176,9 @@ async function deleteSaved(id){
   }
 }
 async function exportCSV(){let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);if(cloudProfile&&!a.length)try{a=await cloudFetchReports()}catch(e){return alert('クラウド日報を読み込めませんでした。')}if(!a.length)return alert('日報がありません。');const includePremiumRates=cloudProfile?.active===true&&cloudProfile.role==='admin';const rows=[['日付','現場','記入者','クラウド登録者','天気','明建人数','朝日人数','作業者','開始','終了','残業','作業内容','詳細','自社車両','リース車両','自社重機','リース重機','自社アタッチメント','リースアタッチメント','メモ','終了日区分','勤務日区分','休憩（分）','実働（分）','夜間（分）','休日夜間（分）',...(includePremiumRates?['残業倍率']:[])]];a.forEach(d=>rows.push([d.date,d.site,d.writer,d.cloudCreatedByName||'',d.weather,d.meikenCount||0,d.asahiCount||0,[...(d.workers||[]),d.otherWorker].filter(Boolean).join('・'),d.start,d.end,d.overtime,(d.workTypes||[]).join('・'),d.details,(d.vehicles||[]).join('・'),(d.leaseVehicles||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.machines||[]).map(x=>`${x.name} ${x.hours||''}h`).join('・'),(d.leaseMachines||[]).map(x=>`${x.name} ${x.count}台 ${x.company||''}`).join('・'),(d.attachments||[]).join('・'),(d.leaseAttachments||[]).map(x=>x.name||x).join('・'),d.memo,...(window.ToyaWorkTimeEngine?.exportColumns(d,{includeRates:includePremiumRates})||Array(includePremiumRates?7:6).fill(''))]));const csv='\ufeff'+rows.map(r=>r.map(v=>`"${String(v??'').replaceAll('"','""')}"`).join(',')).join('\n');const x=document.createElement('a');x.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));x.download='TOYA_クラウド作業日報一覧.csv';x.click()}
-const DAILY_REPORT_STAFF=['上村 凌太','宮下 哲也'];
+function dailyReportStaff(){return isToyaCompany()?['上村 凌太','宮下 哲也']:Object.values(cloudProfilesCache).filter(p=>p.active!==false&&p.role==='employee').map(p=>String(p.name||'').trim()).filter(Boolean);}
 async function renderHome(){
+  const DAILY_REPORT_STAFF=dailyReportStaff();
   let a=cloudProfile?cloudReportsCache:get(LS.reports,[]);
   if(cloudProfile&&!a.length){try{a=await cloudFetchReports()}catch(e){console.warn(e)}}
   const td=today(),todayA=a.filter(x=>x.date===td);
@@ -2189,8 +2230,8 @@ function addAttachment(){const a=get(LS.attachments,defaults.attachments);a.push
 function updateAttachment(i,k,v){const a=get(LS.attachments,defaults.attachments);a[i][k]=esc(v);set(LS.attachments,a);renderSelectors()}
 function deleteAttachment(i){if(!confirm('削除しますか？'))return;const a=get(LS.attachments,defaults.attachments);a.splice(i,1);set(LS.attachments,a);renderMasters();renderSelectors();renderAttachments()}
 
-function backupData(){const data={reports:get(LS.reports,[]),sites:get(LS.sites,[]),vehicles:get(LS.vehicles,[]),machines:get(LS.machines,[]),attachments:get(LS.attachments,[])};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='TOYA_Manager_backup.json';a.click()}
-$('#restoreFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);set(LS.reports,d.reports||[]);set(LS.sites,d.sites||defaults.sites);set(LS.vehicles,d.vehicles||defaults.vehicles);set(LS.machines,d.machines||defaults.machines);set(LS.attachments,d.attachments||defaults.attachments);alert('復元しました。');location.reload()}catch(err){alert('復元に失敗しました。')}};r.readAsText(f)}
+function backupData(){if(!localCompanyKey())return alert('ログインしてください。');const data={company_id:localCompanyKey(),reports:get(LS.reports,[]),sites:get(LS.sites,[]),vehicles:get(LS.vehicles,[]),machines:get(LS.machines,[]),attachments:get(LS.attachments,[])};const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));a.download='TOYA_Manager_backup.json';a.click()}
+$('#restoreFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!localCompanyKey()||(d.company_id?d.company_id!==localCompanyKey():!isToyaCompany()))throw new Error('この会社のバックアップではありません。');set(LS.reports,d.reports||[]);set(LS.sites,d.sites||defaults.sites);set(LS.vehicles,d.vehicles||defaults.vehicles);set(LS.machines,d.machines||defaults.machines);set(LS.attachments,d.attachments||defaults.attachments);alert('復元しました。');location.reload()}catch(err){alert('復元できませんでした：'+err.message)}};r.readAsText(f)}
 function resetAll(){if(confirm('全データを削除しますか？')){Object.values(LS).forEach(k=>localStorage.removeItem(k));location.reload()}}
 const fuelInputObserver=new MutationObserver(()=>syncFuelInputs());
 for(const id of ['vehicleChoices','machineChoices','smallToolChoices','leaseVehicles','leaseMachines']){
@@ -2202,10 +2243,10 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 
 
 </script>
-<script src="midway.js?v=20260910-sites-v3"></script>
-<script src="site-move-filter-fix.js?v=20260912-report-filters-v2"></script>
+<script src="midway.js?v=20260914-company-v1"></script>
+<script src="site-move-filter-fix.js?v=20260914-company-v1"></script>
 <script src="attachment-usage.js?v=20260912-session-recovery-v1"></script>
-<script src="attachment-separation-stable.js?v=20260908-1705"></script>
+<script src="attachment-separation-stable.js?v=20260914-company-v1"></script>
 <script src="waste-price-master.js?v=20260908-shori-v1"></script>
 <script src="waste-price-admin.js?v=20260908-shori-v1"></script>
 <script src="site-waste-cost-summary.js?v=20260910-sites-v3"></script>
@@ -2223,7 +2264,7 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="shared-site-master.js?v=20260913-site-rename-v1"></script>
 <script src="unified-daily-rate-admin.js?v=20260910-v1"></script>
 <script src="report-draft-recovery.js?v=20260909-travel-site-v4"></script>
-<script src="project-documents-engine.js?v=20260913-invoice-layout-v1"></script>
+<script src="project-documents-engine.js?v=20260914-company-v1"></script>
 <script src="project-business.js?v=20260913-delete-draft-v2"></script>
 <script src="site-project-profile-engine.js?v=20260913-v1"></script>
 <script src="site-project-profile.js?v=20260913-v1"></script>

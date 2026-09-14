@@ -166,6 +166,7 @@
   };
 
   function installLoginHelper(){
+    if(localStorage.getItem('toya_last_company_for_ui')!==window.ToyaCompanyScope?.legacyCompany){document.querySelector('#employeeQuickLogin')?.remove();return false;}
     const loggedOut=document.querySelector('#cloudLoggedOut');
     const email=document.querySelector('#cloudEmail');
     if(!loggedOut||!email)return false;

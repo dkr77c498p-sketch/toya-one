@@ -80,6 +80,7 @@
   ];
   function install(){
     try{
+      if(typeof isToyaCompany!=='function'||!isToyaCompany())return false;
       if(typeof LS==='undefined'||typeof get!=='function'||typeof set!=='function'||!LS.attachments)return false;
       const a=get(LS.attachments,[])||[];
       let changed=false;

@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),E=require('../docs/project-documents-engine.js');
+const draft=E.draft('estimate',{id:'site',name:'試験工事'},{issuer_name:'試験解体株式会社',representative:'試験代表'},'2026-09-14');
+draft.items=[{name:'解体作業',quantity:'1',unitPrice:'10000',unit:'式'}];
+const other={...draft,company_id:'company-b'};
+const html=E.printHTML(other);
+assert.match(html,/試験解体株式会社/);assert.match(html,/試験代表/);
+assert.doesNotMatch(html,/16963|宮下|src="toya-document-logo.svg"/,'他社の見積書にTOYAの許可番号・代表者・ロゴを印刷しない');
+const toya=E.printHTML({...draft,company_id:'40a7a065-1086-4e62-aa09-f44d6207602c',issuer:{issuer_name:'株式会社TOYA'}});
+assert.match(toya,/16963/);assert.match(toya,/宮下/);assert.match(toya,/src="toya-document-logo.svg"/);
+console.log('PASS company-specific estimate issuer and legacy TOYA branding');
