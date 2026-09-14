@@ -142,7 +142,7 @@ regular_hours numeric(8,2) NOT NULL DEFAULT 0,
 overtime_hours numeric(8,2) NOT NULL DEFAULT 0,
 hourly_rate numeric(12,2) NOT NULL DEFAULT 0,
 overtime_rate numeric(12,2) NOT NULL DEFAULT 0,
-amount numeric(14,2) DEFAULT ((regular_hours * hourly_rate) + (overtime_hours * overtime_rate)),
+amount numeric(14,2) GENERATED ALWAYS AS (((regular_hours * hourly_rate) + (overtime_hours * overtime_rate))) STORED,
 created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 alter table "public"."labor_entries" enable row level security;
@@ -155,7 +155,7 @@ equipment_id uuid,
 use_date date NOT NULL DEFAULT CURRENT_DATE,
 hours numeric(8,2) NOT NULL DEFAULT 0,
 hourly_rate numeric(12,2) NOT NULL DEFAULT 0,
-amount numeric(14,2) DEFAULT (hours * hourly_rate),
+amount numeric(14,2) GENERATED ALWAYS AS ((hours * hourly_rate)) STORED,
 attachment text,
 notes text,
 created_at timestamp with time zone NOT NULL DEFAULT now()
@@ -172,7 +172,7 @@ days numeric(8,2) NOT NULL DEFAULT 1,
 distance_km numeric(10,2) NOT NULL DEFAULT 0,
 daily_rate numeric(12,2) NOT NULL DEFAULT 0,
 km_rate numeric(12,2) NOT NULL DEFAULT 0,
-amount numeric(14,2) DEFAULT ((days * daily_rate) + (distance_km * km_rate)),
+amount numeric(14,2) GENERATED ALWAYS AS (((days * daily_rate) + (distance_km * km_rate))) STORED,
 created_at timestamp with time zone NOT NULL DEFAULT now()
 );
 alter table "public"."vehicle_usage" enable row level security;
@@ -187,7 +187,7 @@ fuel_type text NOT NULL DEFAULT 'diesel'::text,
 fuel_date date NOT NULL DEFAULT CURRENT_DATE,
 liters numeric(10,2) NOT NULL DEFAULT 0,
 unit_price numeric(12,2) NOT NULL DEFAULT 0,
-amount numeric(14,2) DEFAULT (liters * unit_price),
+amount numeric(14,2) GENERATED ALWAYS AS ((liters * unit_price)) STORED,
 receipt_url text,
 notes text,
 created_at timestamp with time zone NOT NULL DEFAULT now()
@@ -2759,21 +2759,15 @@ grant UPDATE on "public"."attachment_rate_master" to "authenticated";
 grant UPDATE ("entries") on "public"."company_registries" to "authenticated";
 grant UPDATE ("version") on "public"."company_registries" to "authenticated";
 revoke all on function "public"."current_company_id"() from PUBLIC,anon,authenticated,service_role;
-grant execute on function "public"."current_company_id"() to "anon";
 grant execute on function "public"."current_company_id"() to "authenticated";
 grant execute on function "public"."current_company_id"() to "service_role";
 revoke all on function "public"."current_is_admin"() from PUBLIC,anon,authenticated,service_role;
-grant execute on function "public"."current_is_admin"() to "anon";
 grant execute on function "public"."current_is_admin"() to "authenticated";
 grant execute on function "public"."current_is_admin"() to "service_role";
 revoke all on function "public"."toya_current_company_id"() from PUBLIC,anon,authenticated,service_role;
-grant execute on function "public"."toya_current_company_id"() to PUBLIC;
-grant execute on function "public"."toya_current_company_id"() to "anon";
 grant execute on function "public"."toya_current_company_id"() to "authenticated";
 grant execute on function "public"."toya_current_company_id"() to "service_role";
 revoke all on function "public"."toya_is_admin"() from PUBLIC,anon,authenticated,service_role;
-grant execute on function "public"."toya_is_admin"() to PUBLIC;
-grant execute on function "public"."toya_is_admin"() to "anon";
 grant execute on function "public"."toya_is_admin"() to "authenticated";
 grant execute on function "public"."toya_is_admin"() to "service_role";
 revoke all on function "public"."vehicle_cost_validate_totals"() from PUBLIC,anon,authenticated,service_role;
