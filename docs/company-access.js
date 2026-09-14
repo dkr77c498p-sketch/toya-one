@@ -1,5 +1,14 @@
 (() => {
  'use strict';
+ let account='',current=null;
+ function remember(s,userId){
+  const changed=account===userId&&current?.plan&&s?.plan&&current.plan!==s.plan;
+  account=userId;current=s?.state==='ready'?s:null;
+  return {...s,planChanged:!!changed};
+ }
+ const view=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.id===account?current:null;
+ const allows=feature=>view()?.features?.[feature]===true;
+
  async function check(client,userId){
   const status=await client.rpc('toya_access',{p_action:'status',p_payload:{}});
   if(status.error)throw status.error;
@@ -11,5 +20,5 @@
   if(bound.error)throw bound.error;
   return bound.data||{state:'blocked',message:'端末を確認できませんでした。'};
  }
- window.ToyaCompanyAccess={check};
+ window.ToyaCompanyAccess={check,accept:remember,allows,view:()=>{const v=view();return v?{...v,features:{...v.features}}:null;}};
 })();

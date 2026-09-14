@@ -52,7 +52,7 @@ Inspect an old unfinished reservation by its exact company/ID. Compare its routi
 
 - Company identity, active membership, active contract, expiry, seats and registered session are server-checked. Existing tenant policies remain in place; restrictive policies add the contract guard.
 - Binding uses a random browser-stored secret whose hash is stored on the server. It is not hardware attestation. A copied browser secret/session, shared credentials, or deliberate company-admin collusion cannot be completely prevented. Public source can also be deployed with a separately operated backend. Do not market this as uncopyable software.
-- Three feature tiers, prices, payment collection, subscription webhooks and a seller-facing contract console are not included in this release.
+- Three feature tiers are implemented as described below. Prices, payment collection, subscription webhooks and a seller-facing contract console are not included.
 - Owner email delivery is unchanged and was not tested by sending messages. Employees created through the ID path do not require email delivery.
 - Edge function `employee-admin` has verify_jwt=true and also performs getUser verification and database authorization. It has no public account-creation endpoint. Its SDK import is pinned to 2.49.8.
 - New private tables intentionally deny direct client access (RLS with no client policies). The security advisor's prior public-helper/legacy-definer and leaked-password-protection warnings are unchanged. See [RLS advisor](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy).
@@ -64,3 +64,30 @@ Inspect an old unfinished reservation by its exact company/ID. Compare its routi
 `employee-admin-edge.mjs` tests authorization before Auth administration, exact-user failure cleanup and partial reset recovery. `employee-login-ui.cjs`, `company-member-id-ui.cjs` and existing UI/browser tests verify the actual UI scripts, payloads, password clearing, phone layout/account isolation and preservation of internal data. Browser/Auth tests use mocks; no real employee password/login has been issued as a test.
 
 Official API references: [Admin.createUser](https://supabase.com/docs/reference/javascript/auth-admin-createuser), [getUser](https://supabase.com/docs/reference/javascript/auth-getuser).
+
+
+## Feature tiers (2026-09-14)
+
+The seller-managed `private.company_licenses.plan` accepts `daily`, `billing`, or `complete`.
+New registrations default to `daily`; existing internal use remains `complete` and always has all features.
+Set the agreed tier along with status, seats and expiry at activation; customers cannot change this field.
+
+| Tier | Daily reports / common masters | Invoice / progress invoice | Estimate / costing / imported quantities |
+| --- | --- | --- | --- |
+| daily | Yes | No | No |
+| billing | Yes | Yes | No |
+| complete | Yes | Yes | Yes |
+
+`public.toya_access` returns current features only for a valid contract/device session. Restrictive RLS policies protect project_documents by kind, estimate_plans and estimate_quantity_sheets. Existing invoker document RPCs obey those policies. Seller plan changes take effect in the database immediately; the app reloads its view when it detects a changed plan, discarding old module caches. Plan checks do not trust user-editable JWT metadata or local storage.
+
+Common company settings and site completion stay available on all tiers. The home card links to `plans.html`, explaining setup and tiers without quoting unapproved prices or initiating payments. On downgrade, out-of-tier documents are inaccessible but retained; customers should export needed documents before a downgrade and can reopen them after returning to an eligible tier. Existing downloaded copies cannot be recalled.
+
+Seller plan change, with an exact verified company and agreed tier:
+
+```sql
+update private.company_licenses set plan=:agreed_plan
+where company_id=:verified_company_id and not internal
+returning company_id,plan,status,max_users,expires_at;
+```
+
+`customer-plans-database.sql` covers all tiers, invoice/progress/estimate RPCs, direct reads/writes/deletes, imported quantities, ordinary company data, malicious JWT plan claims, seller-only changes, suspension and retained records across downgrade/upgrade. All fixtures roll back. `customer-plans-ui.cjs` covers the actual module entry points and shared settings; existing browser tests verify full internal use and account isolation.

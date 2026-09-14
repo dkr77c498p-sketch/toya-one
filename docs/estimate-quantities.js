@@ -31,7 +31,7 @@
  const engine={summary,label,table,fromSheet,printHTML};
  if(node){module.exports=engine;return;}window.ToyaEstimateQuantities=Object.freeze(engine);
  const q=s=>document.querySelector(s);
- const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
+ const identity=()=>window.ToyaCompanyAccess?.allows('estimate')===true&&typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  const busy=()=>window.ToyaEstimatePlanUI?.isBusy()||window.ToyaProjectBusiness?.isBusy();
  let owner='',host=null,sheets=[],selected='',ticket=0,running=false,siteOptions='';
  const note=s=>{if(q('#eqStatus'))q('#eqStatus').textContent=s;};
@@ -76,3 +76,4 @@
  const start=()=>{mount();document.addEventListener('click',e=>{if(e.target.closest('nav [data-page]'))mount();});document.addEventListener('visibilitychange',()=>{if(!document.hidden)mount();});setInterval(()=>{if(owner!==identity()||!host?.isConnected)mount();if(identity())updateSites();},1000);};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(start,1300),{once:true});else setTimeout(start,1300);
 })();
+

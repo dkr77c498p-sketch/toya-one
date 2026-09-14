@@ -48,6 +48,7 @@
  const site=()=>sites.find(s=>s.id===siteId);
  const summarySite=()=>q('#siteSummarySelect')?.value||'';
  const siteByName=name=>sites.find(s=>s.name===name);
+ const allowed=k=>window.ToyaCompanyAccess?.allows(k==='estimate'?'estimate':'invoice')===true;
  const documentReady=()=>!!editor&&(editor.kind==='estimate'&&!editor.site_id||siteLoaded);
  const note=(s,error=false)=>{for(const selector of ['#pbStatus','#pbActionStatus','#pbDeleteStatus']){const n=q(selector);if(n){n.textContent=s;n.classList.toggle('pb-error',error);}}};
  const one=data=>Array.isArray(data)?data[0]:data;
@@ -91,6 +92,11 @@
   q('#pbNew').onclick=()=>newDocument(kind);
   q('#pbCompanySave').onclick=saveProfile;q('#pbCompanyFields').addEventListener('input',()=>{profileDirty=true;});
   const shortcut=document.createElement('div');shortcut.id='pbMasterLink';shortcut.className='card';shortcut.innerHTML='<h2>現場・請求・完工</h2><button class="btn dark pb-wide" type="button">請求・完工設定を開く</button>';shortcut.querySelector('button').onclick=()=>{q('nav [data-page="homePage"]')?.click();card.scrollIntoView({block:'start',behavior:'smooth'});};q('#masterPage')?.prepend(shortcut);
+  if(!allowed('invoice')){
+   card.querySelector('h2').textContent='現場・完工';shortcut.querySelector('h2').textContent='現場・完工';shortcut.querySelector('button').textContent='現場・完工設定を開く';
+   for(const el of card.querySelectorAll('.pb-tabs,#pbNew,#pbEditor,#pbDocuments,#pbOverview'))el.hidden=true;
+   const msg=document.createElement('p');msg.className='note';msg.textContent='請求書はプラン2・3で利用できます。';card.querySelector('#pbCompletion').after(msg);
+  }
   renderProfile();refresh();return true;
  }
  function field(label,id,value='',type='text',extra=''){return '<div class="pb-field"><label for="'+id+'">'+esc(label)+'</label><input id="'+id+'" type="'+type+'" value="'+esc(value??'')+'" '+extra+'></div>';}
@@ -184,6 +190,7 @@
   const select=q('#pbSite');select?.scrollIntoView?.({block:'center',behavior:'smooth'});select?.focus();
  }
  function newDocument(k,from){
+  if(!allowed(k))return note('この書類は現在のプランでは作成できません。ホームのプラン案内を確認してください。',true);
   if(!site())return requestSite();
   if(!siteLoaded)return note('現場の読み込みが終わってから、もう一度押してください。',true);
   if(!discard())return;
@@ -192,7 +199,7 @@
   if(from){editor.customer_name=from.customer_name;editor.customer_address=from.customer_address;editor.subject=from.subject;editor.notes=from.notes;editor.tax_rate=from.tax_rate;editor.items=copy(from.items).map(x=>({...x,costPrice:k==='estimate'?x.costPrice:null}));}
   kind=k;dirty=true;renderTabs();renderList();renderEditor();
  }
- function openDocument(id){if(!discard())return;const doc=docs.find(d=>d.id===id);if(!doc)return;editor=copy(doc);dirty=false;renderEditor();}
+ function openDocument(id){if(!discard())return;const doc=docs.find(d=>d.id===id);if(!doc||!allowed(doc.kind))return;editor=copy(doc);dirty=false;renderEditor();}
  function rateOptions(){return '<option value="">登録単価を選択</option>'+rates.map((r,i)=>'<option value="'+i+'">'+esc(r.name)+' / '+yen(r.costPrice)+'・'+esc(r.unit)+'</option>').join('');}
  function simpleEstimateHTML(d,locked){
   return '<section class="pb-editor pb-simple-review"><div class="pb-editor-heading"><h3>3. 見積書を確認します</h3><button id="pbCloseEditor" class="btn light" type="button">明細に戻る</button></div><div class="pb-review-job"><b>'+esc(d.site_name)+'</b><p id="pbReviewCustomer">見積先：'+esc(d.customer_name||'未入力')+'</p>'+(d.site_address?'<p>工事場所：'+esc(d.site_address)+'</p>':'')+'</div><div id="pbTotals" aria-live="polite"></div><div class="pb-review-groups">'+d.items.map(r=>'<p><span>'+esc(r.name)+'</span><b>'+yen(E.lineAmount(r.quantity,r.unitPrice))+'</b></p>').join('')+'</div><button id="pbShowPreview" class="btn light pb-wide" type="button">見積書の仕上がりを見る</button><p id="pbEditorStatus" class="note" role="status"></p><p id="pbActionStatus" class="note" role="status" aria-live="polite"></p>'+(!locked?'<button id="pbIssueDoc" class="btn lime pb-wide" type="button">完成して印刷・PDFへ →</button><p class="note">内容を確認して完成すると、見積番号が付きます。</p>':'<p class="pb-review-done">'+esc(d.document_number||'')+' ／ '+(d.status==='issued'?'完成・保存済み':'取消済み')+'</p>')+'<details id="pbReviewFields"><summary>日付・宛先・条件を直す</summary><fieldset id="pbFields" '+(locked?'disabled':'')+'><div class="pb-grid">'+field('発行日','pbDocumentDate',d.document_date,'date')+field('見積有効期限（任意）','pbValidUntil',d.valid_until,'date')+'</div>'+field('宛先','pbCustomer',d.customer_name,'text','maxlength="160"')+field('宛先住所（任意）','pbCustomerAddress',d.customer_address,'text','maxlength="500"')+field('件名','pbSubject',d.subject,'text','maxlength="200"')+'<div class="pb-grid">'+field('工事開始日（任意）','pbTransactionStart',d.transaction_start,'date')+field('工事終了日（任意）','pbTransactionEnd',d.transaction_end,'date')+'</div><label for="pbTaxRate">消費税</label><select id="pbTaxRate"><option value="10">10%</option><option value="8">8%</option><option value="0">非課税・対象外</option></select><label for="pbNotes">備考・条件</label><textarea id="pbNotes" maxlength="3000">'+esc(d.notes)+'</textarea></fieldset>'+(!locked?'<button id="pbSaveDoc" class="btn light pb-wide" type="button">変更を保存しておく</button>':'')+'</details><details><summary>発行者情報を確認する</summary><div id="pbIssuerView"></div>'+(!locked?'<button id="pbApplyIssuer" class="btn light pb-wide" type="button">保存済みの発行者情報を反映</button>':'')+'</details>'+(!d.issuer?.issuer_name?'<p class="pb-error">発行者の会社名を登録してください。</p><button id="pbSetupIssuer" class="btn light pb-wide" type="button">発行者情報を登録する</button>':'')+(locked&&d.status==='issued'&&d.site_id?'<details><summary>受注したときの操作</summary><button id="pbAcceptEstimate" class="btn dark pb-wide" type="button">この見積額を請負金額に設定</button><div class="pb-actions"><button id="pbInvoiceFromEstimate" class="btn light" type="button">請求書に引き継ぐ</button><button id="pbProgressFromEstimate" class="btn light" type="button">出来高請求に引き継ぐ</button></div></details>':'')+(d.id&&d.status!=='void'?'<details><summary>この見積書を取り消す</summary>'+field('取消理由','pbVoidReason','','text','maxlength="500"')+'<button id="pbVoidDoc" class="btn danger pb-wide" type="button">取消として保存</button></details>':'')+'</section>';
@@ -334,6 +341,7 @@
   await action(async()=>{const r=await cloudClient.rpc('toya_estimate_to_contract',{p_id:d.id,p_expected_revenue_updated_at:contract?.updated_at||null});if(r.error)throw r.error;if(identity()!==mine)return;contract=one(r.data);renderOverview();note('見積額を請負金額に設定しました。現場の利益にも反映します。');q('#sfRefresh')?.click();});
  }
  function preview(){
+  if(!editor||!allowed(editor.kind))return note('この書類は現在のプランでは利用できません。',true);
   let d;try{d=calculatedDocument().d;if(d.status==='draft')d.document_number=null;}catch(e){return note(e.message,true);}
   closeDocumentPreview?.();const opener=document.activeElement,dialog=document.createElement('dialog');dialog.id='pbPreview';dialog.innerHTML='<div class="pb-preview-toolbar"><b>'+E.kinds[d.kind]+'プレビュー</b><div><button id="pbPrint" class="btn dark" type="button">印刷・PDF保存</button><button id="pbPreviewClose" class="btn light" type="button">閉じる</button></div></div><p class="note">'+(d.status==='draft'&&d.kind!=='estimate'?'今は下書きです。正式な請求書にするには、この画面を閉じて「下書きを保存」→「内容を確定・採番」を押してください。請求番号が付き、下書き表示が消えます。':'印刷画面でPDFに保存できます。下書きには「下書き」と表示します。')+'</p><div class="pb-preview-viewport" tabindex="0" role="region" aria-label="書類のプレビュー"><div class="pb-preview-stage"><iframe title="書類の印刷プレビュー" scrolling="no" sandbox="allow-same-origin allow-modals"></iframe></div></div>';document.body.append(dialog);
   const frame=dialog.querySelector('iframe'),stopFit=fitDocumentPreview(frame);let closed=false;
@@ -345,7 +353,7 @@
   isBusy:()=>busy,
   closeEstimate(){if(busy)return false;if(editor?.kind==='estimate'){if(!discard())return false;editor=null;dirty=false;renderEditor();}return true;},
   async openEstimate(row){
-   if(busy||!identity()||!discard()||row.kind!=='estimate')return false;
+   if(!allowed('estimate')||busy||!identity()||!discard()||row.kind!=='estimate')return false;
    if(!mount())return false;const mine=owner;
    if(!row.site_id){editor=copy(row);dirty=false;renderEditor();return true;}
    if(!sites.some(s=>s.id===row.site_id))await refresh();

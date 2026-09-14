@@ -3,7 +3,7 @@
  'use strict';
  const C=window.ToyaEstimatePlan,E=window.ToyaProjectDocuments,A=window.ToyaEstimateAuto;if(!C||!E||!A||window.__toyaEstimatePlans)return;window.__toyaEstimatePlans=true;
  const q=(s,r=document)=>r.querySelector(s),esc=E.escape,yen=E.yen,copy=x=>JSON.parse(JSON.stringify(x));
- const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
+ const identity=()=>window.ToyaCompanyAccess?.allows('estimate')===true&&typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  let owner='',sites=[],plans=[],quotes=[],rates=[],selected='',plan=null,dirty=false,busy=false,ready=false,ticket=0,quoteRequest=null,simpleStep=1;
  const selectedSite=()=>sites.find(s=>s.id===selected);
  const note=(message,error=false)=>{for(const id of ['epStatus','epFormStatus']){const el=q('#'+id);if(el){el.textContent=message;el.classList.toggle('pb-error',error);}}};
