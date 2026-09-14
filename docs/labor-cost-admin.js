@@ -28,17 +28,17 @@
   }
   function fromReports(reports, rates) {
     const names = new Set();
-    let meiken = 0, asahi = 0;
+    let meiken = 0, asahi = 0;const dispatchCounts={};
     reports.forEach(r => {
       const d = r.report_data || {};
       (Array.isArray(d.workers) ? d.workers : []).forEach(n => names.add(norm(n)));
       meiken = Math.max(meiken, num(d.meikenCount));
-      asahi = Math.max(asahi, num(d.asahiCount));
+      asahi = Math.max(asahi, num(d.asahiCount));for(const e of window.ToyaDispatchCatalog.entries(d)){const k=norm(e.name);dispatchCounts[k]=Math.max(dispatchCounts[k]||0,e.count);}
     });
     return rates.filter(r => r.active !== false).map(rate => {
-      const r = newEntry(rate, rate.kind === 'own' && names.has(norm(rate.label)) ? 1 : rate.code === 'meiken' ? meiken : rate.code === 'asahi' ? asahi : 0);
-      if (rate.kind === 'dispatch' && ['meiken','asahi'].includes(rate.code) && travelEngine) {
-        const travel = travelEngine.resolve(reports, rate.code, rate.city_per_vehicle);
+      const r = newEntry(rate, rate.kind === 'own' && names.has(norm(rate.label)) ? 1 : rate.code === 'meiken' ? meiken : rate.code === 'asahi' ? asahi : rate.kind==='dispatch'?(dispatchCounts[norm(rate.label)]||0):0);
+      if (rate.kind === 'dispatch' && travelEngine) {
+        const travel = travelEngine.resolve(reports, reports.map(r=>window.ToyaDispatchCatalog.code(r.report_data,rate.label)).find(Boolean)||rate.code, rate.city_per_vehicle);
         if (travel.entry && !travel.conflict) {
           r.area = travel.entry.area || 'city'; r.vehicles = travel.entry.vehicles ?? 0;
           r.highway = travel.highway ?? 0; r.manualTravel = travel.entry.manualTravel;
@@ -190,7 +190,7 @@
     const section=(list,title)=>list.length?`<h3 class="lc-group-title">${title}</h3>`+list.map(({r,i})=>entryHTML(r,i)).join(''):'';
     const all=rows.map((r,i)=>({r,i}));
     const own=all.filter(x=>x.r.kind==='own'),dispatch=all.filter(x=>x.r.kind==='dispatch'),support=all.filter(x=>!['own','dispatch'].includes(x.r.kind));
-    q('#lcBody').innerHTML=section(own,'自社：勤務を選ぶだけ')+section(dispatch,'明建・朝日など：人数と通勤台数')+
+    q('#lcBody').innerHTML=section(own,'自社：勤務を選ぶだけ')+section(dispatch,'応援・派遣会社：人数と通勤台数')+
       (support.length?`<details class="lc-support" ${support.some(x=>calculate(x.r).active)?'open':''}><summary>常用・応援（必要な日だけ）</summary><p class="note">来てもらう分は費用、応援に行く分は売上。自社の人件費は上の自社欄に残します。</p>${support.map(({r,i})=>entryHTML(r,i)).join('')}</details>`:'');
     q('#lcTotals').hidden=false;q('#lcSave').hidden=false;renderTotals();
   }
@@ -278,7 +278,7 @@
       sheet=saved.data;selectedDate=date;selectedSite=site;
       if(sheet&&!rebuild){hoursImportBlocked='';rows=structuredClone(sheet.entries);sources=sheet.source_reports||[];dirty=false;msg('保存済みの金額を読み込みました。手入力と当時の単価を保持しています。');}
       else{rows=fromTimedReports(reports,rates,sites.find(s=>s.id===site),dispatchCrews);sources=(rows.some(r=>Number.isFinite(r.hourlyMinutes)||r.hourlyCrews?.length)?reports:reports.filter(r=>r.site_id===site)).map(r=>({id:r.id,updated_at:r.updated_at}));dirty=true;
-        msg(`日報${reports.length}件から人数・記録済みの通勤台数・交通費を読み込みました。${rows.filter(r=>r.travelImportNote).map(r=>r.label+'：'+r.travelImportNote).join(' ')} 全日・半日、通勤台数、市外交通費、高速代を確認してください。${reports.length>1?' 同じ人は1人、明建・朝日は最大人数で仮入力しています。別班の場合は人数を修正してください。':''}${reports.some(r=>r.report_data?.siteMoves?.length)?' 現場移動あり：各現場の人工配分と交通費の重複を確認してください。':''}${reports.some(r=>r.report_data?.otherWorker)?' その他の作業者は自動算入していません。単価設定から追加してください。':''}`);
+        msg(`日報${reports.length}件から人数・記録済みの通勤台数・交通費を読み込みました。${rows.filter(r=>r.travelImportNote).map(r=>r.label+'：'+r.travelImportNote).join(' ')} 全日・半日、通勤台数、市外交通費、高速代を確認してください。${reports.length>1?' 同じ人は1人、応援・派遣会社は最大人数で仮入力しています。別班の場合は人数を修正してください。':''}${reports.some(r=>r.report_data?.siteMoves?.length)?' 現場移動あり：各現場の人工配分と交通費の重複を確認してください。':''}${reports.some(r=>r.report_data?.otherWorker)?' その他の作業者は自動算入していません。単価設定から追加してください。':''}`);
       }
       renderEntries();
     }catch(e){msg('読込エラー：'+e.message,true);}finally{setBusy(false);}

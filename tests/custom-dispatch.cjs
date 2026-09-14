@@ -1,0 +1,13 @@
+const assert=require('node:assert/strict'),D=require('../docs/dispatch-catalog'),F=require('../docs/site-financial-summary'),T=require('../docs/dispatch-travel');
+const date='2026-09-14',site={id:'s',name:'現場'},row={id:'r',site_id:'s',report_date:date,report_data:{site:'現場',start:'08:00',end:'17:00',dispatchWorkers:[{id:'vendor-x',name:'任意の派遣会社',count:3}],dispatchTravel:{'vendor-x':{area:'city',vehicles:1,highway:500,manualTravel:null,memo:''}}}};
+const rate={code:'custom-rate',label:'任意の派遣会社',kind:'dispatch',day_rate:20000,half_rate:10000,city_per_vehicle:1000,active:true};
+assert.equal(D.total(row.report_data),3);assert.equal(D.total({...row.report_data,meikenCount:2}),5);assert.equal(T.resolve([row],'vendor-x',1000).value,1500);
+let result=F.automaticSheet('labor',date,{laborRates:[rate],reports:[row]},site,[row]);assert.equal(result.sheet.cost_total,61500);
+const duplicate={...structuredClone(row),id:'r2'};
+assert.equal(F.automaticSheet('labor',date,{laborRates:[rate],reports:[row,duplicate]},site,[row,duplicate]).sheet.cost_total,61500);
+const missing=F.automaticSheet('labor',date,{laborRates:[],reports:[row]},site,[row]);assert.equal(missing.sheet.cost_total,0);assert(missing.issues.some(i=>i.includes('単価')));
+const timed=structuredClone(row);timed.report_data.usageHours={version:1,entries:[{kind:'dispatch',label:'任意の派遣会社',quantity:3,allocations:[{site:'現場',minutes:240}],travelSite:'現場'}]};
+const timedResult=F.automaticSheet('labor',date,{laborRates:[rate],reports:[timed],sites:[site]},site,[timed]);assert.equal(timedResult.sheet.cost_total,31500);
+const legacy={...row,report_data:{start:'08:00',end:'17:00',meikenCount:2,dispatchTravel:{meiken:{area:'city',vehicles:0,highway:0,manualTravel:null}}}};
+assert.equal(F.automaticSheet('labor',date,{laborRates:[{...rate,code:'meiken',label:'明建'}],reports:[legacy]},site,[legacy]).sheet.cost_total,40000);
+console.log('PASS dispatch: custom vendor counts, daily/hourly labor, travel, duplicate prevention, missing-rate warning and legacy totals');

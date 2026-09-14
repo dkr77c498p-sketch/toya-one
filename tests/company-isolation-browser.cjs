@@ -38,6 +38,17 @@ const profile=(company,name='試験社長')=>({id:company+'-admin',company_id:co
   await page.evaluate(async()=>{window.__qaDB.company_registries=[{company_id:'company-a',kind:'vehicles',entries:[{id:'qa-shared',name:'A社の共有車両',active:true}],version:1}];await window.ToyaCompanyRegistry.refresh();});
   assert.deepEqual(await page.locator('#vehicleChoices input').evaluateAll(xs=>xs.map(x=>x.value)),['A社の共有車両']);
   await page.evaluate(async()=>{window.__qaDB.company_registries=[];await window.ToyaCompanyRegistry.refresh();set(LS.vehicles,[]);renderSelectors();});
+  await page.evaluate(async()=>{window.__qaDB.company_registries=[{company_id:'company-a',kind:'dispatch',entries:[{id:'vendor-a',name:'A応援会社',active:true}],version:1}];await window.ToyaCompanyRegistry.refresh();});
+  await page.locator('nav [data-page="reportPage"]').click();
+  await page.locator('#dispatchCount-vendor-a').fill('3');
+  await page.waitForFunction(()=>collect().dispatchWorkers?.[0]?.count===3);
+  await page.waitForFunction(()=>collect().usageHours?.entries?.some(e=>e.kind==='dispatch'&&e.label==='A応援会社'&&e.quantity===3));
+  assert.equal(await page.locator('#meikenCount').isVisible(),false,'他社の派遣入力にTOYAの会社名を表示しない');
+  await page.evaluate(()=>{const d=collect();fillReportForm(d,'edit');});
+  assert.equal(await page.locator('#dispatchCount-vendor-a').inputValue(),'3','日報の再編集で派遣人数を保持');
+  await page.evaluate(()=>clearReportFormDynamic());
+  assert.equal(await page.locator('#dispatchCount-vendor-a').inputValue(),'0');
+  await page.evaluate(async()=>{window.__qaDB.company_registries=[];await window.ToyaCompanyRegistry.refresh();});
   await page.locator('#restoreFile').setInputFiles({name:'wrong-company.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({company_id:'company-b',vehicles:['他社のバックアップ車両']}))});
   await page.waitForFunction(()=>window.__qaAlert?.includes('この会社のバックアップではありません'));
   assert.deepEqual(await page.evaluate(()=>get(LS.vehicles,[])),[],'他社のバックアップを混ぜない');

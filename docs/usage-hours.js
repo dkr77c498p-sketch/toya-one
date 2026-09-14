@@ -3,6 +3,7 @@
  */
 (() => {
  'use strict';
+ const dispatchCatalog=typeof module==='object'&&module.exports?require('./dispatch-catalog.js'):window.ToyaDispatchCatalog;
  const workTime=typeof module==='object'&&module.exports?require('./work-time.js'):window.ToyaWorkTimeEngine;
  const arr=v=>Array.isArray(v)?v:[],norm=v=>String(v??'').normalize('NFKC').replace(/[\s　]/g,'').toLowerCase();
  const key=v=>['sk55','sk55sr'].includes(norm(v))?'sk55':norm(v)==='アームロール'?norm('4tアームロール'):norm(v);
@@ -57,13 +58,13 @@
   return next;
  }
  function used(r,kind,name){const d=r.report_data||{};
-  if(kind==='dispatch')return Number(d[norm(name)==='明建'?'meikenCount':'asahiCount'])>0;
+  if(kind==='dispatch')return dispatchCatalog.entries(d).some(e=>norm(e.name)===norm(name)&&e.count>0);
   return arr(d[fields[kind]]).some(v=>key(label(v).replace(/\s*[×x]\s*\d+\s*[台本個]$/,''))===key(name));
  }
  // A company name is not a crew identity. Only current administrator
  // confirmations may distinguish separate crews; unconfirmed reports remain ambiguous.
  function dispatchCrew(data,r,name){
-  const code=norm(name)==='明建'?'meiken':norm(name)==='朝日'?'asahi':'';
+  const code=dispatchCatalog.code(r.report_data,name);
   const stamp=v=>{const t=Date.parse(v);return Number.isFinite(t)?t+':'+(String(v).match(/\.(\d+)/)?.[1]?.padEnd(6,'0').slice(3,6)||'000'):'';};
   const time=stamp(r.updated_at);
   const rows=arr(data.dispatchCrews).filter(c=>c.report_id===r.id&&c.site_id===r.site_id&&c.work_date===r.report_date&&c.dispatch_code===code&&time&&stamp(c.report_updated_at)===time);
@@ -132,7 +133,7 @@
    const gross=round(daily*weighted.minutes*e.quantity/480);
    if(kind==='labor'){
     let travel=0,highway=0;
-    if(g.kind==='dispatch'&&norm(e.travelSite||g.report.report_data?.site)===norm(site.name)&&travelEngine){const t=travelEngine.resolve([g.report],r.code,r.city_per_vehicle);travel=t.travel;highway=t.highway;if(travel===null||highway===null)pending.push(g.label+'の交通費');t.issues.forEach(x=>issues.add(date+'：'+g.label+'／'+x));}
+    if(g.kind==='dispatch'&&norm(e.travelSite||g.report.report_data?.site)===norm(site.name)&&travelEngine){const t=travelEngine.resolve([g.report],dispatchCatalog.code(g.report.report_data,g.label)||r.code,r.city_per_vehicle);travel=t.travel;highway=t.highway;if(travel===null||highway===null)pending.push(g.label+'の交通費');t.issues.forEach(x=>issues.add(date+'：'+g.label+'／'+x));}
     s.entries.push({key:r.code,label:r.label,kind:r.kind,minutes:m,quantity:e.quantity,...(premium?{premium:structuredClone(premium),weightedMinutes:weighted.minutes}:{}),cost:round(gross+(travel||0)+(highway||0)),laborCost:gross,travel,highway});
    }else{
     // Vehicle and equipment rates are usage charges. Fuel stays in the daily
@@ -185,7 +186,7 @@
   const rows=[];
   const push=(kind,n,quantity=1,minutes=null)=>{if(n)rows.push({kind,label:n,quantity,minutes});};
   arr(d.workers).forEach(n=>push('labor',label(n)));
-  [['明建','meikenCount'],['朝日','asahiCount']].forEach(([n,f])=>{if(Number(d[f])>0)push('dispatch',n,Number(d[f]));});
+  dispatchCatalog.entries(d).forEach(e=>{if(e.count>0)push('dispatch',e.name,e.count);});
   arr(d.vehicles).forEach(n=>push('vehicle',label(n)));
   arr(d.machines).forEach(n=>push('equipment',label(n),1,num(n.hours)===null?null:Math.round(Number(n.hours)*60)));
   const small=new Set([...document.querySelectorAll('#smallToolChoices input[name="attachment"]')].map(e=>key(e.value)));
@@ -238,6 +239,7 @@
   for(const code of ['meiken','asahi']){
    const input=q('#'+code+'Count');definitions.push([code,input?.closest('.stepper')||input]);
   }
+  document.querySelectorAll('.custom-dispatch-count').forEach(input=>definitions.push([input.closest('[data-dispatch-id]').dataset.dispatchId,input]));
   for(const [id,anchor] of definitions){
    if(!anchor)continue;
    let host=q('#uhInline-'+id);
@@ -278,7 +280,7 @@
   const shift=workTime.report(d);if(shift&&!shift.issue){breakMinutes=shift.breakMinutes;q('#uhBreak').value=breakMinutes;}
   q('#uhBreak').closest('details').hidden=!!shift;
   for(const [kind,title] of groups){
-   const buckets=kind==='dispatch'?[['meiken','明建'],['asahi','朝日']]:[[kind,null]];
+   const buckets=kind==='dispatch'?dispatchCatalog.entries(d).map(e=>[e.id,e.name]):[[kind,null]];
    for(const [id,name] of buckets){
     const host=q('#uhInline-'+id);if(!host)continue;
     const es=entries.filter(e=>e.kind===kind&&(!name||e.label===name));
@@ -294,6 +296,7 @@
   window.syncFuelInputs?.();
   q('#uhInlineStatus').textContent=enabled?'選択した項目のすぐ下で時間を入力できます。上へ戻る操作は不要です。':'時間入力は無効です。過去の日報は従来の計算を保持しています。';
  }
+ document.addEventListener('toya-dispatch-input',()=>schedule());document.addEventListener('toya-dispatch-rendered',()=>schedule());
  function schedule(){if(scheduled)return;scheduled=true;setTimeout(()=>{scheduled=false;display();},0);}
  function restore(d,mode){
   state={};const h=d?.usageHours;enabled=h?.version===1||mode!=='edit';breakMinutes=h?.breakMinutes??60;

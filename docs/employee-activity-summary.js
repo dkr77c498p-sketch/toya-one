@@ -4,6 +4,7 @@
  */
 (() => {
   'use strict';
+ const dispatchCatalog=typeof module==='object'&&module.exports?require('./dispatch-catalog.js'):window.ToyaDispatchCatalog;
   const arr = x => Array.isArray(x) ? x : [];
   const norm = x => String(x ?? '').normalize('NFKC').replace(/[\s　]/g, '').toLowerCase();
   const key = x => ['sk55', 'sk55sr'].includes(norm(x)) ? 'sk55' : norm(x) === 'アームロール' ? norm('4tアームロール') : norm(x);
@@ -13,7 +14,7 @@
     return /[¥￥$€£]|[0-9０-９][0-9０-９.,，．]*\s*円/.test(t) ? '名称を確認してください' : t;
   };
   const name = x => safe(typeof x === 'string' ? x : x?.name);
-  const kinds = {labor:'自社の作業者', dispatch:'明建・朝日', vehicle:'車両', equipment:'重機', attachment:'アタッチメント', tool:'小型機械・工具'};
+  const kinds = {labor:'自社の作業者', dispatch:'応援・派遣会社', vehicle:'車両', equipment:'重機', attachment:'アタッチメント', tool:'小型機械・工具'};
   const cleanResource = x => {
     const n = name(x), m = n.match(/\s*[×x]\s*(\d+)\s*[台本個]$/);
     return {label:m ? n.slice(0,m.index).trim() : n, quantity:m ? Number(m[1]) : 1, minutes:x && typeof x === 'object' && num(x.hours) !== null ? Number(x.hours)*60 : null};
@@ -25,7 +26,7 @@
     return {
       id:String(r.id), date:String(r.report_date || '').slice(0,10), siteId:r.site_id, site:safe(site?.name || d.site),
       workers:arr(d.workers).map(name),
-      dispatch:[['明建','meikenCount'],['朝日','asahiCount']].map(([label,f])=>({label,quantity:num(d[f]) || 0})),
+      dispatch:dispatchCatalog.entries(d).map(e=>({label:safe(e.name),quantity:num(e.count)||0})),
       vehicles:arr(d.vehicles).map(cleanResource), machines:arr(d.machines).map(cleanResource), attachments:arr(d.attachments).map(cleanResource),
       hours:d.usageHours?.version === 1 ? arr(d.usageHours.entries).filter(e=>Object.hasOwn(kinds,e.kind)).map(e=>({
         kind:e.kind, label:safe(e.label), quantity:num(e.quantity),
@@ -186,7 +187,7 @@
       window.ToyaSharedSiteUI?.syncBrowse(q('#esSite'));
       const target=sites.find(s=>s.id===q('#esSite').value);if(!target){q('#esStatus').textContent='現場を選んでください。';return;}
       // Read shared report facts only. Never query pricing masters or confirmed cost sheets.
-      const fields='id,site_id,report_date,workers:report_data->workers,meikenCount:report_data->meikenCount,asahiCount:report_data->asahiCount,vehicles:report_data->vehicles,machines:report_data->machines,attachments:report_data->attachments,usageHours:report_data->usageHours,siteMoves:report_data->siteMoves,items:report_data->items,fuels:report_data->fuels';
+      const fields='id,site_id,report_date,workers:report_data->workers,meikenCount:report_data->meikenCount,asahiCount:report_data->asahiCount,dispatchWorkers:report_data->dispatchWorkers,vehicles:report_data->vehicles,machines:report_data->machines,attachments:report_data->attachments,usageHours:report_data->usageHours,siteMoves:report_data->siteMoves,items:report_data->items,fuels:report_data->fuels';
       const rows=await read('daily_reports',fields,company,bounds,t);
       if(t!==ticket||mine!==identity())return;
       const names=[...document.querySelectorAll('#smallToolChoices input[name="attachment"]')].map(e=>e.value);

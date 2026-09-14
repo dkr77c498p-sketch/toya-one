@@ -1,6 +1,7 @@
 /* TOYA One site financial summary v4. Review reasons separate from movement records. */
 (() => {
   'use strict';
+ const dispatchCatalog=typeof module==='object'&&module.exports?require('./dispatch-catalog.js'):window.ToyaDispatchCatalog;
   const hoursEngine = typeof module === 'object' && module.exports ? require('./usage-hours.js') : window.ToyaUsageHoursEngine;
   const travelEngine = typeof module === 'object' && module.exports ? require('./dispatch-travel.js') : window.ToyaDispatchTravelEngine;
   const transportEngine = typeof module === 'object' && module.exports ? require('./equipment-transport.js') : window.ToyaTransportEngine;
@@ -110,15 +111,15 @@
         entries.push({key: rate.code, label, kind: 'own', full: 1, half: 0, cost});
         sheet.cost_total = round(sheet.cost_total + cost);
       });
-      [['meiken', 'meikenCount', '明建'], ['asahi', 'asahiCount', '朝日']].forEach(([code, field, label]) => {
-        const observed = own.map(r => ({r, n: amount(raw(r)[field])}));
+      dispatchCatalog.catalog(own).forEach(({id:code,name:label}) => {
+        const observed = own.map(r => ({r, n: amount(dispatchCatalog.count(raw(r),code))}));
         if (observed.some(x => x.n !== null && (!Number.isInteger(x.n) || x.n < 0))) {note(label + 'の人数を確認してください。'); return;}
         const working = observed.filter(x => x.n > 0); if (!working.length) return;
-        if (working.some(x => hasMoves(x.r) && !hoursEngine.dispatchCrew(data, x.r, label)) || others.some(r => amount(raw(r)[field]) > 0 && working.some(x => hoursEngine.sameDispatchCrew(data, x.r, r, label)))) {
+        if (working.some(x => hasMoves(x.r) && !hoursEngine.dispatchCrew(data, x.r, label)) || others.some(r => amount(dispatchCatalog.count(raw(r),code)) > 0 && working.some(x => hoursEngine.sameDispatchCrew(data, x.r, r, label)))) {
           note(label + 'が同日に複数現場へ記録されています。別班か現場移動か不明のため、この会社の人工・交通費は自動加算を保留しています。'); return;
         }
         const counts = [...new Set(working.map(x => x.n))];
-        const rate = findRate(data.laborRates, r => r.kind === 'dispatch' && r.code === code, label); if (!rate) return;
+        const rate = findRate(data.laborRates, r => r.kind === 'dispatch' && (r.code === code || normal(r.label)===normal(label)), label); if (!rate) return;
         if (!travelEngine) throw new Error('交通費の計算処理を読み込めませんでした。再読み込みしてください。');
         const travel = travelEngine.resolve(own, code, rate.city_per_vehicle);
         travel.issues.forEach(issue => note(label + '：' + issue));
@@ -132,7 +133,7 @@
       });
       if (own.some(r => String(raw(r).otherWorker || '').trim())) note('その他の作業者は人数・単価を確定できないため含めていません。');
       const premiumRecorded = r => {
-        const d=raw(r),labels=[...list(d.workers).map(named),...(Number(d.meikenCount)>0?['明建']:[]),...(Number(d.asahiCount)>0?['朝日']:[])];
+        const d=raw(r),labels=[...list(d.workers).map(named),...dispatchCatalog.entries(d).filter(e=>e.count>0).map(e=>e.name)];
         return labels.length>0&&labels.every(label=>list(d.usageHours?.entries).some(e=>['labor','dispatch'].includes(e.kind)&&normal(e.label)===normal(label)&&list(e.allocations).length&&e.allocations.every(a=>a.premium)));
       };
       if (own.some(r => (amount(raw(r).overtime) || 0) > 0&&!premiumRecorded(r))) note('残業の時間・割増を人工欄で確認してください。内訳未入力の残業代は含めていません。');

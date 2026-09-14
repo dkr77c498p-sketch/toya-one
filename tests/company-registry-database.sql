@@ -30,6 +30,8 @@ begin
  perform set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('qa.ui'),'role','authenticated')::text,true);
  select count(*) into n from public.company_registries;if n<>0 then raise exception 'inactive read accepted';end if;
 end $$;
+select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('qa.ua'),'role','authenticated')::text,true);
+insert into public.company_registries(company_id,kind,entries) values(current_setting('qa.a')::uuid,'dispatch','[{"id":"custom-vendor","name":"試験派遣会社","active":true}]');
 set local role anon;
 do $$ declare blocked boolean:=false;begin begin perform 1 from public.company_registries;exception when insufficient_privilege then blocked:=true;end;if not blocked then raise exception 'anon access accepted';end if;end $$;
 reset role;

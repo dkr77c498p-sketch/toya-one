@@ -4,6 +4,7 @@
  */
 (() => {
   'use strict';
+ const dispatchCatalog=typeof module==='object'&&module.exports?require('./dispatch-catalog.js'):window.ToyaDispatchCatalog;
   const codes = ['meiken', 'asahi'];
   const labels = {meiken:'明建', asahi:'朝日'};
   const list = v => Array.isArray(v) ? v : [];
@@ -43,7 +44,7 @@
     const working = list(reports).filter(r => {
       if (r.id && seen.has(r.id)) return false;
       if (r.id) seen.add(r.id);
-      return Number(r.report_data?.[code+'Count'] || 0) > 0;
+      return dispatchCatalog.count(r.report_data,code) > 0;
     });
     if (!working.length) return {recorded:false,conflict:false,entry:null,travel:0,highway:0,value:0,issues:[]};
     const values = working.map(r => decode(r.report_data?.dispatchTravel?.[code])).filter(Boolean);

@@ -1,7 +1,7 @@
 /* Company-owned shared registration. All mutations require admin RLS and version CAS. */
 (() => {
  'use strict';
- const kinds={vehicles:'車両',machines:'重機',attachments:'アタッチメント',employees:'社員名簿'};
+ const kinds={vehicles:'車両',machines:'重機',attachments:'アタッチメント',employees:'社員名簿',dispatch:'派遣会社'};
  const q=s=>document.querySelector(s),list=x=>Array.isArray(x)?x:[],clone=x=>JSON.parse(JSON.stringify(x));
  const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&!companyTransition?cloudProfile.id+':'+cloudProfile.company_id+':'+cloudProfile.role:'';
  const admin=()=>!!identity()&&cloudProfile.role==='admin';
@@ -22,9 +22,10 @@
   document.documentElement.classList.add('company-registry-ready');
   for(const k of ['vehicles','machines','attachments'])if(rows[k])set(LS[k],active(k).map(e=>k==='attachments'?{name:e.name,category:e.category||'',location:e.location||'',mountedOn:e.mountedOn||'',memo:e.memo||''}:e.name));
   preserveChoices(()=>{renderSelectors();renderCompanyPeople();});
+  document.dispatchEvent(new CustomEvent('toya-company-registry-updated'));
   for(const id of ['vehicleMaster','machineMaster','attachmentMaster']){const card=q('#'+id)?.closest('.card');if(card)card.hidden=true;}
  }
- function selectKind(k){kind=k;draft=clone(list(rows[k]?.entries));editVersion=rows[k]?.version??null;dirty=false;if(!rows[k]&&k!=='employees'&&typeof isToyaCompany==='function'&&isToyaCompany()){draft=list(get(LS[k],[])).map(e=>({...(typeof e==='string'?{name:e}:e),id:crypto.randomUUID(),active:true}));}paintEditor();}
+ function selectKind(k){kind=k;draft=clone(list(rows[k]?.entries));editVersion=rows[k]?.version??null;dirty=false;if(!rows[k]&&!['employees','dispatch'].includes(k)&&typeof isToyaCompany==='function'&&isToyaCompany()){draft=list(get(LS[k],[])).map(e=>({...(typeof e==='string'?{name:e}:e),id:crypto.randomUUID(),active:true}));}paintEditor();}
  function mount(){
   if(!adopt())return;
   if(!q('#companyRegistry')){
@@ -40,10 +41,10 @@
  function paintEditor(){
   if(!q('#crEditor'))return;q('#crKind').value=kind;
   const editable=ready&&admin()&&!busy;
-  q('#crEditor').innerHTML='<p class="note">'+(!rows[kind]&&draft.length?'この端末の登録内容です。内容を確認して保存すると会社内で共有されます。<br>':'')+(kind==='employees'?'日報で選ぶ名前を登録します。ログイン用アカウントの発行・停止とは別です。':kind==='attachments'?'名称と必要な補足を入力してください。単価は単価設定で別に登録します。':'例：車両は「３ｔダンプ １号」、重機は「０．４５ １号」。同じ種類が複数ある場合は番号で区別してください。')+'<br>「使用停止」は今後の選択肢から外す操作です。過去の日報は変わりません。</p>'+draft.map((e,i)=>'<div class="row"><label>名称・氏名<input data-cr-index="'+i+'" data-cr-key="name" maxlength="120" value="'+esc(e.name)+'"></label>'+(kind==='attachments'?['category','location','mountedOn','memo'].map((key,j)=>'<label>'+['種類','保管場所','装着中の重機','メモ'][j]+'<input data-cr-index="'+i+'" data-cr-key="'+key+'" maxlength="1000" value="'+esc(e[key])+'"></label>').join(''):'')+'<button class="btn light" type="button" data-cr-toggle="'+i+'">'+(e.active===false?'使用を再開する':'使用停止にする')+'</button><span class="note">'+(e.active===false?' 使用停止中':' 使用中')+'</span></div>').join('')+(!draft.length?'<p class="note">まだ登録されていません。「追加」から登録できます。</p>':'')+'<div class="toolbar"><button class="btn light" id="crAdd" type="button">＋ 追加</button><button class="btn lime" id="crSave" type="button">この項目を保存・共有</button><button class="btn light" id="crImport" type="button">この端末の登録を取り込む</button></div>';
+  q('#crEditor').innerHTML='<p class="note">'+(!rows[kind]&&draft.length?'この端末の登録内容です。内容を確認して保存すると会社内で共有されます。<br>':'')+(kind==='dispatch'?'応援・派遣会社の正式名称を登録してください。人数は日報、単価は人件費の単価設定で登録します。':kind==='employees'?'日報で選ぶ名前を登録します。ログイン用アカウントの発行・停止とは別です。':kind==='attachments'?'名称と必要な補足を入力してください。単価は単価設定で別に登録します。':'例：車両は「３ｔダンプ １号」、重機は「０．４５ １号」。同じ種類が複数ある場合は番号で区別してください。')+'<br>「使用停止」は今後の選択肢から外す操作です。過去の日報は変わりません。</p>'+draft.map((e,i)=>'<div class="row"><label>名称・氏名<input data-cr-index="'+i+'" data-cr-key="name" maxlength="120" value="'+esc(e.name)+'"></label>'+(kind==='attachments'?['category','location','mountedOn','memo'].map((key,j)=>'<label>'+['種類','保管場所','装着中の重機','メモ'][j]+'<input data-cr-index="'+i+'" data-cr-key="'+key+'" maxlength="1000" value="'+esc(e[key])+'"></label>').join(''):'')+'<button class="btn light" type="button" data-cr-toggle="'+i+'">'+(e.active===false?'使用を再開する':'使用停止にする')+'</button><span class="note">'+(e.active===false?' 使用停止中':' 使用中')+'</span></div>').join('')+(!draft.length?'<p class="note">まだ登録されていません。「追加」から登録できます。</p>':'')+'<div class="toolbar"><button class="btn light" id="crAdd" type="button">＋ 追加</button><button class="btn lime" id="crSave" type="button">この項目を保存・共有</button><button class="btn light" id="crImport" type="button">この端末の登録を取り込む</button></div>';
   q('#crEditor').querySelectorAll('input,button').forEach(e=>e.disabled=!editable);
   q('#crKind').disabled=busy;q('#crReload').disabled=busy||loading;
-  q('#crImport').hidden=!!rows[kind]||kind==='employees';
+  q('#crImport').hidden=!!rows[kind]||['employees','dispatch'].includes(kind);
   q('#crEditor').oninput=e=>{if(e.target.dataset.crKey){draft[Number(e.target.dataset.crIndex)][e.target.dataset.crKey]=e.target.value;dirty=true;note('変更は未保存です。「この項目を保存・共有」を押してください。');}};
   q('#crEditor').onclick=e=>{const b=e.target.closest('[data-cr-toggle]');if(b){const entry=draft[Number(b.dataset.crToggle)];entry.active=entry.active===false;dirty=true;paintEditor();note('変更は未保存です。');}};
   q('#crAdd').onclick=()=>{if(draft.length>=500)return note('1項目につき500件まで登録できます。');draft.push({id:crypto.randomUUID(),name:'',active:true});dirty=true;paintEditor();const inputs=q('#crEditor').querySelectorAll('[data-cr-key=name]');inputs[inputs.length-1]?.focus();};
@@ -66,7 +67,7 @@
   }catch(e){if(identity()===mine)note('保存できませんでした。入力内容は保持しています。'+(e.code==='23505'?'他の端末で登録済みです。内容を控えてから読み込み直してください。':e.message||''));}
   finally{if(identity()===mine){busy=false;paintEditor();}}
  }
- window.ToyaCompanyRegistry={people,refresh,has:k=>ready&&!!rows[k]};
+ window.ToyaCompanyRegistry={people,refresh,dispatch:()=>active('dispatch'),has:k=>ready&&!!rows[k]};
  const originalGet=window.get;window.get=function(key,fallback){if(identity()===owner&&ready){for(const k of ['vehicles','machines','attachments'])if(rows[k]&&key===LS[k])return active(k).map(e=>k==='attachments'?{name:e.name,category:e.category||'',location:e.location||'',mountedOn:e.mountedOn||'',memo:e.memo||''}:e.name);}return originalGet.apply(this,arguments);};
  const style=document.createElement('style');style.textContent='.company-registry-ready #smallToolMasterCard{display:none!important}#companyRegistry input{box-sizing:border-box;max-width:100%;font-size:16px}#companyRegistry .toolbar{flex-wrap:wrap}#companyRegistry button{min-height:44px}';document.head.appendChild(style);
  function start(){mount();refresh();document.addEventListener('click',e=>{if(e.target.closest('nav [data-page]')){mount();if(!dirty)refresh();}});window.addEventListener('pageshow',()=>refresh());setInterval(()=>{if(identity()!==owner){mount();refresh();}},1000);}
