@@ -950,6 +950,7 @@ function set(k,v){if(companyTransition)throw new Error('ログイン切替中で
 function initializeCompanyDefaults(){if(!localCompanyKey())return;Object.entries({sites:LS.sites,vehicles:LS.vehicles,machines:LS.machines,attachments:LS.attachments}).forEach(([n,k])=>{if(localStorage.getItem(k)===null)set(k,defaults[n]);});}
 function companyPeople(){
   if(!localCompanyKey())return [];
+  const registered=window.ToyaCompanyRegistry?.people();if(registered)return registered;
   if(isToyaCompany())return ['宮下 直也','上村 凌太','宮下 哲也'];
   return [...new Set([...Object.values(cloudProfilesCache).filter(p=>p.active!==false).map(p=>p.name),cloudProfile.name].map(n=>String(n||'').trim()).filter(Boolean))];
 }
@@ -2265,7 +2266,7 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="unified-daily-rate-admin.js?v=20260910-v1"></script>
 <script src="report-draft-recovery.js?v=20260909-travel-site-v4"></script>
 <script src="project-documents-engine.js?v=20260914-company-v1"></script>
-<script src="project-business.js?v=20260913-delete-draft-v2"></script>
+<script src="project-business.js?v=20260914-registry-v1"></script>
 <script src="site-project-profile-engine.js?v=20260913-v1"></script>
 <script src="site-project-profile.js?v=20260913-v1"></script>
 <script src="estimate-plan-engine.js?v=20260911-auto-estimate-v1"></script>
@@ -2274,5 +2275,6 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="estimate-plan-admin.js?v=20260913-concrete-v1"></script>
 <script src="site-auto-ledger.js?v=20260911-quote-quantities-v1"></script>
 <script src="estimate-quantities.js?v=20260911-invoice-a4-v2"></script>
+<script src="company-registry.js?v=20260914-v1"></script>
 </body>
 </html>

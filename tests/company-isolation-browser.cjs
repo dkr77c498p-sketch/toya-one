@@ -35,6 +35,9 @@ const profile=(company,name='試験社長')=>({id:company+'-admin',company_id:co
   assert.equal(await page.locator('#vehicleChoices input').count(),0);
   assert.equal(await page.locator('#machineChoices input').count(),0);
   await page.waitForTimeout(1500);assert.equal(await page.locator('input[name="attachment"]').count(),0,'TOYA専用の自動追加を他社で実行しない');
+  await page.evaluate(async()=>{window.__qaDB.company_registries=[{company_id:'company-a',kind:'vehicles',entries:[{id:'qa-shared',name:'A社の共有車両',active:true}],version:1}];await window.ToyaCompanyRegistry.refresh();});
+  assert.deepEqual(await page.locator('#vehicleChoices input').evaluateAll(xs=>xs.map(x=>x.value)),['A社の共有車両']);
+  await page.evaluate(async()=>{window.__qaDB.company_registries=[];await window.ToyaCompanyRegistry.refresh();set(LS.vehicles,[]);renderSelectors();});
   await page.locator('#restoreFile').setInputFiles({name:'wrong-company.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({company_id:'company-b',vehicles:['他社のバックアップ車両']}))});
   await page.waitForFunction(()=>window.__qaAlert?.includes('この会社のバックアップではありません'));
   assert.deepEqual(await page.evaluate(()=>get(LS.vehicles,[])),[],'他社のバックアップを混ぜない');
