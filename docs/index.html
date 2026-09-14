@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ja">
-<head>
+<head><script src="company-access.js?v=20260914-access-v1"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0b">
@@ -169,7 +169,7 @@ textarea{min-height:105px;resize:vertical}
   </div>
   <div id="cloudReportList" class="cloud-list"></div>
 </div>
-<a class="btn light" href="start.html" style="display:block;text-align:center;margin-top:12px">はじめての登録・社員の参加</a>
+<a class="btn lime" href="employee.html" style="display:block;text-align:center;margin-top:12px">社員IDでログイン（メール不要）</a><a class="btn light" href="start.html" style="display:block;text-align:center;margin-top:12px">はじめての登録・社員の参加</a>
 <div id="cloudStatus" class="note" style="margin-top:8px">クラウド未接続</div>
 </div>
 <div class="card"><h2>今日の状況</h2><div class="statgrid">
@@ -486,7 +486,7 @@ function cloudSetSessionState(state,session=null){
     initializeCompanyDefaults();renderCompanyPeople();renderSelectors();
     localStorage.setItem('toya_last_company_for_ui',cloudProfile.company_id);
     $('#cloudUserName').textContent=cloudProfile.name||session?.user?.email||'ログイン中';
-    $('#cloudUserMeta').textContent=`${session?.user?.email||''}｜権限：${cloudProfile.role}`;
+    $('#cloudUserMeta').textContent=`${session?.user?.email?.endsWith('@employee.toya.invalid')?'社員IDでログイン':session?.user?.email||''}｜権限：${cloudProfile.role}`;
     cloudMsg('クラウドに接続済み','ok');
   }else cloudMsg(state.message||(state.status==='signed_out'?'この画面ではログインしていません。':'接続を確認してください。'),state.status==='signed_out'?'':'bad');
   applyCloudRoleUI();
@@ -512,6 +512,11 @@ function cloudEnsureProfile(){
         if(!p){state={status:'unregistered',message:'会社の利用登録がまだありません。「はじめての登録・社員の参加」から進めてください。'};}else state=p?.id===session.user.id&&p.company_id&&p.active===true&&['admin','employee'].includes(p.role)
           ?{status:'ready',profile:p}
           :{status:'inactive',message:'このアカウントの利用登録を確認してください。'};
+        if(state.status==='ready'){
+          const access=await cloudSessionTimeout(window.ToyaCompanyAccess.check(cloudClient,p.id));
+          if(epoch!==cloudSessionEpoch)return {status:'changed'};
+          if(access.state!=='ready')state={status:'blocked',message:access.message||'会社の契約と端末登録を確認してください。'};
+        }
       }
     }catch(error){state={status:'error',message:error.message||'接続を確認できませんでした。'};}
     if(epoch!==cloudSessionEpoch)return {status:'changed'};
@@ -533,7 +538,7 @@ function installCloudSessionListener(){
       cloudSetSessionState({status:'signed_out'});
     }
     if(session?.user?.id&&['INITIAL_SESSION','SIGNED_IN','TOKEN_REFRESHED','USER_UPDATED'].includes(event)){
-      const needsRefresh=!cloudProfile||event==='USER_UPDATED';
+      const needsRefresh=!cloudProfile||event==='USER_UPDATED'||event==='TOKEN_REFRESHED';
       if(needsRefresh)setTimeout(()=>cloudRefreshSession(),0);
     }
   });
@@ -2279,7 +2284,7 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="site-auto-ledger.js?v=20260911-quote-quantities-v1"></script>
 <script src="estimate-quantities.js?v=20260911-invoice-a4-v2"></script>
 <script src="company-registry.js?v=20260914-onboarding-v1"></script>
-<script src="company-members.js?v=20260914-v1"></script>
+<script src="company-members.js?v=20260914-access-v1"></script>
 <script src="company-dispatch.js?v=20260914-v1"></script>
 </body>
 </html>

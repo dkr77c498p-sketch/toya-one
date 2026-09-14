@@ -1,4 +1,7 @@
 begin;
+-- Test-only seller activation, rolled back with all fixtures. External device/seat rules
+-- have separate coverage in company-access-database.sql.
+create function pg_temp.qa_activate(c uuid) returns void language sql security definer set search_path='' as $$update private.company_licenses set status='active',internal=true,max_users=10000 where company_id=c;$$;
 do $$
 declare a uuid:=gen_random_uuid();b uuid:=gen_random_uuid();e uuid:=gen_random_uuid();w uuid:=gen_random_uuid();unverified uuid:=gen_random_uuid();
 begin
@@ -13,7 +16,7 @@ begin
  blocked:=false;begin perform public.toya_onboarding('create_company','{"name":"未確認","company_name":"不可"}');exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'unverified creation accepted';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('qa.admin'),'role','authenticated')::text,true);
  result:=public.toya_onboarding('status','{}');if result->>'state'<>'unregistered' then raise exception 'new state incorrect';end if;
- result:=public.toya_onboarding('create_company','{"name":"試験管理者","company_name":"試験会社A"}');a:=(result->>'company_id')::uuid;
+ result:=public.toya_onboarding('create_company','{"name":"試験管理者","company_name":"試験会社A"}');a:=(result->>'company_id')::uuid;if result->>'state'<>'pending' then raise exception 'approval bypass';end if;perform pg_temp.qa_activate(a);
  if public.toya_current_company_id()<>a or not public.toya_is_admin() then raise exception 'created owner invalid';end if;
  if exists(select 1 from public.company_registries) then raise exception 'new company seeded';end if;
  blocked:=false;begin perform public.toya_onboarding('create_company','{"name":"もう一度","company_name":"不可"}');exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'duplicate creation accepted';end if;
@@ -26,7 +29,7 @@ begin
  blocked:=false;begin perform public.toya_onboarding('invite','{"email":"no@example.invalid"}');exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'employee invite accepted';end if;
  blocked:=false;begin perform public.toya_onboarding('join',jsonb_build_object('name','再参加','token',inv->>'token'));exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'reuse accepted';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('qa.other'),'role','authenticated')::text,true);
- result:=public.toya_onboarding('create_company','{"name":"別管理者","company_name":"試験会社B"}');b:=(result->>'company_id')::uuid;
+ result:=public.toya_onboarding('create_company','{"name":"別管理者","company_name":"試験会社B"}');b:=(result->>'company_id')::uuid;perform pg_temp.qa_activate(b);
  blocked:=false;begin perform public.toya_onboarding('member_active',jsonb_build_object('id',current_setting('qa.employee'),'active',false,'expected_active',true));exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'foreign member update accepted';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('qa.admin'),'role','authenticated')::text,true);
  perform public.toya_onboarding('member_active',jsonb_build_object('id',current_setting('qa.employee'),'active',false,'expected_active',true));

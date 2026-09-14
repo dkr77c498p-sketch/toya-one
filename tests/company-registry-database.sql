@@ -4,6 +4,7 @@ declare a uuid:=gen_random_uuid();b uuid:=gen_random_uuid();ua uuid:=gen_random_
 begin
  insert into public.companies(id,name) values(a,'QA registry A'),(b,'QA registry B');
  insert into auth.users(id) values(ua),(ub),(ue),(ui);
+ update private.company_licenses set status='active',internal=true,max_users=10000 where company_id in (a,b);
  insert into public.profiles(id,company_id,name,role,active) values(ua,a,'A admin','admin',true),(ub,b,'B admin','admin',true),(ue,a,'A employee','employee',true),(ui,a,'inactive','admin',false);
  perform set_config('qa.a',a::text,true);perform set_config('qa.b',b::text,true);perform set_config('qa.ua',ua::text,true);perform set_config('qa.ub',ub::text,true);perform set_config('qa.ue',ue::text,true);perform set_config('qa.ui',ui::text,true);
 end $$;

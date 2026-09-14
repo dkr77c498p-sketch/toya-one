@@ -25,7 +25,7 @@ const profile=(company,name='試験社長')=>({id:company+'-admin',company_id:co
    window.supabase={createClient(){return{
     auth:{getSession:async()=>({data:{session:p?{user:{id:p.id,email:'qa@example.invalid'}}:null}}),onAuthStateChange(fn){listeners.push(fn);return{data:{subscription:{unsubscribe(){}}}}},async signOut(){sessionStorage.setItem('qa-profile','null');listeners.forEach(fn=>fn('SIGNED_OUT',null));return{};}},
     from(table){const filters=[];let single=false;const query={select(){return this},eq(k,v){filters.push(r=>r[k]===v);return this},is(k,v){filters.push(r=>r[k]===v);return this},in(k,v){filters.push(r=>v.includes(r[k]));return this},neq(){return this},gte(){return this},lte(){return this},gt(){return this},lt(){return this},order(){return this},range(){return this},limit(){return this},single(){single=true;return this},maybeSingle(){single=true;return this},insert(){return this},update(){return this},upsert(){return this},delete(){return this},then(resolve,reject){const rows=(window.__qaDB[table]||[]).filter(r=>filters.every(f=>f(r)));return Promise.resolve({data:single?rows[0]||null:structuredClone(rows),error:null}).then(resolve,reject)}};return query;},
-    rpc:async()=>({data:[],error:null})
+    rpc:async name=>({data:name==='toya_access'?(sessionStorage.getItem('qa-license-blocked')?{state:'suspended',message:'会社の契約が停止中です。'}:{state:'ready',internal:true}):name==='toya_employee_admin'?{company_code:'AABBCCDDEEFF',internal:true,employees:[]}:[],error:null})
    };}};
    window.alert=message=>{window.__qaAlert=message;};window.confirm=()=>true;
   },{initial:profile('company-a')});
@@ -84,7 +84,13 @@ const profile=(company,name='試験社長')=>({id:company+'-admin',company_id:co
   assert.equal(await page.evaluate(()=>get(LS.draft,null)),null);
   assert.equal(await page.evaluate(async()=> (await getPhotosForReport(77)).length),0);
   assert.equal(await page.locator('#companyWorkerChoices input').count(),0);
+  await page.evaluate(next=>{sessionStorage.setItem('qa-profile',JSON.stringify(next));sessionStorage.setItem('qa-license-blocked','yes');},profile('company-a'));
+  await page.reload();await page.waitForFunction(()=>cloudSessionState.status==='blocked');
+  assert.equal(await page.evaluate(()=>cloudProfile),null);
+  assert.deepEqual(await page.evaluate(()=>get(LS.reports,[])),[]);
+  assert.equal(await page.evaluate(()=>get(LS.draft,null)),null);
+  assert.equal(await page.locator('#cloudLoggedIn').isVisible(),false);
   assert.deepEqual(errors,[]);
-  console.log('PASS mobile full app: A/B accounts and local masters/drafts/photos isolated, account switch reload, TOYA legacy records/draft/photos retained, logout hides company data');
+  console.log('PASS mobile full app: A/B accounts and local masters/drafts/photos isolated, account switch reload, TOYA legacy records/draft/photos retained, logout and suspended contract hide company data');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

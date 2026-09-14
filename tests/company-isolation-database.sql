@@ -5,6 +5,7 @@ declare a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid(); ua uuid:=gen_rando
 begin
  insert into public.companies(id,name) values(a,'QA tenant A rollback'),(b,'QA tenant B rollback');
  insert into auth.users(id) values(ua),(ub),(inactive);
+ update private.company_licenses set status='active',internal=true,max_users=10000 where company_id in (a,b);
  insert into public.profiles(id,company_id,name,role,active) values(ua,a,'QA A','admin',true),(ub,b,'QA B','admin',true),(inactive,a,'QA inactive','employee',false);
  insert into public.sites(company_id,name) values(a,'QA A site') returning id into sa;
  insert into public.sites(company_id,name) values(b,'QA B site') returning id into sb;
