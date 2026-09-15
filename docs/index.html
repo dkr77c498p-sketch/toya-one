@@ -138,15 +138,16 @@ textarea{min-height:105px;resize:vertical}
 .edit-banner.show{display:flex;justify-content:space-between;gap:8px;align-items:center}
 @media(max-width:650px){.records-filter{grid-template-columns:1fr}.calendar-day{min-height:62px;padding:4px}.calendar-day .mini{display:none}}
 </style>
+<link rel="stylesheet" href="usability.css?v=20260915-v1">
 </head>
 <body>
 <header>
-<div class="head"><div class="brand">TOYA <span>One</span> <small class="internal-label">TOYA社内用</small></div><div class="sub">これひとつで、現場から経営まで。｜クラウド版 v5.8.20 請求書配置統一版</div></div>
+<div class="head"><div class="brand">TOYA <span>One</span> <small class="internal-label">TOYA社内用</small></div><div class="sub">日報・写真・現場管理を、ひとつに。</div></div>
 <nav>
 <button class="active" data-page="homePage">ホーム</button>
 <button data-page="reportPage">日報入力</button>
 <button data-page="recordsPage">日報一覧</button>
-<button data-page="attachmentPage">アタッチメント</button><button data-page="masterPage" style="display:none">登録管理</button>
+<button data-page="attachmentPage">機材記録</button><button data-page="masterPage" style="display:none">設定・管理</button>
 </nav>
 </header>
 
@@ -246,7 +247,7 @@ textarea{min-height:105px;resize:vertical}
 <label style="margin-top:12px">写真を追加</label>
 <input id="photos" type="file" accept="image/*" multiple><div class="note" style="margin-top:6px">複数枚を一度に選べます。写真ごとに分類と写真説明を設定できます。PDFはA4・3枚単位の工事写真帳形式です。</div>
 <div id="photoList" class="photo-list"></div>
-<p class="note">クラウド版 v5.6.3：保存した日報と写真を会社全員の端末で共有できます。</p></div>
+<p class="note">日報を保存すると、写真も一緒に会社へ共有されます。</p></div>
 <div class="card"><h2>メモ・明日の予定</h2><textarea id="memo"></textarea><div id="status" class="status"></div></div>
 </section>
 
@@ -259,7 +260,7 @@ textarea{min-height:105px;resize:vertical}
     <button type="button" class="btn dark" onclick="showSiteLedger()">写真台帳を見る</button>
     <button type="button" class="btn light" onclick="printSiteLedger()">写真台帳PDF</button>
   </div>
-  <p class="note">保存済みの日報写真を分類別に自動整理。v4.0.1：Supabaseクラウド接続・社員ログイン・重複同期防止に対応。写真台帳PDFも利用できます。</p>
+  <p class="note">現場を選ぶと、保存済みの日報写真をまとめて見られます。「写真台帳PDF」で印刷用の台帳を作れます。</p>
 </div>
 <div class="card"><h2>保存済み日報</h2>
 <div class="records-mode"><button id="calendarModeBtn" class="btn active" type="button" onclick="setRecordView('calendar')">📅 カレンダー</button><button id="listModeBtn" class="btn light" type="button" onclick="setRecordView('list')">☰ 一覧・検索</button></div>
@@ -2289,5 +2290,5 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="company-registry.js?v=20260914-onboarding-v1"></script>
 <script src="company-members.js?v=20260914-access-v1"></script>
 <script src="company-dispatch.js?v=20260914-v1"></script>
-<script src="company-plan-ui.js?v=20260914-plans-v1"></script></body>
+<script src="company-plan-ui.js?v=20260914-plans-v1"></script><script src="usability.js?v=20260915-v1"></script></body>
 </html>

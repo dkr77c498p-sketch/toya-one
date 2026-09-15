@@ -1,0 +1,20 @@
+/* Shared mobile navigation: generous targets and visible focus, TOYA colours. */
+:root{--ux-header:145px;--ux-actions-height:155px}
+html{scroll-padding-top:var(--ux-header)}
+main{padding-bottom:calc(var(--ux-actions-height) + 35px + env(safe-area-inset-bottom))}
+nav{grid-template-columns:repeat(5,minmax(0,1fr))}nav button{min-height:48px;font-size:12px;white-space:nowrap}
+body:has(nav [data-page="masterPage"][style*="none"]) nav{grid-template-columns:repeat(4,minmax(0,1fr))}
+.page .card,.page .ux-guide{scroll-margin-top:var(--ux-header)}
+input,select,textarea{font-size:16px!important;max-width:100%;min-width:0}
+button,a.btn,summary{touch-action:manipulation}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid #3c71b5;outline-offset:3px}
+.ux-entry{border-top:5px solid var(--lime)}.ux-eyebrow{font-size:12px;font-weight:800;color:#587100;margin:0 0 6px}.ux-entry h2{font-size:22px;border:0;padding:0}
+.ux-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ux-grid .btn{min-height:56px;padding:14px 8px;font-size:15px;overflow-wrap:anywhere}.ux-grid small{display:block;font-size:11px;font-weight:500;margin-top:5px}
+.ux-guide{background:#fff;color:#111;border:1px solid #d4dec9;border-left:5px solid var(--lime);font-size:16px}.ux-guide p{font-size:13px;line-height:1.6;font-weight:400;margin:8px 0 12px}.ux-guide label{font-size:12px}.ux-guide select{margin-bottom:0}
+.ux-jumps{display:flex;flex-wrap:wrap;gap:7px}.ux-jumps button{min-height:44px;border:1px solid #bdcba9;border-radius:9px;background:#f4f9e9;padding:9px 10px;font-size:13px;font-weight:800;color:#223500}
+#uxSaveStatus{margin:0;padding:8px 10px;background:#fff7d9;border-left:4px solid #ad7900;color:#322b13;font-size:13px;line-height:1.5;max-height:95px;overflow:auto}
+#uxReportTop{font-size:13px;min-height:40px;padding:7px}#actions{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+.ux-account{border-top:1px solid #e0e3dc;margin-top:10px}.ux-account summary{min-height:44px;cursor:pointer;font-size:13px;font-weight:800;padding:12px 0}
+.ux-signed-in #cloudCard>a[href="employee.html"],.ux-signed-in #cloudCard>a[href="start.html"]{display:none!important}
+#uxMasterGuide[hidden],#uxSaveStatus[hidden]{display:none!important}
+@media(max-width:380px){.ux-grid .btn{font-size:14px}.sub{font-size:10px}.internal-label{font-size:10px}.brand{font-size:20px}}
+@media print{#uxDailyHome,#uxReportGuide,#uxRecordGuide,#uxMasterGuide{display:none!important}}
