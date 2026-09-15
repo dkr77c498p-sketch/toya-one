@@ -52,21 +52,21 @@
  const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.role==='admin'&&cloudProfile.active===true&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  const busy=()=>window.ToyaEstimatePlanUI?.isBusy()||window.ToyaProjectBusiness?.isBusy();
  const visible=()=>q('#homePage')?.classList.contains('active')&&!document.hidden;
- let owner='',rows=[],stamp='',ticket=0,running=false,timer,host=null;
+ let owner='',rows=[],stamp='',ticket=0,running=false,loaded=false,timer,host=null;
  const status=s=>{if(q('#alStatus'))q('#alStatus').textContent=s;};
- function clear(){owner='';rows=[];stamp='';ticket++;running=false;clearTimeout(timer);if(host?.isConnected)host.innerHTML='';host=null;if(q('#epActualDetail'))q('#epActualDetail').innerHTML='';q('#alPreview')?.remove();}
+ function clear(){owner='';rows=[];stamp='';ticket++;running=false;loaded=false;clearTimeout(timer);if(host?.isConnected)host.innerHTML='';host=null;if(q('#epActualDetail'))q('#epActualDetail').innerHTML='';q('#alPreview')?.remove();}
  function mount(){
   if(!identity()){if(owner)clear();return false;}if(owner&&owner!==identity())clear();
   const target=q('#epActualLedger');if(!target)return false;owner=identity();if(host===target&&q('#alRows'))return true;host=target;
   target.innerHTML='<div class="pb-actions"><button id="alRefresh" class="btn dark" type="button">日報から再集計</button><button id="alPrintAll" class="btn light" type="button" disabled>一覧を印刷・PDF</button></div><p id="alStatus" class="note" role="status" aria-live="polite">日報・費用を読み込み中…</p><div id="alRows"></div>';
-  q('#alRefresh').onclick=()=>refresh();q('#alPrintAll').onclick=()=>print(false);q('#epSite')?.addEventListener('change',renderDetail);schedule();return true;
+  q('#alRefresh').onclick=()=>refresh(true);q('#alPrintAll').onclick=()=>print(false);q('#epSite')?.addEventListener('change',renderDetail);schedule();return true;
  }
  function schedule(){clearTimeout(timer);timer=setTimeout(()=>{if(visible())refresh();},250);}
  async function read(table,fields,company,t,mine){
   const out=[];for(let offset=0;offset<100000;offset+=500){if(t!==ticket||identity()!==mine)throw new Error('ログイン状態が変わりました。');const r=await cloudClient.from(table).select(fields).eq('company_id',company).order('id').range(offset,offset+499);if(r.error)throw new Error(table+'：'+r.error.message);out.push(...(r.data||[]));if((r.data||[]).length<500)return out;}throw new Error('全件を読み込めませんでした。途中の合計は表示していません。');
  }
- async function refresh(){
-  if(!mount()||running||busy())return;const mine=owner,t=++ticket,company=cloudProfile.company_id;running=true;rows=[];stamp='';q('#alRows').innerHTML='';q('#epActualDetail').innerHTML='';q('#alRefresh').disabled=true;q('#alPrintAll').disabled=true;status('全現場の日報・原価・請負金額を自動集計中…');
+ async function refresh(force=false){
+  if(!mount()||running||busy()||(!force&&loaded))return;const mine=owner,t=++ticket,company=cloudProfile.company_id;running=true;q('#alRefresh').disabled=true;q('#alPrintAll').disabled=true;status('全現場の日報・原価・請負金額を自動集計中…');
   try{
    if(!S?.sources)throw new Error('原価計算の更新が必要です。画面を再読み込みしてください。');
    const definitions=[['sites','sites','id,name,status,completed_on'],...S.sources];
@@ -74,15 +74,15 @@
    if(t!==ticket||identity()!==mine)return;
    if(busy()){schedule();return;}
    const failed=values.filter(r=>r.status==='rejected');if(failed.length)throw new Error(failed.map(r=>r.reason.message).join(' / '));
-   const data=Object.fromEntries(definitions.map(([name],i)=>[name,values[i].value]));rows=build(data);window.ToyaEstimatePlanUI?.updateSites(data.sites);stamp=new Date().toLocaleString('ja-JP');render();renderDetail();
-  }catch(e){if(t===ticket&&identity()===mine){rows=[];q('#alRows').innerHTML='';q('#epActualDetail').innerHTML='';status('集計できませんでした：'+e.message);}}
+   const data=Object.fromEntries(definitions.map(([name],i)=>[name,values[i].value]));rows=build(data);window.ToyaEstimatePlanUI?.updateSites(data.sites);stamp=new Date().toLocaleString('ja-JP');loaded=true;render();renderDetail();
+  }catch(e){if(t===ticket&&identity()===mine){loaded=false;rows=[];q('#alRows').innerHTML='';q('#epActualDetail').innerHTML='';status('集計できませんでした：'+e.message);}}
   finally{if(t===ticket&&identity()===mine){running=false;q('#alRefresh').disabled=false;q('#alPrintAll').disabled=!rows.length;}}
  }
  function render(){
   const total=totals(rows);
   q('#alRows').innerHTML=rows.length?tableHTML(rows,true)+(total.count?'<p class="al-aggregate">日報・費用と請負金額が揃う '+total.count+'現場の合計<br>売上 '+yen(total.sales)+' ／ 原価 '+yen(total.cost)+' ／ 概算利益 '+yen(total.profit)+(total.partial?'（要確認あり）':'')+(total.excluded?'<br>比較対象外 '+total.excluded+'現場（記録なし・請負未登録・集計エラー）':'')+'</p>':''):'<p class="note">現場を登録すると、日報と費用が自動でここに集まります。</p>';
   q('#alRows').querySelectorAll('[data-al-site]').forEach(b=>b.onclick=()=>{if(busy())return;const select=q('#epSite');if(![...select.options].some(o=>o.value===b.dataset.alSite)){status('現場一覧を読み込み中です。少し待って内訳を開いてください。');return;}select.value=b.dataset.alSite;select.dispatchEvent(new Event('change',{bubbles:true}));q('#epActualDetail').scrollIntoView({block:'start',behavior:'smooth'});});
-  status('全 '+rows.length+'現場を自動集計しました。'+stamp+' 更新。費用の再入力・積算表の作成操作は不要です。');
+  status('全 '+rows.length+'現場を自動集計しました。'+stamp+' 更新。費用の再入力・積算表の作成操作は不要です。最新の内容は「日報から再集計」で確認できます。');
  }
  function renderDetail(){
   const box=q('#epActualDetail');if(!box)return;const row=rows.find(r=>r.site.id===q('#epSite')?.value);if(!row){box.innerHTML='';return;}

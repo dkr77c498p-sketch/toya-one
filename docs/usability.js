@@ -45,7 +45,7 @@
   const logged=q('#cloudLoggedIn'),controls=logged?.querySelectorAll('.cloud-row')[1];
   if(controls){const details=document.createElement('details');details.className='ux-account';const summary=document.createElement('summary');summary.textContent='同期・ログアウト';details.append(summary);controls.before(details);details.append(controls);}
   document.addEventListener('toya-role-changed',sync);
-  document.addEventListener('click',e=>{if(e.target.closest('nav [data-page]')){window.scrollTo({top:0});sync();}});
+  document.addEventListener('click',e=>{if(e.target.closest('nav [data-page]')){if(e.isTrusted)window.scrollTo({top:0});sync();}});
   for(const node of [home,report,q('#masterPage')])new MutationObserver(()=>{if(scheduled)return;scheduled=true;queueMicrotask(()=>{scheduled=false;sync();});}).observe(node,{childList:true});
   if(window.ResizeObserver){new ResizeObserver(()=>{document.documentElement.style.setProperty('--ux-actions-height',q('#actions').getBoundingClientRect().height+'px');}).observe(q('#actions'));new ResizeObserver(()=>{document.documentElement.style.setProperty('--ux-header',(q('header').getBoundingClientRect().height+12)+'px');}).observe(q('header'));}
   sync();

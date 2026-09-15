@@ -468,7 +468,7 @@
     const siteName = q('#siteSummarySelect')?.value;
     if (!siteName) {q('#sfResult').innerHTML = ''; status('上の欄で現場を選んでください。'); return;}
     const mine = owner, ticket = ++token; runningKey = k;
-    q('#sfResult').innerHTML = ''; status('保存済み費用と日報を読み込み中…'); q('#sfRefresh').disabled = true;
+    status('保存済み費用と日報を読み込み中…'); q('#sfRefresh').disabled = true;
     try {
       const mode = q('#sfMode').value, value = mode === 'day' ? q('#sfDay').value : q('#sfMonth').value;
       const bounds = periodBounds(mode, value), company = cloudProfile.company_id;
@@ -490,12 +490,12 @@
   function start() {
     mount(); schedule();
     const logged = q('#cloudLoggedIn'); if (logged) new MutationObserver(() => {mount(); schedule();}).observe(logged, {attributes: true, attributeFilter: ['style']});
-    document.addEventListener('click', e => {if (e.target.closest?.('nav [data-page="homePage"]')) {mount(); schedule(true);}});
-    window.addEventListener('pageshow', () => {mount(); schedule(true);});
-    document.addEventListener('visibilitychange', () => {if (!document.hidden) {mount(); schedule(true);}});
+    document.addEventListener('click', e => {if (e.target.closest?.('nav [data-page="homePage"]')) {mount(); schedule();}});
+    window.addEventListener('pageshow', () => {mount(); schedule();});
+    document.addEventListener('visibilitychange', () => {if (!document.hidden) {mount(); schedule();}});
     let attempts = 0; const initial = setInterval(() => {if (mount()) schedule(); if (owner || ++attempts >= 30) clearInterval(initial);}, 1000);
-    // Refresh while the home is visible, at most once a minute. Preserve an amount being typed.
-    setInterval(() => {if (!document.hidden && visible() && identity() && !runningKey && !contractEditing && !contractSaving) schedule(true);}, 60000);
+    // Retry unfinished loads only. Keep completed results stable until explicit refresh.
+    setInterval(() => {if (!document.hidden && visible() && identity() && !runningKey && !contractEditing && !contractSaving) schedule();}, 60000);
     // Identity check only: never signs out or creates an auth client.
     setInterval(() => {if (owner && identity() !== owner) clear();}, 1000);
   }
