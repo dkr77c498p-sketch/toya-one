@@ -27,6 +27,7 @@ do $$declare r jsonb;blocked boolean:=false;begin
  if public.toya_current_company_id() is not null then raise exception 'unbound JWT bypass';end if;
  r:=public.toya_access('bind',jsonb_build_object('device_key',repeat('a',64)));
  if r->>'state'<>'ready' or public.toya_current_company_id()<>current_setting('qa.ca')::uuid then raise exception 'licensed admin bind failed';end if;
+ if (public.toya_employee_admin('list')->'employees') is distinct from '[]'::jsonb then raise exception 'new company employee list is not empty';end if;
  insert into public.company_registries(company_id,kind) values(current_setting('qa.ca')::uuid,'vehicles');
  r:=public.toya_employee_admin('reserve',jsonb_build_object('name','試験社員','login_id','staff01','company_id',current_setting('qa.cb'),'role','admin'));
  perform set_config('qa.reservation',r->>'reservation',true);perform set_config('qa.alias',r->>'email',true);
@@ -40,10 +41,18 @@ select public.toya_employee_finish(current_setting('qa.reservation')::uuid,curre
 reset role;
 do $$begin if not exists(select 1 from public.profiles where id=current_setting('qa.e')::uuid and role='employee' and company_id=current_setting('qa.ca')::uuid) then raise exception 'provisioned wrong tenant/role';end if;end $$;
 set local role authenticated;
+select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('qa.a'),'role','authenticated','session_id',current_setting('qa.a'))::text,true);
+do $$declare r jsonb;begin
+ r:=public.toya_employee_admin('list',jsonb_build_object('company_id',current_setting('qa.cb')));
+ if r->'employees' is distinct from jsonb_build_array(jsonb_build_object('id',current_setting('qa.e'),'login_id','staff01')) then raise exception 'employee list omitted own account or trusted client company';end if;
+ if public.toya_employee_admin('reset_target',jsonb_build_object('id',current_setting('qa.e')))->>'user_id' is distinct from current_setting('qa.e') then raise exception 'own employee reset target failed';end if;
+end $$;
 select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('qa.e'),'role','authenticated','session_id',current_setting('qa.e'))::text,true);
 do $$declare r jsonb;blocked boolean:=false;begin
  r:=public.toya_access('bind',jsonb_build_object('device_key',repeat('e',64)));if r->>'state'<>'ready' then raise exception 'employee bind failed';end if;
  if (select count(*) from public.company_registries)<>1 then raise exception 'employee own read failed';end if;
+ begin perform public.toya_employee_admin('list');exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'employee accessed admin employee list';end if;
+ blocked:=false;
  r:=public.toya_access('bind',jsonb_build_object('device_key',repeat('f',64)));if r->>'state'<>'device_limit' then raise exception 'employee extra device accepted';end if;
  begin perform public.toya_employee_admin('reserve','{"name":"不可","login_id":"bad01"}');exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'employee created account';end if;
 end $$;
@@ -51,6 +60,7 @@ select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting(
 select public.toya_access('bind',jsonb_build_object('device_key',repeat('b',64)));
 do $$declare blocked boolean:=false;begin
  if exists(select 1 from public.company_registries) then raise exception 'cross-company read';end if;
+ if (public.toya_employee_admin('list',jsonb_build_object('company_id',current_setting('qa.ca')))->'employees') is distinct from '[]'::jsonb then raise exception 'cross-company employee list';end if;
  begin perform public.toya_access('reset_device',jsonb_build_object('id',current_setting('qa.e')));exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'foreign device reset';end if;
  blocked:=false;begin perform public.toya_employee_admin('reset_target',jsonb_build_object('id',current_setting('qa.e')));exception when raise_exception then blocked:=true;end;if not blocked then raise exception 'foreign password reset';end if;
 end $$;
@@ -85,4 +95,4 @@ set local role anon;
 do $$declare blocked boolean:=false;begin begin perform public.toya_access('status');exception when insufficient_privilege then blocked:=true;end;if not blocked then raise exception 'anonymous license access';end if;end $$;
 reset role;
 rollback;
-select 'PASS contracts, device binding/reset, stale session rejection, employee ID provisioning, tenant/role injection, private grants, seat limits, suspension and expiry; rolled back' result;
+select 'PASS employee list (empty, populated, company scope, admin-only), contracts, device binding/reset, stale session rejection, employee ID provisioning, tenant/role injection, private grants, seat limits, suspension and expiry; rolled back' result;
