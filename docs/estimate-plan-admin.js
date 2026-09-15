@@ -74,7 +74,7 @@
  }
  function renderSimplePlan(){
   const host=q('#epEditor');q('#epPlannedEstimates').open=true;
-  host.innerHTML='<section class="ep-plan ep-simple"><ol class="ep-steps" aria-label="見積作成の進み方"><li data-ep-step="1"><b>1</b>工事情報</li><li data-ep-step="2"><b>2</b>数量入力</li><li data-ep-step="3"><b>3</b>確認・印刷</li></ol><div id="epStep1"><h3>1. どの工事の見積ですか？</h3><p class="note">工事名と見積先を入力してください。工事場所は後からでも入力できます。</p>'+field('工事名','epJobName',plan.site_name||sites.find(s=>s.id===plan.site_id)?.name||'','text','maxlength="200" placeholder="例：○○様邸 解体工事"'+(plan.site_id?' readonly':''))+field('見積先（会社名・お名前）','epCustomer',plan.customer_name,'text','maxlength="160" placeholder="例：○○建設株式会社 御中"')+field('工事場所（任意）','epJobAddress',plan.site_address||'','text','maxlength="500" placeholder="例：鹿児島市○○町1-2"')+'<details><summary>見積先住所・件名・条件を入れる</summary>'+field('見積先住所','epAddress',plan.customer_address,'text','maxlength="500"')+field('見積件名（空欄なら工事名）','epTitle',plan.title,'text','maxlength="200"')+'<label for="epQuoteNotes">備考・見積条件</label><textarea id="epQuoteNotes" maxlength="3000">'+esc(plan.quote_notes)+'</textarea></details><button id="epNextItems" type="button" class="btn lime pb-wide">次へ：数量を入力する →</button></div><div id="epStep2" hidden><h3>2. 数量を入れて自動積算</h3><p class="note">㎡・坪・㎥・m・検体数を入れると、御社書式の明細をまとめて作ります。</p>'+autoBuilderHTML()+'<details class="ep-manual"><summary>作成した明細を確認・修正</summary><p class="note">現場条件に合わせて数量・単価を直接変更できます。単価未登録の項目だけ入力してください。</p><div id="epGroups"></div><button id="epAddGroup" type="button" class="btn light pb-wide">＋ 工事項目を追加</button></details><button id="epTemplate" type="button" class="btn light pb-wide">過去の見積をコピーして始める</button><details><summary>税率・社内メモ・その他の操作</summary><label for="epTax">消費税</label><select id="epTax"><option value="10">10%</option><option value="8">8%</option><option value="0">非課税・対象外</option></select><label for="epInternalNotes">社内メモ</label><textarea id="epInternalNotes" maxlength="3000">'+esc(plan.internal_notes)+'</textarea><button id="epPrint" type="button" class="btn light pb-wide">社内用の積算表を印刷</button><label for="epCopySite">この見積の複製先</label><select id="epCopySite"><option value="">新しい工事</option>'+optionSites()+'</select><button id="epCopy" type="button" class="btn light pb-wide">複製して作る</button></details><div id="epTotals" aria-live="polite"></div><button id="epCreateQuote" type="button" class="btn lime pb-wide">保存して御社書式の見積書を確認 →</button><button id="epBackInfo" type="button" class="btn light pb-wide">← 工事情報に戻る</button></div><div id="epInputFooter"><p id="epFormStatus" class="note" role="status" aria-live="polite"></p><button id="epSave" type="button" class="btn light pb-wide">途中で保存する</button></div></section>';
+  host.innerHTML='<section class="ep-plan ep-simple"><ol class="ep-steps" aria-label="見積作成の進み方"><li data-ep-step="1"><b>1</b>工事情報</li><li data-ep-step="2"><b>2</b>数量入力</li><li data-ep-step="3"><b>3</b>確認・印刷</li></ol><div id="epStep1"><h3>1. どの工事の見積ですか？</h3><p class="note">工事名と見積先を入力してください。工事場所は後からでも入力できます。</p>'+field('工事名','epJobName',plan.site_name||sites.find(s=>s.id===plan.site_id)?.name||'','text','maxlength="200" placeholder="例：○○様邸 解体工事"'+(plan.site_id?' readonly':''))+field('見積先（会社名・お名前）','epCustomer',plan.customer_name,'text','maxlength="160" placeholder="例：○○建設株式会社 御中"')+field('工事場所（任意）','epJobAddress',plan.site_address||'','text','maxlength="500" placeholder="例：鹿児島市○○町1-2"')+'<details><summary>見積先住所・件名・条件を入れる</summary>'+field('見積先住所','epAddress',plan.customer_address,'text','maxlength="500"')+field('見積件名（空欄なら工事名）','epTitle',plan.title,'text','maxlength="200"')+'<label for="epQuoteNotes">備考・見積条件</label><textarea id="epQuoteNotes" maxlength="3000">'+esc(plan.quote_notes)+'</textarea></details><button id="epNextItems" type="button" class="btn lime pb-wide">次へ：数量を入力する →</button></div><div id="epStep2" hidden><h3>2. 工事の種類・数量を入力</h3><p class="note">数量から明細を自動作成できます。自由に入力する場合は「その他（手入力）」を選んでください。</p>'+autoBuilderHTML()+'<details class="ep-manual"><summary>明細を手入力・確認・修正</summary><p class="note">品名・数量・単位・単価を自由に入力・変更できます。</p><div id="epGroups"></div><button id="epAddGroup" type="button" class="btn light pb-wide">＋ 工事項目を追加</button></details><button id="epTemplate" type="button" class="btn light pb-wide">過去の見積をコピーして始める</button><details><summary>税率・社内メモ・その他の操作</summary><label for="epTax">消費税</label><select id="epTax"><option value="10">10%</option><option value="8">8%</option><option value="0">非課税・対象外</option></select><label for="epInternalNotes">社内メモ</label><textarea id="epInternalNotes" maxlength="3000">'+esc(plan.internal_notes)+'</textarea><button id="epPrint" type="button" class="btn light pb-wide">社内用の積算表を印刷</button><label for="epCopySite">この見積の複製先</label><select id="epCopySite"><option value="">新しい工事</option>'+optionSites()+'</select><button id="epCopy" type="button" class="btn light pb-wide">複製して作る</button></details><div id="epTotals" aria-live="polite"></div><button id="epCreateQuote" type="button" class="btn lime pb-wide">保存して御社書式の見積書を確認 →</button><button id="epBackInfo" type="button" class="btn light pb-wide">← 工事情報に戻る</button></div><div id="epInputFooter"><p id="epFormStatus" class="note" role="status" aria-live="polite"></p><button id="epSave" type="button" class="btn light pb-wide">途中で保存する</button></div></section>';
   q('#epTax').value=String(plan.tax_rate);q('#epCopySite').value=plan.site_id||'';renderSimpleGroups();updateTotals();setSimpleStep(simpleStep,false);
   q('#epNextItems').onclick=()=>{if(checkJobInfo())setSimpleStep(2);};q('#epBackInfo').onclick=()=>setSimpleStep(1);
   bindAutoBuilder();
@@ -83,14 +83,17 @@
   q('#epAddGroup').onclick=()=>{gather();if(plan.groups.length>=100)return note('工事項目は100件までです。',true);plan.groups.push({name:'',quote_lines:[C.blankQuoteLine()],lines:[]});dirty=true;renderSimpleGroups(plan.groups.length-1);updateTotals();focusInput('#epWork'+(plan.groups.length-1));};
   q('#epSave').onclick=save;q('#epCreateQuote').onclick=saveAndReview;q('#epPrint').onclick=print;q('#epCopy').onclick=duplicate;host.scrollIntoView({block:'start',behavior:'smooth'});
  }
- function autoInput(){return copy(plan.groups.find(g=>g.auto_input)?.auto_input||A.defaults());}
+ function autoInput(){return copy(plan.groups.find(g=>g.auto_draft)?.auto_draft||plan.groups.find(g=>g.auto_input)?.auto_input||A.defaults());}
  function autoBuilderHTML(){
   const a=A.normalize(autoInput());
   const f=(label,id,key,unit)=>field(label+(unit?'（'+unit+'）':''),id,a[key],'number','data-auto-key="'+key+'" min="0" step="'+(key==='concrete_quantity'?'0.001':'0.01')+'" inputmode="decimal"');
   const select=(label,id,key,choices)=>'<div class="pb-field" style="grid-column:1/-1"><label for="'+id+'">'+label+'</label><select id="'+id+'" data-auto-key="'+key+'">'+choices.map(([value,text])=>'<option value="'+value+'">'+text+'</option>').join('')+'</select></div>';
   return [
-   '<details class="ep-auto" open><summary>かんたん自動積算</summary><div class="ep-auto-grid">',
-   select('工事の種類','epAutoKind','kind',[['wood','木造解体'],['lightSteel','軽量鉄骨造解体'],['steel','鉄骨造（S造）解体'],['rc','RC造解体'],['src','SRC造解体'],['interior','内部改修・内部解体・スケルトン解体']]),
+   '<details class="ep-auto" open><summary>かんたん自動積算・手入力</summary><div class="ep-auto-grid">',
+   select('工事の種類','epAutoKind','kind',[['wood','木造解体'],['lightSteel','軽量鉄骨造解体'],['steel','鉄骨造（S造）解体'],['rc','RC造解体'],['src','SRC造解体'],['interior','内部改修・内部解体・スケルトン解体'],['custom','その他（手入力）']]),
+   '</div><div id="epAutoCustomFields" hidden>',
+   field('工事の種類を入力','epAutoCustomName',a.custom_name,'text','data-auto-key="custom_name" maxlength="200" required placeholder="例：手壊し解体・草刈り工事"'),
+   '<p class="note">明細を作ったら、品名・数量・単位・単価を入力してください。入力した金額を合計します。</p></div><div id="epAutoPresetFields"><div class="ep-auto-grid">',
    select('建物用途','epAutoUse','use',Object.entries(A.Concrete.uses)),
    select('面積の入力方法','epAutoAreaBasis','area_basis',[['gross','延床面積を入力'],['typical','各階の面積 × 階数で概算']]),
    f('建物面積','epAutoM2','area_m2','㎡'),f('建物面積','epAutoTsubo','area_tsubo','坪'),
@@ -123,15 +126,19 @@
    f('解体跡整地','epAutoGrading','grading_m2','㎡'),f('土嚢積み','epAutoSandbag','sandbag_m','m'),
    '</div></details><details><summary>諸経費・法定福利費の自動計算率</summary><p class="note">直接工事費に対する率です。率は今回の見積で変更できます。</p><div class="ep-auto-grid">',
    f('諸経費率','epAutoOverhead','overhead_rate','%'),f('法定福利費率','epAutoWelfare','welfare_rate','%'),
-   '</div></details><button id="epAutoApply" type="button" class="btn lime pb-wide">この数量で明細を自動作成</button><p class="note">コンクリート以外の産廃は従来の300㎡参考表から面積比例で計算します。SRC造のその他産廃は手入力してください。条件を変えたら明細を作り直し、現場に合わせて数量・単価を確認してください。</p></details>'
+   '</div></details></div><button id="epAutoApply" type="button" class="btn lime pb-wide">この数量で明細を自動作成</button><p id="epAutoPresetNote" class="note">コンクリート以外の産廃は従来の300㎡参考表から面積比例で計算します。SRC造のその他産廃は手入力してください。条件を変えたら明細を作り直し、現場に合わせて数量・単価を確認してください。</p></details>'
   ].join('');
  }
  function bindAutoBuilder(){
   const a=A.normalize(autoInput()),host=q('.ep-auto');
   host.querySelectorAll('select[data-auto-key]').forEach(el=>el.value=a[el.dataset.autoKey]);
+  host.dataset.autoReady='true';
   const readInput=()=>Object.fromEntries([...host.querySelectorAll('[data-auto-key]')].map(el=>[el.dataset.autoKey,el.value]));
   const refresh=()=>{
-   const input=readInput(),manual=input.concrete_mode==='manual',elevated=input.upper_method==='elevated'&&input.kind!=='interior';
+   const input=readInput(),custom=input.kind==='custom',manual=input.concrete_mode==='manual',elevated=input.upper_method==='elevated'&&input.kind!=='interior';
+   q('#epAutoCustomFields').hidden=!custom;q('#epAutoPresetFields').hidden=custom;q('#epAutoPresetNote').hidden=custom;
+   q('#epAutoApply').textContent=custom?'この工事の明細を手入力する':'この数量で明細を自動作成';
+   if(custom)return;
    q('#epAutoConcreteManual').hidden=!manual;q('#epAutoElevatedFields').hidden=!elevated;q('#epAutoElevatedNote').hidden=!elevated;
    const basis=manual?input.concrete_unit:'t',priceBasis=q('#epAutoConcretePriceBasis');
    if(priceBasis.value!==basis){q('#epAutoConcreteHaul').value='';q('#epAutoConcreteDisposal').value='';priceBasis.value=basis;}
@@ -147,11 +154,13 @@
   q('#epAutoTsubo').oninput=()=>{const n=Number(q('#epAutoTsubo').value);q('#epAutoM2').value=n>0?A.round(n*A.TSUBO,2):'';};
   host.addEventListener('input',refresh);host.addEventListener('change',refresh);refresh();
   q('#epAutoApply').onclick=()=>{
-   for(const el of host.querySelectorAll('input[type="number"]'))if(!el.closest('[hidden]')&&!el.reportValidity())return;
+   for(const el of host.querySelectorAll('input'))if(!el.closest('[hidden]')&&!el.reportValidity())return;
    let result;try{result=A.build(readInput());}catch(e){note(e.message,true);return;}
    gather();const existing=plan.groups.some(g=>(g.quote_lines||[]).some(r=>!r.auto_percent));
-   if(existing&&!confirm('入力済みの明細・単価を、この条件の自動積算で作り直しますか？'))return;
-   plan.groups=A.percentRows(result.groups,result.input);dirty=true;renderSimpleGroups(0);q('.ep-manual').open=true;updateTotals();note('数量から明細を作成しました。コンクリート数量・単価と階上解体の条件を確認してください。');q('#epGroups').scrollIntoView({block:'start',behavior:'smooth'});
+   const custom=result.input.kind==='custom';
+   if(existing&&!confirm(custom?'入力済みの明細・単価を、この工事の手入力用の明細に置き換えますか？':'入力済みの明細・単価を、この条件の自動積算で作り直しますか？'))return;
+   plan.groups=A.percentRows(result.groups,result.input);dirty=true;renderSimpleGroups(0);q('.ep-manual').open=true;updateTotals();note(custom?'手入力用の明細を作りました。品名・数量・単位・単価を入力してください。':'数量から明細を作成しました。コンクリート数量・単価と階上解体の条件を確認してください。');q('#epGroups').scrollIntoView({block:'start',behavior:'smooth'});
+   if(custom)focusInput('#epQty0_0');
   };
  }
  function setSimpleStep(step,scroll=true){
@@ -244,7 +253,12 @@
  function gather(){
   if(!plan||!q('#epTitle'))return plan;
   plan.site_name=q('#epJobName').value.trim();plan.site_address=q('#epJobAddress').value.trim();plan.title=q('#epTitle').value.trim()||(plan.site_name?(plan.site_name+' 見積').slice(0,200):'');plan.customer_name=q('#epCustomer').value.trim();plan.customer_address=q('#epAddress').value.trim();plan.quote_notes=q('#epQuoteNotes').value;plan.internal_notes=q('#epInternalNotes').value;
-  if(plan.entry_mode==='quote'){plan.tax_rate=Number(q('#epTax').value);plan.groups=gatherSimpleGroups();return plan;}
+  if(plan.entry_mode==='quote'){
+   plan.tax_rate=Number(q('#epTax').value);plan.groups=gatherSimpleGroups();
+   const autoHost=q('.ep-auto');
+   if(plan.groups.length&&autoHost?.dataset.autoReady==='true')plan.groups[0].auto_draft=Object.fromEntries([...autoHost.querySelectorAll('[data-auto-key]')].map(el=>[el.dataset.autoKey,el.value]));
+   return plan;
+  }
   plan.overhead_percent=q('#epOverhead').value===''?null:q('#epOverhead').value;plan.markup_percent=q('#epMarkup').value===''?null:q('#epMarkup').value;plan.quote_amount_override=q('#epOverride').value===''?null:q('#epOverride').value;plan.tax_rate=Number(q('#epTax').value);
   plan.groups=[...q('#epGroups').querySelectorAll('[data-ep-group]')].map((el,i)=>({name:q('[data-group-name]',el).value,lines:[...el.querySelectorAll('[data-ep-row]')].map((row,j)=>({...plan.groups[i].lines[j],...Object.fromEntries([...row.querySelectorAll('[data-key]')].map(input=>[input.dataset.key,input.value]))}))}));
   return plan;
