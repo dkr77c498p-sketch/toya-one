@@ -78,12 +78,12 @@
   for(let offset=0;offset<100000;offset+=500){let r=cloudClient.from(table).select(fields).eq('company_id',company);if(sid)r=r.eq('site_id',sid);r=await r.order(table==='billing_profiles'?'company_id':'id').range(offset,offset+499);if(r.error)throw new Error(r.error.message);out.push(...(r.data||[]));if((r.data||[]).length<500)return out;}
   throw new Error('件数が多く全件を確認できませんでした。');
  }
- function clear(){closeIssueConfirmation?.();closeDeleteConfirmation?.();closeDocumentPreview?.();siteLoaded=false;profileDirty=false;kind='invoice';owner='';sites=[];docs=[];profile={};rates=[];siteId='';editor=null;dirty=false;ticket++;q('#projectBusinessCard')?.remove();q('#pbMasterLink')?.remove();if(q('#estimateDocumentHost'))q('#estimateDocumentHost').innerHTML='';}
+ function clear(){closeIssueConfirmation?.();closeDeleteConfirmation?.();closeDocumentPreview?.();siteLoaded=false;profileDirty=false;kind='invoice';owner='';sites=[];docs=[];profile={};rates=[];siteId='';editor=null;dirty=false;ticket++;q('#projectBusinessCard')?.remove();q('#pbMasterLink')?.remove();q('#pbHomeActions')?.remove();if(q('#estimateDocumentHost'))q('#estimateDocumentHost').innerHTML='';}
  function mount(){
   const id=identity();if(!id){if(owner)clear();return false;}if(owner&&owner!==id)clear();owner=id;
   if(q('#projectBusinessCard'))return true;
   const card=document.createElement('div');card.id='projectBusinessCard';card.className='card admin-home-only';
-  card.innerHTML='<h2>現場・請求・完工</h2><label for="pbSite">現場</label><select id="pbSite"><option value="">現場を選択</option></select><div class="pb-actions"><button id="pbReload" class="btn light" type="button">一覧を更新</button><button id="pbProfit" class="btn light" type="button">この現場の利益を見る</button></div><p id="pbStatus" class="note" role="status" aria-live="polite">読み込み中…</p><div id="pbOverview"></div><details id="pbCompletion"><summary>完工設定</summary><div id="pbCompletionBody"></div></details><div class="pb-tabs" role="group" aria-label="書類の種類"><button class="btn lime" type="button" data-pb-kind="invoice">請求書</button><button class="btn light" type="button" data-pb-kind="progress">出来高請求書</button></div><button id="pbNew" class="btn dark pb-wide" type="button">＋ 請求書を作成</button><div id="pbEditor"></div><div id="pbDocuments"></div><details id="pbCompany"><summary>発行者・振込先の設定</summary><p class="note">自社の情報を登録すると、新しく作る書類に入ります。</p><div id="pbCompanyFields"></div><button id="pbCompanySave" class="btn dark pb-wide" type="button">発行者情報を保存</button><p id="pbCompanyStatus" class="note" role="status"></p></details>';
+  card.innerHTML='<h2>請求書・現場設定</h2><label for="pbSite">現場</label><select id="pbSite"><option value="">現場を選択</option></select><div class="pb-actions"><button id="pbReload" class="btn light" type="button">一覧を更新</button><button id="pbProfit" class="btn light" type="button">この現場の利益を見る</button></div><p id="pbStatus" class="note" role="status" aria-live="polite">読み込み中…</p><div class="pb-tabs" role="group" aria-label="書類の種類"><button class="btn lime" type="button" data-pb-kind="invoice">請求書</button><button class="btn light" type="button" data-pb-kind="progress">出来高請求書</button></div><button id="pbNew" class="btn dark pb-wide" type="button">＋ 請求書を作成</button><div id="pbDocuments"></div><div id="pbEditor"></div><details id="pbSiteSettings"><summary>現場設定（契約金額・工事内容・完工）</summary><p id="pbSettingsSite" class="note"></p><div id="pbOverview"></div><details id="pbCompletion"><summary>完工日を設定・工事中に戻す</summary><div id="pbCompletionBody"></div></details></details><details id="pbCompany"><summary>発行者・振込先の設定</summary><p class="note">自社の情報を登録すると、新しく作る書類に入ります。</p><div id="pbCompanyFields"></div><button id="pbCompanySave" class="btn dark pb-wide" type="button">発行者情報を保存</button><p id="pbCompanyStatus" class="note" role="status"></p></details>';
   q('#siteSummaryCard')?.before(card);
   q('#pbSite').onchange=async e=>{const next=e.target.value;if(dirty&&!confirm('書類の未保存の入力を閉じて現場を切り替えますか？')){e.target.value=siteId;return;}siteId=next;editor=null;dirty=false;await loadSite();syncToSummary();};
   const summary=q('#siteSummarySelect');summary?.removeEventListener('change',syncFromSummary);summary?.addEventListener('change',syncFromSummary);
@@ -91,11 +91,26 @@
   card.querySelectorAll('[data-pb-kind]').forEach(b=>b.onclick=()=>{kind=b.dataset.pbKind;renderTabs();renderList();if(!site())requestSite();});
   q('#pbNew').onclick=()=>newDocument(kind);
   q('#pbCompanySave').onclick=saveProfile;q('#pbCompanyFields').addEventListener('input',()=>{profileDirty=true;});
-  const shortcut=document.createElement('div');shortcut.id='pbMasterLink';shortcut.className='card';shortcut.innerHTML='<h2>現場・請求・完工</h2><button class="btn dark pb-wide" type="button">請求・完工設定を開く</button>';shortcut.querySelector('button').onclick=()=>{q('nav [data-page="homePage"]')?.click();card.scrollIntoView({block:'start',behavior:'smooth'});};q('#masterPage')?.prepend(shortcut);
+  const navigation='<h2>請求書・見積書・現場設定</h2><div class="pb-shortcuts">'+(allowed('invoice')?'<button class="btn lime" type="button" data-pb-go="invoice">請求書<br><small>作成・保存済み一覧</small></button>':'')+(allowed('estimate')?'<button class="btn lime" type="button" data-pb-go="estimate">見積書<br><small>作成・保存済み一覧</small></button>':'')+'<button class="btn light" type="button" data-pb-go="site">現場設定<br><small>契約金額・工事内容・完工</small></button></div>';
+  for(const [target,id] of [['#homePage','pbHomeActions'],['#masterPage','pbMasterLink']]){
+   const shortcut=document.createElement('div');shortcut.id=id;shortcut.className='card admin-home-only';shortcut.innerHTML=navigation;
+   if(!allowed('invoice'))shortcut.querySelector('h2').textContent='現場設定';
+   else if(!allowed('estimate'))shortcut.querySelector('h2').textContent='請求書・現場設定';
+   shortcut.querySelectorAll('[data-pb-go]').forEach(button=>button.onclick=()=>{
+    q('nav [data-page="homePage"]')?.click();
+    const destination=button.dataset.pbGo;
+    if(destination==='estimate'){q('#estimatePlanCard')?.scrollIntoView({block:'start',behavior:'smooth'});return;}
+    if(destination==='site'){
+     q('#pbSiteSettings').open=true;
+     if(!site()){requestSite();return;}
+     q('#pbSiteSettings').scrollIntoView({block:'start',behavior:'smooth'});return;
+    }
+    card.scrollIntoView({block:'start',behavior:'smooth'});
+   });q(target)?.prepend(shortcut);
+  }
   if(!allowed('invoice')){
-   card.querySelector('h2').textContent='現場・完工';shortcut.querySelector('h2').textContent='現場・完工';shortcut.querySelector('button').textContent='現場・完工設定を開く';
+   card.querySelector('h2').textContent='現場設定';q('#pbSiteSettings').open=true;
    for(const el of card.querySelectorAll('.pb-tabs,#pbNew,#pbEditor,#pbDocuments,#pbOverview'))el.hidden=true;
-   const msg=document.createElement('p');msg.className='note';msg.textContent='請求書はプラン2・3で利用できます。';card.querySelector('#pbCompletion').after(msg);
   }
   renderProfile();refresh();return true;
  }
@@ -154,7 +169,7 @@
   }catch(e){if(t===ticket&&identity()===mine)note('書類を確認できませんでした：'+e.message,true);}
  }
  function renderOverview(){
-  if(!q('#pbOverview'))return;const s=site();q('#pbNew').disabled=!!s&&!siteLoaded;
+  if(!q('#pbOverview'))return;const s=site();q('#pbNew').disabled=!!s&&!siteLoaded;q('#pbSettingsSite').textContent=s?'設定する現場：'+s.name:'上の「現場」を選んでください。';
   if(!s){q('#pbOverview').innerHTML='';return;}
   if(!siteLoaded){q('#pbOverview').innerHTML='<p class="note">書類・請求額の読み込みが完了すると表示します。</p>';return;}
   const billed=E.billed(docs),amount=contract?Number(contract.amount):null;
@@ -181,7 +196,7 @@
  function renderTabs(){q('#projectBusinessCard').querySelectorAll('[data-pb-kind]').forEach(b=>{b.className='btn '+(b.dataset.pbKind===kind?'lime':'light');b.setAttribute('aria-pressed',String(b.dataset.pbKind===kind));});q('#pbNew').textContent='＋ '+E.kinds[kind]+'を作成';}
  function renderList(){
   const host=q('#pbDocuments');if(!host)return;const rows=docs.filter(d=>d.kind===kind).sort((a,b)=>b.document_date.localeCompare(a.document_date)||b.created_at.localeCompare(a.created_at));
-  host.innerHTML='<h3>保存済みの'+E.kinds[kind]+'</h3>'+(rows.length?rows.map(d=>'<div class="pb-document-row"><div><b>'+esc(d.document_number||'下書き')+'</b><span class="pb-badge">'+({draft:'下書き',issued:'確定',void:'取消済み'}[d.status])+'</span><p>'+esc(d.document_date)+' / '+esc(d.customer_name||'宛先未入力')+'</p><p>'+esc(d.subject)+'</p><strong>'+yen(d.total)+'（税込）</strong></div><button class="btn light" type="button" data-pb-open="'+esc(d.id)+'">開く</button></div>').join(''):'<p class="note">この現場にはまだ保存されていません。</p>');
+  host.innerHTML='<h3>保存済みの'+E.kinds[kind]+(siteLoaded?'（'+rows.length+'件）':'')+'</h3>'+(rows.length?rows.map(d=>'<div class="pb-document-row"><div><b>'+esc(d.document_number||'下書き')+'</b><span class="pb-badge">'+({draft:'下書き',issued:'確定',void:'取消済み'}[d.status])+'</span><p>'+esc(d.document_date)+' / '+esc(d.customer_name||'宛先未入力')+'</p><p>'+esc(d.subject)+'</p><strong>'+yen(d.total)+'（税込）</strong></div><button class="btn light" type="button" data-pb-open="'+esc(d.id)+'">開く・変更</button></div>').join(''):'<p class="note">'+(!site()?'上の「現場」を選ぶと、保存済みの書類が表示されます。':!siteLoaded?'書類を読み込み中…':esc(site().name)+'の'+E.kinds[kind]+'はまだありません。別の現場の書類は、上の「現場」を切り替えてください。')+'</p>');
   host.querySelectorAll('[data-pb-open]').forEach(b=>b.onclick=()=>openDocument(b.dataset.pbOpen));
  }
  function discard(){return !dirty||confirm('書類の未保存の入力を閉じますか？');}
