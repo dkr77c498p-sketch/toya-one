@@ -87,7 +87,7 @@
  function autoBuilderHTML(){
   const a=A.normalize(autoInput());
   const f=(label,id,key,unit)=>field(label+(unit?'（'+unit+'）':''),id,a[key],'number','data-auto-key="'+key+'" min="0" step="'+(key==='concrete_quantity'?'0.001':'0.01')+'" inputmode="decimal"');
-  const select=(label,id,key,choices)=>'<div class="pb-field" style="grid-column:1/-1"><label for="'+id+'">'+label+'</label><select id="'+id+'" data-auto-key="'+key+'">'+choices.map(([value,text])=>'<option value="'+value+'">'+text+'</option>').join('')+'</select></div>';
+  const select=(label,id,key,choices)=>'<div class="pb-field" style="grid-column:1/-1"><label for="'+id+'">'+label+'</label><select id="'+id+'" data-auto-key="'+key+'">'+(key==='use'?'<option value="" disabled hidden>選択してください</option>':'')+choices.map(([value,text])=>'<option value="'+value+'">'+text+'</option>').join('')+'</select></div>';
   return [
    '<details class="ep-auto" open><summary>かんたん自動積算・手入力</summary><div class="ep-auto-grid">',
    select('工事の種類','epAutoKind','kind',[['wood','木造解体'],['lightSteel','軽量鉄骨造解体'],['steel','鉄骨造（S造）解体'],['rc','RC造解体'],['src','SRC造解体'],['interior','内部改修・内部解体・スケルトン解体'],['custom','その他（手入力）']]),
@@ -131,7 +131,7 @@
  }
  function bindAutoBuilder(){
   const a=A.normalize(autoInput()),host=q('.ep-auto');
-  host.querySelectorAll('select[data-auto-key]').forEach(el=>el.value=a[el.dataset.autoKey]);
+  host.querySelectorAll('select[data-auto-key]').forEach(el=>{const key=el.dataset.autoKey,value=a[key];el.value=key==='use'&&!Object.hasOwn(A.Concrete.uses,value)?'':value;});
   host.dataset.autoReady='true';
   const readInput=()=>Object.fromEntries([...host.querySelectorAll('[data-auto-key]')].map(el=>[el.dataset.autoKey,el.value]));
   const refresh=()=>{

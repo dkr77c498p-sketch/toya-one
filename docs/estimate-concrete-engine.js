@@ -11,7 +11,7 @@
   src:{residential:{kg:1369,n:3,basis:'in'},office:{kg:1856,n:3,basis:'in'},other:{kg:1717,n:2,basis:'in'}}
  };
  const kinds={wood:'木造',lightSteel:'軽量鉄骨造（S造係数を参照）',steel:'S造',rc:'RC造',src:'SRC造'};
- const uses={residential:'住宅',office:'事務所',other:'その他（工場・倉庫など）',unknown:'用途未確認'};
+ const uses={residential:'住宅',office:'事務所',shop:'店舗',factory:'工場',warehouse:'倉庫',other:'その他'};
  const round=n=>Math.round((n+Number.EPSILON)*1000)/1000;
  const blank=v=>v===null||v===undefined||String(v).trim()==='';
  function nonnegative(value,label){if(blank(value))return null;const n=Number(value);if(!Number.isFinite(n)||n<0)throw new Error(label+'は0以上の数値で入力してください。');return n;}
@@ -30,10 +30,14 @@
   if(a.kind==='interior')return {...base,skip:true,reason:'内部解体は建物全体の係数を適用しません。必要な数量を手入力できます。'};
   if(a.concrete_scope==='partial')return {...base,reason:'部分解体は対象範囲のコンクリート数量を手入力してください。'};
   if(!area)return {...base,skip:true,reason:'建物面積を入力すると参考数量を計算します。'};
-  const kind=a.kind==='lightSteel'?'steel':a.kind,use=a.use||'residential',factor=factors[kind]?.[kind==='wood'?'all':use];
+  const kind=a.kind==='lightSteel'?'steel':a.kind,use=a.use??'residential';
+  // Keep the selected use, while these new choices share the existing
+  // "other" reference bucket. Do not invent a use-specific coefficient.
+  const referenceUse=kind==='wood'?'all':['shop','factory','warehouse'].includes(use)?'other':use;
+  const factor=factors[kind]?.[referenceUse];
   if(!factor)return {...base,reason:'この構造・用途の係数は未登録です。用途を確認するか数量を手入力してください。'};
-  const label=kinds[a.kind]+'／'+(kind==='wood'?'用途区分なし':uses[use]),description=factor.basis==='out'?'分別されたコンクリート排出量の平均':'資材投入量の平均で代用';
-  return {...base,quantity:round(area*factor.kg/1000),factor_kg_m2:factor.kg,sample_count:factor.n,method:factor.basis,label,description,source:{...source}};
+  const label=kinds[a.kind]+'／'+(kind==='wood'?'用途区分なし':uses[use]+(referenceUse!==use?'（「その他」の共通参考値）':'')),description=factor.basis==='out'?'分別されたコンクリート排出量の平均':'資材投入量の平均で代用';
+  return {...base,quantity:round(area*factor.kg/1000),factor_kg_m2:factor.kg,sample_count:factor.n,reference_use:referenceUse,method:factor.basis,label,description,source:{...source}};
  }
  return {source,factors,kinds,uses,grossArea,estimate,nonnegative};
 });

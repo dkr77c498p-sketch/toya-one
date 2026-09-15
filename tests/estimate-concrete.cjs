@@ -19,6 +19,22 @@ assert.equal(concrete({...raw,kind:'src',use:'residential'}).quantity,410.7);
 assert.equal(concrete({...raw,kind:'steel',use:'residential'}).sample_count,1,'少数事例を隠さない');
 assert.equal(concrete({...raw,use:'unknown'}).quantity,null);
 assert.equal(disposal({...raw,use:'unknown'}).quantity,'','未登録条件は0にせず数量未入力');
+assert.equal(concrete({...raw,use:''}).quantity,null,'用途未選択を住宅の係数で計算しない');
+for(const use of ['shop','factory','warehouse']){
+ for(const [kind,quantity] of [['wood',61.5],['steel',161.7],['lightSteel',161.7],['rc',491.4],['src',515.1]]){
+  const result=concrete({...raw,kind,use});
+  assert.equal(result.quantity,quantity,kind+' / '+use);
+  assert.equal(result.reference_use,kind==='wood'?'all':'other');
+  if(kind!=='wood'){
+   assert.ok(result.label.includes(A.Concrete.uses[use]));
+   assert.match(result.label,/共通参考値/,'専用の係数ではなく既存のその他区分と明示');
+  }
+ }
+ const savedUse=A.build({...raw,use}).input;
+ assert.equal(savedUse.use,use);
+ assert.equal(concrete(JSON.parse(JSON.stringify(savedUse))).quantity,491.4);
+}
+assert.equal(concrete({...raw,use:'other'}).quantity,491.4,'保存済みのその他区分の計算を維持');
 assert.equal(disposal({...raw,concrete_scope:'partial'}).quantity,'','部分解体に建物全体の係数を適用しない');
 assert.equal(C.calculate({entry_mode:'quote',tax_rate:10,groups:A.build(raw).groups}).complete,false,'t単価の未入力を確定見積にしない');
 assert.equal(disposal({...raw,foundation_m3:'100',slab_m3:'50'}).quantity,'339.9','全体の参考量に基礎・土間を二重加算しない');
