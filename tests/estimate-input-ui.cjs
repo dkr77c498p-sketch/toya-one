@@ -1,0 +1,53 @@
+const assert=require('node:assert/strict');
+const {setup,pause}=require('./project-business-ui.cjs');
+const E=require('../docs/project-documents-engine.js');
+const {JSDOM}=require('jsdom');
+
+(async()=>{
+ const {dom,w,db,calls}=await setup('admin',true),q=s=>w.document.querySelector(s);
+ const set=(s,v)=>{const el=q(s);el.value=v;el.dispatchEvent(new w.Event(el.tagName==='SELECT'?'change':'input',{bubbles:true}));};
+ const name='家屋内部残置物撤去工事',period='着工から約3日間（雨天を除く）';
+ const conditions='1. 家屋内部の残置物撤去・運搬処分を含みます。\n2. <現地確認>の範囲です。';
+ try{
+  q('#epNew').click();set('#epJobName',name);set('#epCustomer','試験見積先');set('#epWorkPeriod',period);set('#epEstimateConditions',conditions);q('#epNextItems').click();
+  set('#epAutoKind','custom');
+  const input=q('#epAutoCustomName'),totals=q('#epTotals').innerHTML;
+  input.focus();input.dispatchEvent(new w.CompositionEvent('compositionstart',{bubbles:true}));
+  input.value='家屋内部残置物撤去こう';input.dispatchEvent(new w.InputEvent('input',{bubbles:true,isComposing:true,inputType:'insertCompositionText'}));
+  assert.equal(q('#epAutoCustomName'),input,'変換中に入力欄を差し替えない');
+  assert.equal(w.document.activeElement,input);assert.equal(q('#epTotals').innerHTML,totals,'変換中に再計算の表示を作り直さない');
+  const beforeApply=q('#epGroups').innerHTML;q('#epAutoApply').click();
+  assert.equal(q('#epGroups').innerHTML,beforeApply,'変換途中の名前で明細を作らない');
+  assert.match(q('#epFormStatus').textContent,/変換を確定/);
+  input.value=name;input.dispatchEvent(new w.CompositionEvent('compositionend',{bubbles:true,data:'工事'}));
+  q('#epAutoApply').click();assert.equal(q('#epWork0').value,name);assert.equal(q('#epLabel0_0').value,name);
+  set('#epQty0_0','1');set('#epUnit0_0','式');set('#epQuotePrice0_0','350000');
+  assert.match(q('#epTotals').textContent,/385,000/);
+  set('#epAutoCustomName',name+'一式');assert.equal(q('#epWork0').value,name+'一式');assert.equal(q('#epLabel0_0').value,name+'一式');assert.equal(q('#epQuotePrice0_0').value,'350000','工事の種類の訂正で金額を消さない');
+  set('#epWork0',name);set('#epLabel0_0','分別・搬出・処分');set('#epAutoCustomName','残置物撤去');
+  assert.equal(q('#epWork0').value,name,'個別に手直しした見出しは上書きしない');assert.equal(q('#epLabel0_0').value,'分別・搬出・処分');
+  q('#epCreateQuote').click();await pause();await pause();
+  let doc=db.project_documents[0];assert.equal(doc.work_period,period);assert.equal(doc.estimate_conditions,conditions);
+  assert.equal(doc.estimate_snapshot.groups[0].name,name);assert.equal(doc.estimate_snapshot.groups[0].quote_lines[0].label,'分別・搬出・処分');
+  assert.equal(q('#pbWorkPeriod').value,period);assert.equal(q('#pbEstimateConditions').value,conditions);
+  set('#pbWorkPeriod','9月下旬の約2日間');set('#pbEstimateConditions','残置物の撤去・運搬処分を含む。\n<script>印刷テスト</script>');
+  q('#pbSaveDoc').click();await pause();doc=db.project_documents[0];
+  assert.equal(doc.work_period,'9月下旬の約2日間');assert.match(doc.estimate_conditions,/残置物/);
+  q('#pbShowPreview').click();const print=q('#pbPreview iframe').srcdoc;
+  assert.match(print,/9月下旬の約2日間/);assert.match(print,/家屋内部残置物撤去工事/);assert.match(print,/分別・搬出・処分/);assert.match(print,/385,000/);
+  assert.doesNotMatch(print,/家屋内部残置物撤去こう|内部残置物があった場合、別途請求|着工依り1か月/);
+  assert.match(print,/&lt;script&gt;印刷テスト&lt;\/script&gt;/);assert.doesNotMatch(print,/<script>/);
+  q('#pbPreviewClose').click();q('#pbEditBreakdown').click();await pause();
+  assert.equal(q('#epStep2').hidden,false);assert.equal(q('.ep-manual').open,true);assert.equal(q('#epWorkPeriod').value,'9月下旬の約2日間');assert.match(q('#epEstimateConditions').value,/撤去・運搬処分/);
+  set('#epLabel0_0',name);q('#epCreateQuote').click();await pause();await pause();
+  assert.match(q('#pbWorkPeriod').value,/約2日/);assert.equal(db.project_documents.at(-1).estimate_snapshot.groups[0].quote_lines[0].label,name);
+  q('#pbIssueDoc').click();q('#pbIssueApprove').click();await pause();
+  assert.equal(db.project_documents.at(-1).status,'issued');assert.ok(q('#pbFields').disabled);assert.equal(q('#pbEditBreakdown'),null,'確定した書類は編集しない');
+  assert.ok(!calls.some(([name])=>/toya_void|delete|estimate_to_contract/.test(name)),'既存書類の取消・削除・請負金額への反映を行わない');
+  const legacy={...doc,work_period:null,estimate_conditions:null,transaction_start:null,transaction_end:null};
+  assert.match(E.printHTML(legacy),/着工依り1か月/);assert.match(E.printHTML(legacy),/内部残置物があった場合、別途請求/);
+  const blank=E.printHTML({...legacy,work_period:'',estimate_conditions:''});assert.doesNotMatch(blank,/着工依り1か月|内部残置物があった場合、別途請求/);
+  const parsed=new JSDOM(blank);assert.equal(parsed.window.document.querySelectorAll('script').length,0);parsed.window.close();
+  console.log('PASS Japanese conversion, corrected custom names, manual item labels, period/conditions save-reopen-print, escaped text, frozen issued documents and legacy defaults');
+ }finally{dom.window.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

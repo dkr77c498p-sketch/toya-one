@@ -2,6 +2,9 @@
 (function(root,factory){const api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.ToyaProjectDocuments=api;})(typeof window==='object'?window:globalThis,function(){
  'use strict';
  const isToyaDocument=d=>(d.company_id||d.issuer?.company_id)==='40a7a065-1086-4e62-aa09-f44d6207602c';
+ const defaultEstimateConditions=['アスベスト・PCB等の有害物質の撤去及び処分費用は、明細に記載がない限り含まれておりません。','基礎杭の撤去費用は含まれておりません。','内部残置物があった場合、別途請求いたしますのでご了承ください。','水道メーター撤去費用は含まれておりません。','建物基礎以外の埋設物が出た場合は別途費用が発生します。','工事御依頼決定後、3営業日以内に注文書及び注文請書を作成します。'].map((s,j)=>(j+1)+'. '+s).join('\n');
+ const estimateConditions=d=>d.estimate_conditions??defaultEstimateConditions;
+ const estimateWorkPeriod=d=>String(d.work_period||'').trim()||[d.transaction_start,d.transaction_end].filter(Boolean).join(' ～ ')||(d.work_period==null?'着工依り1か月':'');
  const kinds={estimate:'見積書',invoice:'請求書',progress:'出来高請求書'};
  const escape=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const yen=n=>Number(n).toLocaleString('ja-JP')+'円';
@@ -119,8 +122,8 @@
   const state=d.status==='draft'?'<b class="te2-state">下書き</b>':d.status==='void'?'<b class="te2-state">取消済み</b>':'';
   const cover='<section class="te2-page te2-cover"><div class="te2-cover-customer" style="font-size:'+fitFont(customerText,98,15.48)+'pt">'+customer+'</div><h1>御　見　積　書</h1><div class="te2-cover-brand">'+logo+company+'</div></section>';
   const field=(label,value)=>{const width=textWidth(value),size=width>80?8:width>50?9.5:width>23?11:14.04;return '<dt><span style="width:'+(label.length<4?'24.8':'29')+'mm">'+[...label].map(c=>'<i>'+e(c)+'</i>').join('')+'</span>:</dt><dd style="font-size:'+size+'pt">'+nl(value)+'</dd>';};
-  const notes=String(d.notes||''),mainNotes=wrapped(notes,25)>2?'別紙「見積諸条件」に記載':notes;
-  const main='<section class="te2-page te2-main"><div class="te2-frame"><h1>御　見　積　書</h1><div class="te2-main-customer" style="font-size:'+fitFont(customerText,115,20.04)+'pt">'+customer+'</div><div class="te2-grand"><b>御見積金額</b><strong>¥'+num(t.total??d.total??totals.total)+'</strong></div><dl>'+field('工事名',subject)+field('工事場所',d.site_address||'')+field('工期',d.transaction_start||d.transaction_end?[d.transaction_start,d.transaction_end].filter(Boolean).join(' ～ '):'着工依り1か月')+field('見積有効期',d.valid_until||'見積提出から1ヶ月')+field('工事概要',subject)+field('備考',mainNotes)+'</dl><p class="te2-greeting">上記の通り御見積申し上げます。<br>何卒ご用命のほどよろしくお願い申し上げます。</p><div class="te2-date">'+state+'<span>'+e(jpDate)+'</span></div><div class="te2-main-brand">'+logo+company+'</div></div></section>';
+  const notes=String(d.notes||''),mainNotes=wrapped(notes,25)>2?'別紙「見積諸条件」に記載':notes,period=estimateWorkPeriod(d),longPeriod=wrapped(period,25)>2;
+  const main='<section class="te2-page te2-main"><div class="te2-frame"><h1>御　見　積　書</h1><div class="te2-main-customer" style="font-size:'+fitFont(customerText,115,20.04)+'pt">'+customer+'</div><div class="te2-grand"><b>御見積金額</b><strong>¥'+num(t.total??d.total??totals.total)+'</strong></div><dl>'+field('工事名',subject)+field('工事場所',d.site_address||'')+field('工期',longPeriod?'別紙「見積諸条件」に記載':period)+field('見積有効期',d.valid_until||'見積提出から1ヶ月')+field('工事概要',subject)+field('備考',mainNotes)+'</dl><p class="te2-greeting">上記の通り御見積申し上げます。<br>何卒ご用命のほどよろしくお願い申し上げます。</p><div class="te2-date">'+state+'<span>'+e(jpDate)+'</span></div><div class="te2-main-brand">'+logo+company+'</div></div></section>';
   const head='<div class="te2-sheet-head"><h1>工事内訳書</h1><b>'+e(i.issuer_name||'')+'</b></div>';
   const columns='<colgroup><col style="width:6%"><col style="width:23.55%"><col style="width:14.5%"><col style="width:6.3%"><col style="width:14.6%"><col style="width:17.55%"><col style="width:17.5%"></colgroup><thead><tr><th>項目№</th><th>名　称</th><th>見積数量</th><th>単 位</th><th>見積単価</th><th>見積金額</th><th>備　考・品　目</th></tr></thead>';
   const row=(cells,cls='',units=1)=>({html:'<tr class="'+cls+'" style="height:'+(7.75*units).toFixed(2)+'mm">'+cells.map(x=>'<td>'+x+'</td>').join('')+'</tr>',units});
@@ -147,8 +150,8 @@
   const summaryBottom=[totalRow('直接工事費',direct),...adjustments,totalRow('小計',t.price??d.subtotal??totals.subtotal),row(['','消費税（'+e(d.tax_rate)+'%）','1.00','式','',money(t.tax??totals.tax),'']),totalRow('総合計',t.total??d.total??totals.total,'te2-grand-total')];
   const aggregate=sheets(summaryTop,[empty()],summaryBottom,29,'te2-summary');
   const details=directGroups.map(x=>sheets((x.g.quote_lines||[]).filter(r=>!r.excluded).map(dataRow),[row([e(x.letter),e(plain(x)),'','','','',''],'te2-group')],[totalRow(plain(x),x.total,'te2-grand-total')],32,'te2-detail')).join('');
-  const conditionsList=['アスベスト・PCB等の有害物質の撤去及び処分費用は、明細に記載がない限り含まれておりません。','基礎杭の撤去費用は含まれておりません。','内部残置物があった場合、別途請求いたしますのでご了承ください。','水道メーター撤去費用は含まれておりません。','建物基礎以外の埋設物が出た場合は別途費用が発生します。','工事御依頼決定後、3営業日以内に注文書及び注文請書を作成します。'];
-  const conditionTexts=['',...conditionsList.map((s,j)=>(j+1)+'. '+s),...(notes?['','備考・特記事項',...notes.split('\n')]:[])];let conditions='',conditionPos=0;
+  const conditionsList=String(estimateConditions(d)).split(/\r?\n/);
+  const conditionTexts=['',...(longPeriod?['工期：'+period,'']:[]),...conditionsList,...(notes?['','備考・特記事項',...notes.split('\n')]:[])];let conditions='',conditionPos=0;
   do{let body='',used=0;while(conditionPos<conditionTexts.length){const text=conditionTexts[conditionPos],units=Math.max(1,Math.ceil((wrapped(text,59)*3.2+1)/7.75));if(used+units>32)break;used+=units;conditionPos++;body+='<tr style="height:'+(7.75*units).toFixed(2)+'mm"><td>'+e(text)+'</td></tr>';}
    if(!used)throw Error('備考が長すぎます。段落を分けてください。');
    conditions+='<section class="te2-page">'+head+'<table class="te2-conditions" aria-label="見積諸条件"><thead><tr><th>見　積　諸　条　件</th></tr></thead><tbody>'+body+'<tr class="te2-blank"><td></td></tr>'.repeat(32-used)+'</tbody></table></section>';
@@ -210,5 +213,5 @@
  @media screen{html{background:#eee}body{width:794px;min-width:794px;padding:8px;background:#eee;transform-origin:top left}.te2-page{margin:0 0 12px;box-shadow:0 0 0 1px #ddd}}
  @media print{html,body{zoom:1!important}}
  `;
- return {kinds,escape,yen,lineAmount,total,billed,progress,percentAmount,draft,printHTML};
+ return {kinds,escape,yen,lineAmount,total,billed,progress,percentAmount,draft,printHTML,estimateConditions,estimateWorkPeriod};
 });
