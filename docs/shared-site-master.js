@@ -1,4 +1,4 @@
-/* TOYA One shared site list v1. Only sites are read/written; report/auth data is untouched.
+/* TOYA One shared site list. Renames keep reports and document labels connected.
  * Admin additions use an authenticated, company-scoped, idempotent registration RPC.
  * Background refresh replaces site options only, never other report controls.
  */
@@ -123,7 +123,7 @@
   };
   const active=rows.filter(r=>r.status==='active'&&!placeholder(r.name));
   const past=rows.filter(r=>r.status!=='active'&&!placeholder(r.name));
-  host.innerHTML='<div id="ssEditor"><p class="note">ここで追加・変更した現場名は社員共通です。名前を変更すると、過去の日報と集計も同じ現場のまま新しい名前になります。</p><label for="ssNewName">追加する現場名</label><input id="ssNewName" type="text" maxlength="120" placeholder="例：○○ビル解体工事"><button id="ssRegister" type="button" class="btn dark">登録して社員へ共有</button><p id="ssAdminStatus" class="note" role="status"></p><div id="ssSharedRows">'+active.map(sharedRow).join('')+'</div>'+(past.length?'<details><summary>完工・過去の現場</summary>'+past.map(sharedRow).join('')+'</details>':'')+ (drafts.length?'<details open><summary>この端末だけの現場（未共有）</summary>'+drafts.map((n,i)=>'<div class="ss-row"><b>'+esc(n)+'</b><button type="button" class="btn light" data-ss-draft="'+i+'">社員へ共有</button></div>').join('')+'</details>':'')+'</div>';
+  host.innerHTML='<div id="ssEditor"><p class="note">ここで追加・変更した現場名は社員共通です。名前を変更すると、日報・写真・集計・積算表・見積書・請求書の現場名に反映されます。確定済みの書類も対象です。</p><label for="ssNewName">追加する現場名</label><input id="ssNewName" type="text" maxlength="120" placeholder="例：○○ビル解体工事"><button id="ssRegister" type="button" class="btn dark">登録して社員へ共有</button><p id="ssAdminStatus" class="note" role="status"></p><div id="ssSharedRows">'+active.map(sharedRow).join('')+'</div>'+(past.length?'<details><summary>完工・過去の現場</summary>'+past.map(sharedRow).join('')+'</details>':'')+ (drafts.length?'<details open><summary>この端末だけの現場（未共有）</summary>'+drafts.map((n,i)=>'<div class="ss-row"><b>'+esc(n)+'</b><button type="button" class="btn light" data-ss-draft="'+i+'">社員へ共有</button></div>').join('')+'</details>':'')+'</div>';
   q('#ssNewName').value=draftName;q('#ssNewName').oninput=e=>{draftName=e.target.value;};
   q('#ssRegister').disabled=writing;q('#ssRegister').onclick=()=>registerName(draftName);
   q('#ssAdminStatus').textContent=message||(loaded?'共有済みの現場は下に表示しています。':'会社共通の一覧を読み込み中…');
@@ -158,7 +158,7 @@
   if(!site){message='変更する現場を確認してください。';editingId='';renderMaster();return;}
   if(problem){message=problem;renderMaster();q('#ssRenameName')?.focus();return;}
   if(norm(site.name)===norm(name)){editingId='';editName='';message='現場名は変更されていません。';renderMaster();return;}
-  if(!confirm('「'+site.name+'」を「'+name+'」へ変更しますか？\n\n過去の日報・写真・集計も同じ現場のまま引き継ぎます。確定済みの見積書・請求書の表記は変更しません。'))return;
+  if(!confirm('「'+site.name+'」を「'+name+'」へ変更しますか？\n\n日報・写真・集計・積算表・見積書・請求書の現場名に反映します。確定済み・取消済みの書類も新しい名前になります。金額・書類番号は変わりません。'))return;
   writing=true;message='現場名を変更しています…';renderMaster();const mine=identity(),oldName=site.name;
   try{
    const result=await cloudClient.rpc('toya_rename_shared_site',{p_site_id:site.id,p_expected_version:site.lifecycle_version,p_name:name});
@@ -166,6 +166,7 @@
    const saved=Array.isArray(result.data)?result.data[0]:result.data;if(!saved?.id||saved.id!==site.id||saved.name!==name)throw new Error('変更結果を確認できませんでした。');
    if(identity()!==mine)return;
    rows=rows.map(r=>r.id===saved.id?{...r,...saved}:r);replaceOpenName(oldName,saved.name);
+   document.dispatchEvent(new CustomEvent('toya-site-renamed',{detail:{companyId:cloudProfile.company_id,siteId:saved.id,oldName,newName:saved.name}}));
    editingId='';editName='';renderMaster();
    const readOK=await refresh(true);
    if(typeof cloudFetchReports==='function')try{await cloudFetchReports();if(typeof renderHome==='function')renderHome();}catch{}

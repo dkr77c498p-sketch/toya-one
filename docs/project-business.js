@@ -129,14 +129,18 @@
   if(data.registration_number&&!/^T\d{13}$/.test(data.registration_number))return note('登録番号はTと13桁の数字で入力してください。',true);
   await action(async()=>{let request=profile.updated_at?cloudClient.from('billing_profiles').update(data).eq('company_id',data.company_id).eq('updated_at',profile.updated_at):cloudClient.from('billing_profiles').insert(data);const r=await request.select('*');if(r.error)throw r.error;if(r.data?.length!==1)throw new Error('発行者情報が更新されています。一覧を更新してください。');if(identity()!==mine)return;profile=r.data[0];profileDirty=false;q('#pbCompanyStatus').textContent='保存しました。作成中の下書きには「発行者情報を反映」で取り込めます。';});
  }
- async function refresh(){
+ async function refresh(renamedSiteId=''){
   if(!identity()||busy)return;const mine=owner,t=++ticket,company=cloudProfile.company_id;note('現場と書類を読み込み中…');
+  const opened=editor;
   try{
    const results=await Promise.all([read('sites','id,name,status,completed_on,lifecycle_version',company),read('billing_profiles','*',company)]);
    if(t!==ticket||identity()!==mine)return;
    sites=results[0];profile=results[1][0]||{};
    const current=siteId||'',linked=siteByName(summarySite());q('#pbSite').innerHTML='<option value="">現場を選択</option>'+[...sites].sort((a,b)=>(a.status==='active'?0:1)-(b.status==='active'?0:1)||a.name.localeCompare(b.name,'ja')).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+(s.completed_on?'（完工）':s.status==='active'?'':'（過去・未整理）')+'</option>').join('');siteId=sites.some(s=>s.id===current)?current:linked?.id||'';q('#pbSite').value=siteId;
    if(!profileDirty&&!q('#pbCompany')?.contains(document.activeElement))renderProfile();await loadSite();loadRates(company,mine);
+   if(identity()===mine&&opened&&editor===opened&&!dirty&&!busy&&siteLoaded&&opened.site_id===renamedSiteId&&!q('#pbEditor')?.contains(document.activeElement)&&!q('#estimateDocumentHost')?.contains(document.activeElement)){
+    const saved=docs.find(d=>d.id===opened.id);if(saved){editor=copy(saved);renderEditor(false);}
+   }
   }catch(e){if(identity()===mine)note('読み込みできませんでした：'+e.message,true);}
  }
  async function syncFromSummary(){
@@ -234,7 +238,7 @@
    const r=await cloudClient.rpc('toya_issue_project_document',{p_id:editor.id,p_expected_updated_at:editor.updated_at});if(r.error)throw r.error;if(identity()!==mine)return;adoptDocument(one(r.data));note('見積書が完成しました。「印刷・PDF保存」から保存できます。');preview();
   },'確定');
  }
- function renderEditor(){
+ function renderEditor(scroll=true){
   closeIssueConfirmation?.();
   closeDeleteConfirmation?.();
   const home=q('#pbEditor'),estimateHost=q('#estimateDocumentHost');if(home)home.innerHTML='';if(estimateHost)estimateHost.innerHTML='';if(!editor)return;const host=editor.kind==='estimate'&&estimateHost?estimateHost:home;if(!host)return;const d=editor,locked=d.status!=='draft',estimate=d.kind==='estimate',progress=d.kind==='progress',linked=!!d.estimate_plan_id,simple=estimate&&linked&&d.estimate_snapshot?.entry_mode==='quote';
@@ -256,7 +260,7 @@
   if(q('#pbProgressFromEstimate'))q('#pbProgressFromEstimate').onclick=()=>newDocument('progress',d);
   if(q('#pbVoidDoc'))q('#pbVoidDoc').onclick=voidDocument;
   if(q('#pbDeleteDoc'))q('#pbDeleteDoc').onclick=deleteInvoice;
-  if(simple)window.ToyaEstimatePlanUI?.documentOpened(d);host.scrollIntoView({block:'start',behavior:'smooth'});
+  if(scroll){if(simple)window.ToyaEstimatePlanUI?.documentOpened(d);host.scrollIntoView({block:'start',behavior:'smooth'});}
  }
  function renderIssuer(){const i=editor?.issuer||{};q('#pbIssuerView').textContent=[i.issuer_name||'発行者未設定',i.postal_code?'〒'+i.postal_code:'',i.address,i.representative,i.phone?'TEL '+i.phone:'',i.fax?'FAX '+i.fax:'',i.registration_number,i.bank_details,i.logo_key==='toya'?'ロゴ：TOYA':''].filter(Boolean).join('\n');}
  function renderLines(){
@@ -366,6 +370,7 @@
   frame.srcdoc=E.printHTML(d);q('#pbPrint').onclick=()=>{frame.contentWindow.focus();frame.contentWindow.print();};q('#pbPreviewClose').onclick=closeDocumentPreview;
   const close=closeDocumentPreview;dialog.addEventListener('close',close,{once:true});dialog.addEventListener('cancel',event=>{event.preventDefault();close();});dialog.showModal();
  }
+ document.addEventListener('toya-site-renamed',e=>{if(identity()&&e.detail?.companyId===cloudProfile.company_id)refresh(e.detail.siteId);});
  window.ToyaProjectBusiness={
   isBusy:()=>busy,
   closeEstimate(){if(busy)return false;if(editor?.kind==='estimate'){if(!discard())return false;editor=null;dirty=false;renderEditor();}return true;},

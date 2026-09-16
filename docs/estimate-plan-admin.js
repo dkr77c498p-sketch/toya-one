@@ -28,11 +28,15 @@
  function beginNew(site=null,mode='quote'){if(busy||!identity()||window.ToyaProjectBusiness?.isBusy()||!discard()||!closeQuote())return;plan=mode==='cost'?C.draft(site):C.quoteDraft(site);plan.work_period='';plan.estimate_conditions=E.estimateConditions(plan);simpleStep=1;dirty=true;quoteRequest=null;renderLists();renderPlan();note(site?'この登録現場の見積を作成します。':'新しい工事名・住所・見積先を入力してください。');q(site&&mode==='cost'?'#epTitle':'#epJobName').focus({preventScroll:true});}
  function discard(){return !dirty||confirm('積算表の未保存の入力を閉じますか？');}
  function closeQuote(){return window.ToyaProjectBusiness?.closeEstimate()!==false;}
- async function refresh(){
+ async function refresh(renamedSiteId=''){
   if(busy||!identity())return;const mine=owner,t=++ticket,company=cloudProfile.company_id;ready=false;updateNewButton();note('積算表を読み込み中…');
+  const opened=plan;
   try{const result=await Promise.all([read('sites',company),read('estimate_plans',company),read('project_documents',company,true)]);if(t!==ticket||identity()!==mine)return;
    sites=result[0].sort((a,b)=>(a.status==='active'?0:1)-(b.status==='active'?0:1)||a.name.localeCompare(b.name,'ja'));plans=result[1];quotes=result[2];ready=true;
    q('#epSite').innerHTML='<option value="">現場を選択</option>'+optionSites();if(!selectedSite())selected='';q('#epSite').value=selected;renderLists();note(dirty?'未保存の積算表を表示しています。':'新しい工事の見積を作るか、保存済みの見積を開いてください。');await loadRates(company,mine);
+   if(identity()===mine&&t===ticket&&opened&&plan===opened&&!dirty&&!busy&&opened.site_id===renamedSiteId&&!q('#epEditor')?.contains(document.activeElement)){
+    const saved=plans.find(p=>p.id===opened.id);if(saved){plan=copy(saved);renderPlan(false);}
+   }
   }catch(e){if(identity()===mine&&t===ticket)note('読み込みできませんでした：'+e.message,true);}
  }
  async function loadRates(company,mine){
@@ -62,9 +66,9 @@
   q('#epQuoteList').innerHTML=quoteRows.length?quoteRows.map(d=>'<div class="pb-document-row"><div><b>'+esc(d.document_number||'下書き')+'</b><span class="pb-badge">'+({draft:'下書き',issued:'確定',void:'取消済み'}[d.status])+'</span><p>'+esc(d.subject)+' / '+esc(d.document_date)+'</p><strong>'+yen(d.total)+'（税込）</strong></div><button type="button" class="btn light" data-ep-quote="'+esc(d.id)+'">開く</button></div>').join(''):'<p class="note">保存済みの見積書はありません。</p>';
   q('#epQuoteList').querySelectorAll('[data-ep-quote]').forEach(b=>b.onclick=()=>{if(!discard()||!closeQuote())return;window.ToyaProjectBusiness?.openEstimate(copy(quotes.find(d=>d.id===b.dataset.epQuote)));});
  }
- function renderPlan(){
+ function renderPlan(scroll=true){
   const host=q('#epEditor');if(!host)return;if(!plan){host.innerHTML='';return;}
-  if(plan.entry_mode==='quote')return renderSimplePlan();
+  if(plan.entry_mode==='quote')return renderSimplePlan(scroll);
   q('#epPlannedEstimates').open=true;
   host.innerHTML='<section class="ep-plan"><h3>'+ (plan.site_id?'登録現場の見積':'新しい工事の見積')+'</h3>'+field('工事名','epJobName',plan.site_name||sites.find(s=>s.id===plan.site_id)?.name||'','text','maxlength="200"'+(plan.site_id?' readonly':''))+field('工事住所','epJobAddress',plan.site_address||'','text','maxlength="500"')+field('見積件名（空欄なら工事名）','epTitle',plan.title,'text','maxlength="200"')+estimateTextFields()+'<details><summary>見積先・条件</summary>'+field('宛先（会社名・お名前）','epCustomer',plan.customer_name,'text','maxlength="160"')+field('宛先住所','epAddress',plan.customer_address,'text','maxlength="500"')+'<label for="epQuoteNotes">見積書に載せる備考・条件</label><textarea id="epQuoteNotes" maxlength="3000">'+esc(plan.quote_notes)+'</textarea></details><p class="note">数量 × 日数・時間・回数 × 単価で計算します。例：人工3人 × 5日。材料は数量 × 1回。燃料は別の行に積み上げます。</p><p id="epRateStatus" class="note">登録単価は取り込んだ時点の金額で保存します。</p><div id="epGroups"></div><button id="epAddGroup" type="button" class="btn light pb-wide">＋ 工事項目を追加</button><h3>諸経費と見積額</h3><p class="note">諸経費を加えた原価に利益を上乗せします。不要な率には0を入力してください。</p><div class="pb-grid">'+field('諸経費率（%）','epOverhead',plan.overhead_percent,'number','min="0" max="1000" step="0.01" inputmode="decimal"')+field('利益上乗せ率（%）','epMarkup',plan.markup_percent,'number','min="0" max="1000" step="0.01" inputmode="decimal"')+'</div><details><summary>見積額を調整する</summary>'+field('提出する見積額（円・税別／空欄なら自動計算）','epOverride',plan.quote_amount_override,'number','min="0" step="1" inputmode="numeric"')+'</details><label for="epTax">消費税</label><select id="epTax"><option value="10">10%</option><option value="8">8%</option><option value="0">非課税・対象外</option></select><div id="epTotals" aria-live="polite"></div><details><summary>社内メモ</summary><textarea id="epInternalNotes" maxlength="3000" placeholder="施工条件・積算の前提など">'+esc(plan.internal_notes)+'</textarea><p class="note">社内メモと費用の内訳は、提出用の見積書には載りません。</p></details><p id="epFormStatus" class="note" role="status"></p><div class="pb-actions"><button id="epSave" type="button" class="btn dark">積算表を保存</button><button id="epPrint" type="button" class="btn light">積算表を印刷</button></div><button id="epCreateQuote" type="button" class="btn lime pb-wide">この積算から見積書を作る</button><p class="note">工事項目ごとの見積額を見積書へ引き継ぎます。諸経費・利益・金額調整は原価の割合で配分します。</p><details><summary>この積算表を複製して使う</summary><label for="epCopySite">複製先の現場</label><select id="epCopySite"><option value="">新しい工事（工事名・住所を入力）</option>'+optionSites()+'</select><button id="epCopy" type="button" class="btn light pb-wide">この内容を複製する</button><p class="note">元の積算表を残して、新しい表を作ります。</p></details></section>';
   q('#epTax').value=String(plan.tax_rate);q('#epCopySite').value=plan.site_id||'';renderGroups();updateTotals();
@@ -72,9 +76,9 @@
   q('#epCopySite').oninput=e=>e.stopPropagation();q('#epCopySite').onchange=e=>e.stopPropagation();
   q('#epAddGroup').onclick=()=>{gather();if(plan.groups.length>=100)return note('工事項目は100件までです。',true);plan.groups.push({name:'',lines:[C.blankLine()]});dirty=true;renderGroups();updateTotals();q('#epWork'+(plan.groups.length-1)).focus();};
   q('#epSave').onclick=save;q('#epCreateQuote').onclick=createQuote;q('#epPrint').onclick=print;q('#epCopy').onclick=duplicate;
-  host.scrollIntoView({block:'start',behavior:'smooth'});
+  if(scroll)host.scrollIntoView({block:'start',behavior:'smooth'});
  }
- function renderSimplePlan(){
+ function renderSimplePlan(scroll=true){
   const host=q('#epEditor');q('#epPlannedEstimates').open=true;
   host.innerHTML='<section class="ep-plan ep-simple"><ol class="ep-steps" aria-label="見積作成の進み方"><li data-ep-step="1"><b>1</b>工事情報</li><li data-ep-step="2"><b>2</b>数量入力</li><li data-ep-step="3"><b>3</b>確認・印刷</li></ol><div id="epStep1"><h3>1. どの工事の見積ですか？</h3><p class="note">工事名と見積先を入力してください。工事場所は後からでも入力できます。</p>'+field('工事名','epJobName',plan.site_name||sites.find(s=>s.id===plan.site_id)?.name||'','text','maxlength="200" placeholder="例：○○様邸 解体工事"'+(plan.site_id?' readonly':''))+field('見積先（会社名・お名前）','epCustomer',plan.customer_name,'text','maxlength="160" placeholder="例：○○建設株式会社 御中"')+field('工事場所（任意）','epJobAddress',plan.site_address||'','text','maxlength="500" placeholder="例：鹿児島市○○町1-2"')+estimateTextFields()+'<details><summary>見積先住所・件名・条件を入れる</summary>'+field('見積先住所','epAddress',plan.customer_address,'text','maxlength="500"')+field('見積件名（空欄なら工事名）','epTitle',plan.title,'text','maxlength="200"')+'<label for="epQuoteNotes">備考・見積条件</label><textarea id="epQuoteNotes" maxlength="3000">'+esc(plan.quote_notes)+'</textarea></details><button id="epNextItems" type="button" class="btn lime pb-wide">次へ：数量を入力する →</button></div><div id="epStep2" hidden><h3>2. 工事の種類・数量を入力</h3><p class="note">数量から明細を自動作成できます。自由に入力する場合は「その他（手入力）」を選んでください。</p>'+autoBuilderHTML()+'<details class="ep-manual"><summary>工事内訳書を手入力・修正</summary><p class="note">品名・数量・単位・単価を自由に入力・変更できます。</p><div id="epGroups"></div><button id="epAddGroup" type="button" class="btn light pb-wide">＋ 工事項目を追加</button></details><button id="epTemplate" type="button" class="btn light pb-wide">過去の見積をコピーして始める</button><details><summary>税率・社内メモ・その他の操作</summary><label for="epTax">消費税</label><select id="epTax"><option value="10">10%</option><option value="8">8%</option><option value="0">非課税・対象外</option></select><label for="epInternalNotes">社内メモ</label><textarea id="epInternalNotes" maxlength="3000">'+esc(plan.internal_notes)+'</textarea><button id="epPrint" type="button" class="btn light pb-wide">社内用の積算表を印刷</button><label for="epCopySite">この見積の複製先</label><select id="epCopySite"><option value="">新しい工事</option>'+optionSites()+'</select><button id="epCopy" type="button" class="btn light pb-wide">複製して作る</button></details><div id="epTotals" aria-live="polite"></div><button id="epCreateQuote" type="button" class="btn lime pb-wide">保存して御社書式の見積書を確認 →</button><button id="epBackInfo" type="button" class="btn light pb-wide">← 工事情報に戻る</button></div><div id="epInputFooter"><p id="epFormStatus" class="note" role="status" aria-live="polite"></p><button id="epSave" type="button" class="btn light pb-wide">途中で保存する</button></div></section>';
   q('#epTax').value=String(plan.tax_rate);q('#epCopySite').value=plan.site_id||'';renderSimpleGroups();updateTotals();setSimpleStep(simpleStep,false);
@@ -83,7 +87,7 @@
   q('#epTemplate').onclick=()=>{const el=q('#eqArchive');if(el){el.open=true;el.scrollIntoView({block:'start',behavior:'smooth'});}};
   bindInputs(host);q('#epCopySite').oninput=e=>e.stopPropagation();q('#epCopySite').onchange=e=>e.stopPropagation();
   q('#epAddGroup').onclick=()=>{gather();if(plan.groups.length>=100)return note('工事項目は100件までです。',true);plan.groups.push({name:'',quote_lines:[C.blankQuoteLine()],lines:[]});dirty=true;renderSimpleGroups(plan.groups.length-1);updateTotals();focusInput('#epWork'+(plan.groups.length-1));};
-  q('#epSave').onclick=save;q('#epCreateQuote').onclick=saveAndReview;q('#epPrint').onclick=print;q('#epCopy').onclick=duplicate;host.scrollIntoView({block:'start',behavior:'smooth'});
+  q('#epSave').onclick=save;q('#epCreateQuote').onclick=saveAndReview;q('#epPrint').onclick=print;q('#epCopy').onclick=duplicate;if(scroll)host.scrollIntoView({block:'start',behavior:'smooth'});
  }
  function bindInputs(host){
   window.ToyaJapaneseInput.bind(host,e=>{e.target.removeAttribute('aria-invalid');dirty=true;if(e.target.id==='epAutoCustomName')syncCustomName();updateTotals();},note);
@@ -314,6 +318,7 @@
   q('#epPreview')?.remove();const dialog=document.createElement('dialog');dialog.id='epPreview';dialog.innerHTML='<div class="pb-preview-toolbar"><b>積算表（社内用）</b><div><button class="btn dark" id="epPrintNow" type="button">印刷・PDF保存</button><button class="btn light" id="epClosePrint" type="button">閉じる</button></div></div><p class="note">この積算表には原価・社内メモを含みます。提出用の見積書は「この積算から見積書を作る」で作成できます。</p><iframe title="積算表の印刷プレビュー" sandbox="allow-same-origin allow-modals"></iframe>';document.body.append(dialog);const frame=dialog.querySelector('iframe');frame.srcdoc=html;q('#epPrintNow').onclick=()=>{frame.contentWindow.focus();frame.contentWindow.print();};q('#epClosePrint').onclick=()=>{dialog.close();dialog.remove();};dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
  }
  document.addEventListener('toya-estimate-document-changed',e=>{if(!identity()||e.detail?.company_id!==cloudProfile.company_id)return;quotes=[...quotes.filter(d=>d.id!==e.detail.id),copy(e.detail)];renderLists();});
+ document.addEventListener('toya-site-renamed',e=>{if(identity()&&e.detail?.companyId===cloudProfile.company_id)refresh(e.detail.siteId);});
  window.ToyaEstimatePlanUI={isBusy:()=>busy,getSites:()=>copy(sites),
   useQuantity(draft){
    if(!identity()||busy||window.ToyaProjectBusiness?.isBusy()||(draft.site_id&&(!ready||!sites.some(s=>s.id===draft.site_id))))return false;
