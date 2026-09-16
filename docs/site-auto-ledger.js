@@ -18,7 +18,12 @@
   return {count:eligible.length,excluded:rows.length-eligible.length,cost:round(eligible.reduce((n,r)=>n+r.result.subtotal,0)),sales:round(eligible.reduce((n,r)=>n+r.result.sales,0)),profit:round(eligible.reduce((n,r)=>n+r.result.profit,0)),partial:eligible.some(r=>r.result.partial)};
  }
  function phase(row){return row.site.completed_on?'完工済み':row.site.status!=='active'?'過去・未整理':row.result?.hasData?'施工中':'日報待ち';}
- function state(row){if(row.error)return '集計要確認';const r=row.result;if(!r.hasData)return '記録なし';if(r.contractAmount===null)return '請負金額未登録';return r.partial?'要確認 '+r.warnings.length+'件':'自動集計';}
+ function state(row){
+  if(row.error)return '集計できません';const r=row.result;if(!r.hasData)return '記録なし';if(r.contractAmount===null)return '請負金額未登録';
+  if(!r.partial)return '自動集計';
+  const move=r.warnings.some(x=>/現場移動|移動先|配分/.test(String(x)));
+  return (move?'現場移動の配分待ち ':'入力待ち ')+r.warnings.length+'件';
+ }
  function costRows(r){return Object.entries(costNames).map(([key,label])=>{const c=r.categories[key],e=r.expenses[key];return {key,label,value:c?c.value:e.value,present:c?c.savedDays>0||c.autoDates.length>0:e.count>0,note:c?'自動 '+c.autoDates.length+'日 / 保存額 '+c.savedDays+'日':e.count+'件'+(e.missing?' / 金額未入力 '+e.missing+'件':'')};});}
  function fromActual(row,at){
   if(row.error||!row.result?.hasData)throw new Error('日報または保存済み費用がある現場を選んでください。');
@@ -26,7 +31,7 @@
    if(c.value<0)throw new Error('マイナス調整を含むため、見積用の費用を確認してください。');
    return {category:({attachments:'attachment',tools:'tool'}[c.key]||c.key),label:c.label+'（実績参考）',quantity:'1',multiplier:'1',unit:'式',unit_price:String(c.value)};
   });
-  if(r.partial)lines.push({category:'other',label:'要確認費用（実績内訳を確認）',quantity:'1',multiplier:'1',unit:'式',unit_price:''});
+  if(r.partial)lines.push({category:'other',label:'未入力・配分待ち費用（実績内訳を確認）',quantity:'1',multiplier:'1',unit:'式',unit_price:''});
   p.title=row.site.name;p.groups=[{name:row.site.name+' 工事',lines}];
   p.quote_amount_override=r.contractAmount;
   p.internal_notes=('実績参考：'+row.site.name+' / '+at+' / 日報 '+r.reportCount+'件。取込後の実績変更はこの見積積算へ自動反映しません。施工条件・数量・見積額は見積先に合わせて確認してください。\n'+r.warnings.join('\n')).slice(0,3000);

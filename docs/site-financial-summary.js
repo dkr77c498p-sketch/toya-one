@@ -352,7 +352,7 @@
     }
     if (!q('#sfPanel')) {
       const panel = document.createElement('div'); panel.id = 'sfPanel';
-      panel.innerHTML = '<h3>現場原価・自動計算</h3><p class="sf-note">日報から自動計算します。日ごとの費用保存は不要です。保存済みの調整額は優先し、未記録・配分不明の費用だけ要確認にします。</p><div class="sf-period"><div><label for="sfMode">集計期間</label><select id="sfMode"><option value="month">月ごと</option><option value="day">1日だけ</option><option value="all">全期間</option></select></div><div><label id="sfPeriodLabel" for="sfMonth">対象月</label><input id="sfMonth" type="month"><input id="sfDay" type="date" hidden></div></div><button id="sfRefresh" class="btn dark sf-button" type="button">集計を更新</button><p id="sfStatus" class="note" role="status" aria-live="polite">現場を選んでください。</p><div id="sfResult"></div>';
+      panel.innerHTML = '<h3>現場原価・自動計算</h3><p class="sf-note">日報から自動計算します。日ごとの費用保存は不要です。保存済みの調整額は優先し、未記録・現場移動の配分待ちだけを分かるように表示します。</p><div class="sf-period"><div><label for="sfMode">集計期間</label><select id="sfMode"><option value="month">月ごと</option><option value="day">1日だけ</option><option value="all">全期間</option></select></div><div><label id="sfPeriodLabel" for="sfMonth">対象月</label><input id="sfMonth" type="month"><input id="sfDay" type="date" hidden></div></div><button id="sfRefresh" class="btn dark sf-button" type="button">集計を更新</button><p id="sfStatus" class="note" role="status" aria-live="polite">現場を選んでください。</p><div id="sfResult"></div>';
       const body = q('#siteSummaryBody'); card.insertBefore(panel, q('#sfLegacyDetails') || (body?.parentElement === card ? body : null));
       q('#sfMonth').value = todayLocal().slice(0, 7); q('#sfDay').value = todayLocal();
       q('#sfMode').addEventListener('change', () => {const mode = q('#sfMode').value; q('#sfMonth').hidden = mode !== 'month'; q('#sfDay').hidden = mode !== 'day'; q('#sfPeriodLabel').hidden = mode === 'all'; q('#sfPeriodLabel').textContent = mode === 'day' ? '作業日' : '対象月'; q('#sfPeriodLabel').htmlFor = mode === 'day' ? 'sfDay' : 'sfMonth'; invalidate();});
@@ -445,7 +445,7 @@
       html += line(label, e.missing === e.count && e.count ? '金額未入力' : e.count ? yen(e.value) : '記録なし', e.count + '件' + (e.missing ? ' ／ 金額未入力 ' + e.missing + '件は小計に含めていません。' : ''));
     });
     const pending = Object.entries(result.categories).filter(([, c]) => c.reviewDates.length).map(([kind, c]) => names[kind] + c.reviewDates.length + '日');
-    if (pending.length) html += '<p class="sf-alert">一部費用の要確認：' + escape(pending.join('・')) + '。計算できる分はすでに小計へ反映済みです。通勤台数や現場間の配分など、不明な分だけ確認・調整してください。通常の日は費用保存なしで表示します。</p>';
+    if (pending.length) html += '<p class="sf-alert"><b>追加入力・現場移動の配分待ち：</b>' + escape(pending.join('・')) + '。計算できる分はすでに小計へ反映済みです。通勤台数や現場間の配分など、不明な分だけ入力してください。通常の日は費用保存なしで表示します。</p>';
     if (result.categories.labor.revenue) html += line('常用に行く分の売上（原価と別）', yen(result.categories.labor.revenue), 'この売上は上の原価小計へ加算・相殺していません。');
     html += '<details><summary>計算方法</summary><p class="sf-note">人件費（登録単価×日報人数、保存額があればそちらを優先）＋車両使用料＋重機使用料＋日報の燃料・油脂＋処分費＋重機回送費＋小型機械費＋その他経費。車両・重機・小型機械の使用料から燃料代は差し引かず、燃料費として別に1回加算します。日報の「記録済み経費」は内訳が重なるため、さらに加算しません。</p><p class="sf-note">車両使用料 ' + yen(result.categories.vehicle.gross) + ' ＋ 重機使用料 ' + yen(result.categories.equipment.gross) + '。燃料・油脂は上の専用欄に別表示しています。</p><p class="sf-note">現場別の時間を入力した人工・車両・重機は日額÷8時間×使用時間で計算します。小型機械は登録した時間単価×使用時間×台数です。分単位の入力に対応します。時間欄のない過去の日報は従来の日額計算を残し、保存済み調整額を優先します。記録が競合する対象や時間未入力は要確認です。明建・朝日の通勤費・高速代は日報の専用欄から人件費内へ1回だけ加算します。市内は台数×登録単価、市外・特別料金は入力合計額です。半日でも通勤費は半額にしません。未記録の通勤台数を人数から推測しません。常用の来る/行くも日報だけで判定できないため保存・調整分を優先します。給油額は当日の消費額とは限りません。回送は日報の専用欄に追加した重機1台・片道回数×現行登録単価で計算し、手入力の合計額（0円も含む）を優先します。運搬会社へ支払う回送費から自社燃料代を差し引きません。メモだけの金額、単価未登録の回送・小型機械や未入力のリース費は自動加算しません。各入力額をそのまま合算し、消費税は新たに加算・税別換算しません。給与や決算用の実費集計ではなく、登録した社内単価による原価の目安です。</p></details>';
     html += '<details><summary>日別の内訳・自動計算を確認（' + result.days.length + '日）</summary>' + result.days.map(d => {
@@ -456,7 +456,7 @@
       }).join(' ／ ');
       return '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + escape(costs) + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ アタッチメント ' + yen(d.attachments) + ' ／ 小型機械・工具 ' + yen(d.tools) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>';
     }).join('') + '</details>';
-    if (result.warnings.length) html += '<details><summary>要確認の記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
+    if (result.warnings.length) html += '<details><summary>追加入力・配分待ちの記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
     if (result.notes.length) html += '<details><summary>現場移動の記録（' + result.notes.length + '件）</summary><p class="sf-note">' + result.notes.map(escape).join('<br><br>') + '</p></details>';
     q('#sfResult').innerHTML = html;
     bindContractEditor(result, site);

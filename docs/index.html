@@ -816,7 +816,10 @@ async function cloudSyncLocalReports(){
   let ok=0,ng=0,updated=0,inserted=0,deduped=0,photoOk=0,photoNg=0,wasteOk=0,wasteNg=0;
   for(let i=0;i<reports.length;i++){
     try{
-      const result=await cloudSaveReport(reports[i]);
+      const ready={...reports[i],cloudPending:false,cloudLastError:''};
+      const result=await cloudSaveReport(ready);
+      reports[i]={...ready,cloudId:result.id,cloudUpdatedAt:result.updatedAt};
+      set(LS.reports,reports);
       const photoResult=await cloudSyncPhotosForReport(reports[i].id,result?.id);
       const wasteResult=await cloudSyncWasteForReport(reports[i],result?.id);
       photoOk+=photoResult.ok;
@@ -1730,26 +1733,33 @@ async function saveReport(){
   if(window.__toyaReportSaveBusy)return;
   const d=collect();
   if(!validate(d))return;
+  if(!cloudProfile){
+    set(LS.draft,d);
+    const message='ログインが切れているため、まだ会社の日報へ保存していません。\n入力内容はこのiPhoneに残しました。ログイン後に「日報を保存」を押してください。';
+    showStatus(message);cloudMsg(message,'warn');alert(message);return;
+  }
   window.__toyaReportSaveBusy=true;const saveButton=$('#saveReportBtn');if(saveButton)saveButton.disabled=true;
+  let localStored=false;
   try{
-    if(cloudProfile){const c=await cloudReportWriteContext(d);if(c.target){d.cloudId=c.target.id;d.cloudUpdatedAt=c.target.updated_at;}}
+    const c=await cloudReportWriteContext(d);if(c.target){d.cloudId=c.target.id;d.cloudUpdatedAt=c.target.updated_at;}
     const addedPhotos=await savePhotosForReport(d.id);
     d.photoCount=Number(editingReport?.photoCount||0)+Number(addedPhotos||0);
     const a=get(LS.reports,[]);
     const editIndex=editingReport?a.findIndex(x=>String(x.id)===String(editingReport.id)):-1;
     if(editIndex>=0)a[editIndex]=d; else a.unshift(d);
     set(LS.reports,a);
+    localStored=true;
     populateLedgerSites();
     localStorage.removeItem(LS.draft);
     stagedPhotos=[];
     renderStagedPhotos();
     let cloudNote='';
-    if(cloudProfile){
+    {
       let cloudResult=null;
       try{
         cloudResult=await cloudSaveReport(d);
         if(!cloudResult?.verified)throw new Error('クラウドの保存結果を確認できませんでした。');
-        d.cloudId=cloudResult.id;d.cloudUpdatedAt=cloudResult.updatedAt;
+        d.cloudId=cloudResult.id;d.cloudUpdatedAt=cloudResult.updatedAt;d.cloudPending=false;d.cloudLastError='';
         const savedLocal=get(LS.reports,[]),savedIndex=savedLocal.findIndex(x=>String(x.id)===String(d.id));
         if(savedIndex>=0){savedLocal[savedIndex]=d;set(LS.reports,savedLocal);}
         await cloudLogActivity('report_save',cloudResult.id,{site:d.site,date:d.date,verified:true});
@@ -1774,6 +1784,12 @@ async function saveReport(){
     clearReportEditState();
     setTimeout(()=>document.querySelector('[data-page="recordsPage"]').click(),400);
   }catch(err){
+    if(localStored){
+      d.cloudPending=true;d.cloudLastError=String(err?.message||err);d.cloudAttemptedAt=new Date().toISOString();
+      const pendingLocal=get(LS.reports,[]),pendingIndex=pendingLocal.findIndex(x=>String(x.id)===String(d.id));
+      if(pendingIndex>=0){pendingLocal[pendingIndex]=d;set(LS.reports,pendingLocal);}
+      window.ToyaReportDelivery?.refresh?.();
+    }
     const message='保存を完了できませんでした：'+(err?.message||err)+'\n入力画面は残しています。成功表示にはしていません。';
     showStatus(message);cloudMsg(message,'bad');alert(message);
   }finally{window.__toyaReportSaveBusy=false;if(saveButton)saveButton.disabled=false;}
@@ -2276,7 +2292,8 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="employee-activity-summary.js?v=20260914-onboarding-v1"></script>
 <script src="shared-site-master.js?v=20260916-site-documents-v1"></script>
 <script src="unified-daily-rate-admin.js?v=20260910-v1"></script>
-<script src="report-draft-recovery.js?v=20260909-travel-site-v4"></script>
+<script src="report-draft-recovery.js?v=20260916-delivery-v1"></script>
+<script src="report-delivery.js?v=20260916-delivery-v1"></script>
 <script src="japanese-input.js?v=20260916-estimate-input-v1"></script>
 <script src="project-documents-engine.js?v=20260916-estimate-input-v1"></script>
 <script src="project-business.js?v=20260916-site-documents-v1"></script>
