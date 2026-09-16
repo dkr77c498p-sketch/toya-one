@@ -18,3 +18,11 @@ button,a.btn,summary{touch-action:manipulation}button:focus-visible,a:focus-visi
 #uxMasterGuide[hidden],#uxSaveStatus[hidden]{display:none!important}
 @media(max-width:380px){.ux-grid .btn{font-size:14px}.sub{font-size:10px}.internal-label{font-size:10px}.brand{font-size:20px}}
 @media print{#uxDailyHome,#uxReportGuide,#uxRecordGuide,#uxMasterGuide{display:none!important}}
+
+#uxSlogan{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.5}
+.ux-slogan-editor{margin:0 0 16px;border:1px solid #d4dec9;border-radius:12px;padding:0 12px}
+.ux-slogan-editor summary{min-height:44px;padding:12px 0;font-size:13px;cursor:pointer}
+.ux-slogan-editor textarea{box-sizing:border-box;width:100%;resize:vertical;min-height:76px}
+.ux-slogan-editor .btn{min-height:44px;margin-bottom:10px}
+.ux-slogan-editor .note{font-size:12px;line-height:1.6}
+#uxSloganReload[hidden]{display:none!important}

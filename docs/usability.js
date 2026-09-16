@@ -21,7 +21,7 @@
  function mount(){
   const home=q('#homePage');if(!home)return;
   const entry=document.createElement('div');entry.id='uxDailyHome';entry.className='card ux-entry';
-  entry.innerHTML='<p class="ux-eyebrow">毎日の作業</p><h2>今日も、安全に。</h2><div class="ux-grid"><button type="button" class="btn lime" id="uxWrite">日報を入力<small>現場・作業・写真を入力</small></button><button type="button" class="btn dark" id="uxRecords">日報・写真を見る<small>確認・変更・写真台帳</small></button></div>';
+  entry.innerHTML='<p class="ux-eyebrow">毎日の作業</p><h2 id="uxSlogan">今日も、安全に。</h2><div class="ux-grid"><button type="button" class="btn lime" id="uxWrite">日報を入力<small>現場・作業・写真を入力</small></button><button type="button" class="btn dark" id="uxRecords">日報・写真を見る<small>確認・変更・写真台帳</small></button></div>';
   home.prepend(entry);q('#uxWrite').onclick=()=>openPage('reportPage');q('#uxRecords').onclick=()=>openPage('recordsPage');
   const report=q('#reportPage'),guide=q('#reportPage .tap-guide');
   guide.id='uxReportGuide';guide.classList.add('ux-guide');
