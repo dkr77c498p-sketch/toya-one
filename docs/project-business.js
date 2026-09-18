@@ -296,7 +296,7 @@
   try{await fn();}catch(e){if(identity()===mine){note(operation+'できませんでした：'+String(e.message||e),true);if(operation==='確定')q('#pbActionStatus')?.scrollIntoView({block:'center',behavior:'smooth'});if(operation.startsWith('削除'))q('#pbDeleteStatus')?.scrollIntoView({block:'center',behavior:'smooth'});}}
   finally{busy=false;if(identity()===mine){document.querySelectorAll('[data-pb-was-disabled]').forEach(b=>{b.disabled=b.dataset.pbWasDisabled==='true';delete b.dataset.pbWasDisabled;});if(editor)updateTotals();}}
  }
- function adoptDocument(row){if(!row?.id)throw new Error('保存結果を確認できません。');docs=[...docs.filter(d=>d.id!==row.id),row].filter(d=>d.site_id===siteId);editor=copy(row);dirty=false;renderOverview();renderList();renderEditor();if(row.kind==='estimate')document.dispatchEvent(new CustomEvent('toya-estimate-document-changed',{detail:copy(row)}));}
+ function adoptDocument(row){if(!row?.id)throw new Error('保存結果を確認できません。');docs=[...docs.filter(d=>d.id!==row.id),row].filter(d=>d.site_id===siteId);editor=copy(row);dirty=false;renderOverview();renderList();renderEditor();document.dispatchEvent(new CustomEvent('toya-project-document-changed',{detail:{id:row.id,kind:row.kind}}));if(row.kind==='estimate')document.dispatchEvent(new CustomEvent('toya-estimate-document-changed',{detail:copy(row)}));}
  async function saveDocument(){
   let data;try{data=calculatedDocument().d;if(!data.document_date)throw new Error('発行日を入力してください。');if(data.transaction_start&&data.transaction_end&&data.transaction_start>data.transaction_end)throw new Error('工事期間の前後を確認してください。');}catch(e){return note(e.message,true);}
   editor.id=editor.id||crypto.randomUUID();const mine=owner,id=editor.id,expected=editor.updated_at||null;
@@ -347,6 +347,7 @@
    note('請求書を削除しています…');
    const r=await cloudClient.rpc('toya_delete_unissued_invoice',{p_id:d.id,p_expected_updated_at:d.updated_at});if(r.error)throw r.error;if(identity()!==mine)return;
    if(one(r.data)!==d.id)throw new Error('削除結果を確認できません。一覧を更新してください。');
+   document.dispatchEvent(new CustomEvent('toya-project-document-changed',{detail:{id:d.id,kind:d.kind}}));
    closeDocumentPreview?.();ticket++;docs=docs.filter(row=>row.id!==d.id);editor=null;dirty=false;renderOverview();renderList();renderEditor();if(!siteLoaded)await loadSite();if(identity()!==mine)return;note('「'+d.subject+'」を完全削除しました。'+(siteLoaded?'':'一覧を更新して確認してください。'));q('#pbDocuments')?.scrollIntoView({block:'start',behavior:'smooth'});
   },'削除');
   if(identity()===mine&&!editor)renderOverview();
