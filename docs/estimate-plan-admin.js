@@ -61,11 +61,27 @@
  function renderLists(){
   if(!q('#epSavedPlans'))return;updateNewButton();
   const rows=[...plans].sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
-  q('#epSavedPlans').innerHTML=rows.length?'<details open><summary>保存した見積を開く（'+rows.length+'件）</summary>'+rows.map(p=>'<div class="pb-document-row"><div><b>'+esc(p.title)+'</b><p>'+esc(p.customer_name||'宛先未入力')+'</p><strong>'+(p.calculation?.complete?'見積 '+yen(p.calculation.price):(p.entry_mode==='quote'?'入力済み見積 '+yen(p.calculation?.known_price||0):'積算途中 / 入力済原価 '+yen(p.calculation?.known_cost||0)))+'</strong></div><button class="btn light" type="button" data-ep-open="'+esc(p.id)+'">開く</button></div>').join('')+'</details>':'<p class="note">保存済みの見積積算はまだありません。</p>';
+  q('#epSavedPlans').innerHTML=rows.length?rows.map(p=>'<div class="pb-document-row"><div><b>'+esc(p.title)+'</b><p>'+esc(p.customer_name||'宛先未入力')+'</p><strong>'+(p.calculation?.complete?'見積 '+yen(p.calculation.price):(p.entry_mode==='quote'?'入力済み見積 '+yen(p.calculation?.known_price||0):'積算途中 / 入力済原価 '+yen(p.calculation?.known_cost||0)))+'</strong></div><div class="pb-actions"><button class="btn light" type="button" data-ep-open="'+esc(p.id)+'">開く</button><button class="btn danger" type="button" data-ep-delete-plan="'+esc(p.id)+'">削除</button></div></div>').join(''):'<p class="note">保存済みの見積はまだありません。</p>';
   q('#epSavedPlans').querySelectorAll('[data-ep-open]').forEach(b=>b.onclick=()=>{if(!discard()||!closeQuote())return;const saved=plans.find(p=>p.id===b.dataset.epOpen);plan=savedPlan(saved);dirty=plan.title!==saved.title;quoteRequest=null;simpleStep=2;renderPlan();});
+  q('#epSavedPlans').querySelectorAll('[data-ep-delete-plan]').forEach(b=>b.onclick=()=>deleteSavedPlan(b.dataset.epDeletePlan));
   const quoteRows=[...quotes].sort((a,b)=>b.created_at.localeCompare(a.created_at));
-  q('#epQuoteList').innerHTML=quoteRows.length?quoteRows.map(d=>'<div class="pb-document-row"><div><b>'+esc(d.document_number||'下書き')+'</b><span class="pb-badge">'+({draft:'下書き',issued:'確定',void:'取消済み'}[d.status])+'</span><p>'+esc(d.subject)+' / '+esc(d.document_date)+'</p><strong>'+yen(d.total)+'（税込）</strong></div><button type="button" class="btn light" data-ep-quote="'+esc(d.id)+'">開く</button></div>').join(''):'<p class="note">保存済みの見積書はありません。</p>';
+  q('#epQuoteList').innerHTML=quoteRows.length?quoteRows.map(d=>'<div class="pb-document-row"><div><b>'+esc(d.document_number||'下書き')+'</b><span class="pb-badge">'+({draft:'下書き',issued:'確定',void:'取消済み'}[d.status])+'</span><p>'+esc(d.subject)+' / '+esc(d.document_date)+'</p><strong>'+yen(d.total)+'（税込）</strong></div><div class="pb-actions"><button type="button" class="btn light" data-ep-quote="'+esc(d.id)+'">開く</button>'+(d.status==='draft'&&!d.document_number?'<button type="button" class="btn danger" data-ep-delete-quote="'+esc(d.id)+'">削除</button>':'')+'</div></div>').join(''):'<p class="note">完成・保存した見積書はまだありません。</p>';
   q('#epQuoteList').querySelectorAll('[data-ep-quote]').forEach(b=>b.onclick=()=>{if(!discard()||!closeQuote())return;window.ToyaProjectBusiness?.openEstimate(copy(quotes.find(d=>d.id===b.dataset.epQuote)));});
+  q('#epQuoteList').querySelectorAll('[data-ep-delete-quote]').forEach(b=>b.onclick=()=>deleteDraftQuote(b.dataset.epDeleteQuote));
+ }
+ async function deleteSavedPlan(id){
+  const saved=plans.find(p=>p.id===id);if(!saved)return;
+  if(!confirm('「'+saved.title+'」を削除しますか？\n元には戻せません。'))return;
+  const r=await cloudClient.rpc('toya_delete_estimate_plan',{p_id:id,p_expected_updated_at:saved.updated_at});
+  if(r.error)return note('削除できませんでした：'+r.error.message,true);
+  plans=plans.filter(p=>p.id!==id);if(plan?.id===id){plan=null;dirty=false;q('#epEditor').innerHTML='';}renderLists();note('見積を削除しました。');
+ }
+ async function deleteDraftQuote(id){
+  const saved=quotes.find(d=>d.id===id);if(!saved)return;
+  if(!confirm('「'+saved.subject+'」の下書きを削除しますか？\n元には戻せません。'))return;
+  const r=await cloudClient.rpc('toya_delete_unissued_document',{p_id:id,p_expected_updated_at:saved.updated_at});
+  if(r.error)return note('削除できませんでした：'+r.error.message,true);
+  quotes=quotes.filter(d=>d.id!==id);renderLists();note('見積書の下書きを削除しました。');
  }
  function renderPlan(scroll=true){
   const host=q('#epEditor');if(!host)return;if(!plan){host.innerHTML='';return;}
