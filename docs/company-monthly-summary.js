@@ -1,4 +1,4 @@
-/* Read-only company totals. Monthly sales use issued invoices, never quote or contract totals. */
+/* Read-only company totals. Contract-based monthly margins and issued invoices stay separate. */
 (() => {
  'use strict';
  const node=typeof module==='object'&&module.exports;
@@ -58,20 +58,31 @@
   const siteIds=new Set(data.sites.map(s=>s.id));
   const unlinked=['reports','laborSheets','vehicleSheets','equipmentSheets'].reduce((n,key)=>n+data[key].filter(r=>!siteIds.has(r.site_id)).length,0);
   let invalidPhases=0;
+  const profilesBySite=new Map(data.profiles.map(p=>[p.site_id,p]));
   for(const profile of data.profiles){
    if(excluded.has(profile.site_id))continue;
    for(const phase of list(profile.contract_breakdown).filter(p=>p?.target_month===month)){
-    const amount=S.amount(phase.amount);if(amount===null||amount<0||!['planned','complete'].includes(phase.status)){invalidPhases++;continue;}
+    const amount=S.amount(phase.amount);if(amount===null||amount<0||!['planned','complete'].includes(phase.status)){invalidPhases++;rowFor(profile.site_id).invalidPhases=true;continue;}
     const row=rowFor(profile.site_id),key=phase.status==='complete'?'completed':'planned';
     row[key]=add(row[key],amount);row.phaseCount++;phaseCount++;
     if(key==='completed')completed=add(completed,amount);else planned=add(planned,amount);
    }
   }
-  const shown=[...rows.values()].filter(r=>!excluded.has(r.site.id)&&(r.hasCosts||r.invoiceCount||r.draftCount||r.phaseCount||r.outgoing||r.contractRecorded))
+  const shown=[...rows.values()].filter(r=>!excluded.has(r.site.id)&&(r.hasCosts||r.invoiceCount||r.draftCount||r.phaseCount||r.invalidPhases||r.outgoing||r.contractRecorded||(within(r.site.completed_on)&&contractsBySite.has(r.site.id))))
    .map(r=>{
     const contracts=contractsBySite.get(r.site.id)||[],amount=contracts.length===1?S.amount(contracts[0].amount):null;
     const contractState=!contracts.length?'missing':contracts.length===1&&amount!==null&&amount>=0&&siteIds.has(r.site.id)?'registered':'invalid';
-    return {...r,contractAmount:contractState==='registered'?amount:null,contractState,profit:r.hasCosts?add(r.sales,-r.cost):null};
+    const rawPhases=profilesBySite.get(r.site.id)?.contract_breakdown,phases=list(rawPhases);
+    const malformedPhases=rawPhases!=null&&!Array.isArray(rawPhases);
+    let monthlyContractAmount=null,monthlyContractSource='missing';
+    if(!siteIds.has(r.site.id)||r.invalidPhases||malformedPhases)monthlyContractSource='invalid';
+    else if(r.phaseCount){monthlyContractAmount=add(r.planned,r.completed);monthlyContractSource='breakdown';}
+    else if(!phases.length&&within(r.site.completed_on)&&contractState==='registered'){monthlyContractAmount=amount;monthlyContractSource='completion';}
+    const validPhases=phases.length&&phases.every(p=>p&&/^\d{4}-(0[1-9]|1[0-2])$/.test(p.target_month)&&S.amount(p.amount)!==null&&S.amount(p.amount)>=0&&['planned','complete'].includes(p.status));
+    const phaseTotal=validPhases?phases.reduce((sum,p)=>add(sum,S.amount(p.amount)),0):null;
+    const contractMismatch=contractState==='registered'&&phaseTotal!==null&&phaseTotal!==amount;
+    return {...r,contractAmount:contractState==='registered'?amount:null,contractState,profit:r.hasCosts?add(r.sales,-r.cost):null,
+     monthlyContractAmount,monthlyContractSource,monthlyProfit:monthlyContractAmount!==null&&r.hasCosts?add(monthlyContractAmount,-r.cost):null,contractMismatch,phaseTotal};
    })
    .sort((a,b)=>a.site.name.localeCompare(b.site.name,'ja'));
   const contractCount=shown.filter(r=>r.contractState==='registered').length;
@@ -83,8 +94,13 @@
   const missingCosts=shown.filter(r=>r.invoiceCount&&!r.hasCosts).length;
   const warningCount=shown.reduce((n,r)=>n+r.warnings.length,0);
   const knownCost=hasCosts&&!unlinked?cost:null;
+  const missingMonthlyContracts=shown.filter(r=>r.monthlyContractAmount===null).length;
+  const missingMonthlyCosts=shown.filter(r=>r.monthlyContractAmount!==null&&!r.hasCosts).length;
+  const monthlyContractTotal=shown.length&&!missingMonthlyContracts?shown.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
+  const monthlyProfit=monthlyContractTotal!==null&&knownCost!==null&&!missingMonthlyCosts?add(monthlyContractTotal,-knownCost):null;
   return {month,rows:shown,sales,invoiceCount,cost:knownCost,profit:knownCost===null?null:add(sales,-knownCost),
    contractTotal,contractCount,missingContracts,invalidContracts,allocatedContract,
+   monthlyContractTotal,monthlyProfit,missingMonthlyContracts,missingMonthlyCosts,
    draftCount,draftAmount,planned,completed,phaseCount,outgoing,invalidPhases,unlinked,missingInvoices,missingCosts,warningCount,
    partial:!!(warningCount||missingInvoices||missingCosts||unlinked||draftCount),hasData:!!(shown.length||unlinked)};
  }
@@ -111,10 +127,10 @@
   card.innerHTML='<div class="cm-heading"><h2 id="cmTitle">今月の請負金・売上・原価・利益</h2><span id="cmScope">選択現場・税別</span></div>'+
    '<div class="cm-controls"><div><label for="cmMonth">対象月</label><input id="cmMonth" type="month" min="2000-01" value="'+month+'"></div><button id="cmThisMonth" class="btn light" type="button">今月</button><button id="cmRefresh" class="btn dark" type="button">更新</button></div>'+
    '<details id="cmSiteFilter"><summary>集計する現場を選ぶ</summary><p class="note">チェックした現場の請負金・売上・原価・利益を集計します。日報や保存金額は変更しません。選択はこの端末・会社ごとに保存します。</p><div id="cmSiteChoices"></div></details><p id="cmSelectionNote" class="note"></p>'+
-   '<div class="cm-metrics"><div><span>請負金額（対象現場の総額）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>売上（確定請求分）</span><strong id="cmSales">—</strong></div><div><span>原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>請求済み売上 − 原価</span><strong id="cmProfit">—</strong></div></div>'+
+   '<div class="cm-metrics"><div><span>対象月の請負分（未請求含む）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>請求済み（参考）</span><strong id="cmSales">—</strong></div><div><span>対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（請負分基準・暫定）</span><strong id="cmProfit">—</strong></div></div>'+
    '<p id="cmContractInfo" class="cm-contract-note"></p>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
-   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>請負金額：対象月に日報・費用・請求書・月別契約内訳・請負金の登録がある現場の、現在の契約総額です。月をまたぐ工事は全工期分を含みます。「対象月の契約内訳」は、月別に割り当てた登録分です。</p><p>売上：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>利益：売上 − 入力済み原価の概算です。未請求分・未入力の費用・会社全体の管理費は含まず、会計上の確定利益ではありません。</p><p>請負金・月別契約内訳・常用売上は参考表示です。請求書との重複を避けるため、上の売上には追加していません。</p></div></details>';
+   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。内訳が一つもない現場は、完工月に請負金を含めます。月別内訳も完工月も決まっていない現場は、自動で月を割り当てず「月割り未登録」と表示します。</p><p>請求済み：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。請負分との重複を避けるため、利益には加算しません。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
   home.prepend(card);place();
   q('#cmMonth').onchange=()=>{month=q('#cmMonth').value;followCurrent=month===japanMonth();ticket++;pending='';loaded='';empty();refresh();};
   q('#cmThisMonth').onclick=()=>{month=japanMonth();followCurrent=true;q('#cmMonth').value=month;ticket++;pending='';loaded='';empty();refresh();};
@@ -165,29 +181,30 @@
   throw Error('記録の全件を確認できませんでした。途中の合計は表示していません。');
  }
  function render(result){
-  q('#cmContract').textContent=yen(result.contractTotal);
-  q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);q('#cmProfit').textContent=yen(result.profit);
-  const contractNotes=['請負金は対象月に記録のある現場の契約総額です（全工期分）。'];
-  if(result.contractCount)contractNotes.push('請負金登録済み '+result.contractCount+'現場。');
-  if(result.missingContracts)contractNotes.push('請負金未登録 '+result.missingContracts+'現場。');
-  if(result.phaseCount)contractNotes.push('対象月の契約内訳（登録分）：'+yen(result.allocatedContract));
-  q('#cmContractInfo').textContent=contractNotes.join(' ');
-  q('#cmProfit').classList.toggle('cm-negative',result.profit!==null&&result.profit<0);
+  q('#cmContract').textContent=yen(result.monthlyContractTotal);
+  q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);q('#cmProfit').textContent=yen(result.monthlyProfit);
+  q('#cmContractInfo').textContent=result.hasData?'利益は「対象月の請負分 − 対象月の入力済み原価」です。未請求分を含む途中の差額で、追加費用により変わります。':'';
+  q('#cmProfit').classList.toggle('cm-negative',result.monthlyProfit!==null&&result.monthlyProfit<0);
   const notices=[];
   if(!result.hasData)notices.push('この月の記録はまだありません。');
-  if(result.invalidContracts)notices.push('請負金額の重複・金額・現場の確認が必要な記録 '+result.invalidContracts+'現場。請負金の合計は表示していません。');
-  if(result.missingInvoices)notices.push('日報・費用があるうち、確定請求がない現場 '+result.missingInvoices+'件。利益は請求前の途中の数値です。');
-  if(result.missingCosts)notices.push('請求済みで原価の記録がない現場 '+result.missingCosts+'件。');
+  if(result.missingMonthlyContracts)notices.push('対象月の請負分が未登録・要確認の現場 '+result.missingMonthlyContracts+'件。内訳を開き、現場設定で月別契約内訳または完工日・請負金を確認してください。請負分と利益の合計は表示していません。');
+  if(result.missingMonthlyCosts)notices.push('請負分は登録済みですが、原価の記録がない現場 '+result.missingMonthlyCosts+'件。利益の合計は表示していません。');
   if(result.warningCount)notices.push('原価に未入力・確認待ちがあります。内訳で確認できます。');
   if(result.unlinked)notices.push('現場の紐付けを確認できない日報・費用 '+result.unlinked+'件。原価と利益の合計は表示していません。');
   q('#cmNotice').textContent=notices.join(' ');
   const references=[];
+  if(result.contractCount||result.invalidContracts)references.push('対象現場の請負総額（全工期・登録分）：'+yen(result.contractTotal));
+  if(result.missingContracts)references.push('請負総額が未登録の現場：'+result.missingContracts+'件');
+  if(result.invalidContracts)references.push('請負総額の重複・金額・現場を要確認：'+result.invalidContracts+'件');
+  if(result.hasData)references.push('請求済み − 原価（参考）：'+yen(result.profit)+'。未請求分は含みません。');
+  if(result.missingInvoices)references.push('日報・費用があり、対象月に確定請求がない現場：'+result.missingInvoices+'件');
   if(result.draftCount)references.push('未確定の請求書：'+result.draftCount+'件 ／ '+yen(result.draftAmount));
   if(result.phaseCount)references.push('月別契約内訳：出来高済み '+yen(result.completed)+' ／ 予定 '+yen(result.planned));
   if(result.outgoing)references.push('常用売上の記録：'+yen(result.outgoing));
   if(result.invalidPhases)references.push('金額・状態を確認できない月別契約内訳：'+result.invalidPhases+'件');
-  const cells=result.rows.map(row=>'<tr><th scope="row">'+escape(row.site.name)+(row.site.completed_on?'<small>完工済み</small>':'')+'</th><td data-label="請負金（全工期）">'+(row.contractState==='registered'?yen(row.contractAmount):row.contractState==='invalid'?'要確認':'未登録')+'</td><td data-label="売上">'+yen(row.sales)+'</td><td data-label="原価">'+(row.hasCosts?yen(row.cost):'記録なし')+'</td><td data-label="概算利益">'+yen(row.profit)+'</td></tr>').join('');
-  q('#cmBreakdown').innerHTML=references.map(s=>'<p class="cm-reference">'+escape(s)+'</p>').join('')+(result.rows.length?'<div class="cm-table-wrap"><table><caption>選択した現場の月別集計</caption><thead><tr><th>現場</th><th>請負金（全工期）</th><th>売上</th><th>原価</th><th>概算利益</th></tr></thead><tbody>'+cells+'</tbody></table></div>':'')+
+  for(const row of result.rows.filter(r=>r.contractMismatch))references.push(row.site.name+'：請負総額 '+yen(row.contractAmount)+' と月別内訳の全期間合計 '+yen(row.phaseTotal)+' が異なります。対象月に登録された内訳を優先して集計しています。');
+  const cells=result.rows.map(row=>'<tr><th scope="row">'+escape(row.site.name)+(row.site.completed_on?'<small>完工済み</small>':'')+'</th><td data-label="対象月の請負分"><span>'+(row.monthlyContractAmount!==null?yen(row.monthlyContractAmount)+'<small>'+(row.monthlyContractSource==='breakdown'?'月別内訳':'完工月の請負金')+'</small>':row.monthlyContractSource==='invalid'?'要確認':row.contractState==='missing'?'請負金未登録':'月割り未登録')+'</span></td><td data-label="請求済み">'+yen(row.sales)+'</td><td data-label="原価">'+(row.hasCosts?yen(row.cost):'記録なし')+'</td><td data-label="暫定利益">'+yen(row.monthlyProfit)+'</td></tr>').join('');
+  q('#cmBreakdown').innerHTML=(result.rows.length?'<div class="cm-table-wrap"><table><caption>選択した現場の月別集計</caption><thead><tr><th>現場</th><th>対象月の請負分</th><th>請求済み</th><th>原価</th><th>暫定利益</th></tr></thead><tbody>'+cells+'</tbody></table></div>':'')+references.map(s=>'<p class="cm-reference">'+escape(s)+'</p>').join('')+
    result.rows.filter(r=>r.warnings.length).map(r=>'<details class="cm-site-warnings"><summary>'+escape(r.site.name)+'：原価の確認 '+r.warnings.length+'件</summary>'+r.warnings.map(w=>'<p>'+escape(w)+'</p>').join('')+'</details>').join('');
   setStatus('確定請求 '+result.invoiceCount+'件 ／ '+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+' 更新');
  }

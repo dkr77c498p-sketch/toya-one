@@ -5,7 +5,7 @@ const monthly=require('../docs/company-monthly-summary.js');
 const root=path.join(__dirname,'../docs/');
 const pause=()=>new Promise(r=>setTimeout(r,30));
 const until=async test=>{for(let n=0;n<60;n++){if(test())return;await pause();}assert.fail('UI did not settle');};
-async function setup(role='admin'){
+async function setup(role='admin',configure=()=>{}){
  const dom=new JSDOM(fs.readFileSync(root+'index.html','utf8'),{runScripts:'outside-only',url:'https://example.test',pretendToBeVisual:true}),w=dom.window;
  const realDate=w.Date;w.Date=class extends realDate{constructor(...a){super(...(a.length?a:['2026-09-18T06:00:00Z']));}static now(){return +new realDate('2026-09-18T06:00:00Z');}};
  w.cloudProfile={id:'admin',active:role!=='inactive',role:role==='inactive'?'admin':role,company_id:'company-a'};w.ToyaSiteCostSummaryEngine=engine;
@@ -14,6 +14,7 @@ async function setup(role='admin'){
  data.contracts=structuredClone(data.revenues).map(r=>({...r,revenue_date:'2026-07-01'}));
  data.sites[0].name='<img src=x onerror=alert(1)>';
  data.reports[0].report_data.site=data.sites[0].name;
+ configure(data);
  for(const [key,table] of monthly.sources())db[table]=(data[key]||[]).map(r=>({...r,company_id:'company-a'}));
  w.cloudClient={from(table){const filters=[];let sort='id',start=0,end=499;return{select(){return this;},eq(k,v){filters.push(['eq',k,v]);return this;},gte(k,v){filters.push(['gte',k,v]);return this;},lt(k,v){filters.push(['lt',k,v]);return this;},order(k){sort=k;return this;},range(a,b){start=a;end=b;return this;},then(resolve,reject){
   calls.push({table,filters:structuredClone(filters),start,end});
@@ -29,6 +30,21 @@ async function setup(role='admin'){
  return{w,dom,db,calls,state,q:s=>w.document.querySelector(s)};
 }
 (async()=>{
+ {
+ const f=await setup('admin',data=>{data.profiles=[{site_id:'b',contract_breakdown:[{target_month:'2026-09',amount:10000,status:'planned'}]},{site_id:'d',contract_breakdown:[{target_month:'2026-09',amount:4000,status:'planned'}]}];}),{w,q,db}=f;
+ assert.equal(q('#cmContract').textContent,'114,000円');assert.equal(q('#cmProfit').textContent,'77,700円');
+ assert.equal(q('#cmSales').textContent,'130,000円');assert.match(q('#cmContractInfo').textContent,/未請求分/);
+ assert.match(q('.cm-method').textContent,/完工月/);assert.match(q('.cm-method').textContent,/今後の費用/);
+ db.project_documents=[];q('#cmRefresh').click();await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');
+ assert.equal(q('#cmSales').textContent,'0円');assert.equal(q('#cmProfit').textContent,'77,700円');assert(!q('#cmProfit').classList.contains('cm-negative'));
+ assert.match(q('#cmBreakdown').textContent,/請求済み − 原価（参考）：-36,300円/);
+ const a=q('#cmSiteChoices input[data-site-id="a"]');a.checked=false;a.dispatchEvent(new w.Event('change'));
+ assert.equal(q('#cmContract').textContent,'14,000円');assert.equal(q('#cmProfit').textContent,'12,400円');
+ db.site_project_profiles.find(r=>r.site_id==='b').contract_breakdown[0].amount=0;db.site_project_profiles.find(r=>r.site_id==='d').contract_breakdown[0].amount=0;
+ q('#cmRefresh').click();await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');
+ assert.equal(q('#cmProfit').textContent,'-1,600円');assert(q('#cmProfit').classList.contains('cm-negative'));
+ f.dom.window.close();console.log('PASS main margin includes unbilled work, invoice totals stay separate, selected sites and genuine negatives render correctly');
+ }
  {
  const f=await setup(),{w,q}=f;
  const check=q('#cmSiteChoices input[data-site-id="a"]');assert(check.checked);
@@ -46,8 +62,8 @@ async function setup(role='admin'){
  }
  console.log('PASS employee/inactive profiles do not request or render company financial totals');
  const f=await setup(),{w,db,calls,state,q}=f;
- assert.equal(q('#cmSales').textContent,'130,000円');assert.equal(q('#cmCost').textContent,'36,300円');assert.equal(q('#cmProfit').textContent,'93,700円');
- assert.equal(q('#cmContract').textContent,'110,000円');assert.equal(q('.cm-metrics').children.length,4);assert.match(q('#cmContractInfo').textContent,/請負金未登録 1現場/);assert.equal(q('#cmBreakdown [data-label="請負金（全工期）"]').textContent,'100,000円');
+ assert.equal(q('#cmSales').textContent,'130,000円');assert.equal(q('#cmCost').textContent,'36,300円');assert.equal(q('#cmProfit').textContent,'—');
+ assert.equal(q('#cmContract').textContent,'—');assert.equal(q('.cm-metrics').children.length,4);assert.match(q('#cmNotice').textContent,/未登録・要確認の現場 2件/);assert.match(q('#cmBreakdown [data-label="対象月の請負分"]').textContent,/100,000円.*完工月/);
  assert.equal(q('#homePage').firstElementChild.id,'uxDailyHome');assert.equal(q('#uxDailyHome').nextElementSibling.id,'companyMonthlySummary');
  assert.equal(q('#cmBreakdown img'),null);assert.ok(q('#cmBreakdown').textContent.includes('<img src=x onerror=alert(1)>'));
  assert.ok(calls.every(c=>c.filters.some(([op,k,v])=>op==='eq'&&k==='company_id'&&v==='company-a')));
@@ -59,8 +75,8 @@ async function setup(role='admin'){
  assert.equal(q('#cmSales'),metrics);assert.equal(q('#details'),input);assert.equal(input.value,'未保存の日本語入力');assert.equal(w.document.activeElement,input);assert.equal(q('#cmDetails').open,true);
  console.log('PASS scoped read-only fetch, escaped site names, stable home placement/focus/input/details with no scrolling');
  db.revenues.find(r=>r.site_id==='a').amount=120000;w.document.dispatchEvent(new w.CustomEvent('toya-site-project-profile-saved'));
- q('#cmRefresh').click();await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');assert.equal(q('#cmContract').textContent,'130,000円');assert.equal(q('#cmSales').textContent,'130,000円');assert.equal(q('#cmProfit').textContent,'93,700円');
- console.log('PASS saved contract updates reach the summary without changing invoiced sales or profit');
+ q('#cmRefresh').click();await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');assert.match(q('#cmBreakdown [data-label="対象月の請負分"]').textContent,/120,000円/);assert.equal(q('#cmSales').textContent,'130,000円');assert.equal(q('#cmProfit').textContent,'—');
+ console.log('PASS saved contract updates change completion-month basis, preserve invoiced sales, and do not hide missing allocations');
 
  db.project_documents=Array.from({length:1001},(_,n)=>({id:'page-'+String(n).padStart(4,'0'),company_id:'company-a',site_id:'a',kind:'invoice',status:'issued',document_date:'2026-09-10',subtotal:1}));
  q('#cmRefresh').click();await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');assert.equal(q('#cmSales').textContent,'1,001円');
@@ -68,7 +84,7 @@ async function setup(role='admin'){
  db.project_documents.push({id:'aug',company_id:'company-a',site_id:'a',kind:'invoice',status:'issued',document_date:'2026-08-31',subtotal:2000});
  q('#cmMonth').value='2026-08';q('#cmMonth').dispatchEvent(new w.Event('change'));assert.equal(q('#cmSales').textContent,'—');await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');
  assert.equal(q('#cmSales').textContent,'2,000円');assert.equal(q('#cmCost').textContent,'—');assert.equal(q('#cmProfit').textContent,'—');assert.match(q('#cmTitle').textContent,/月別/);
- assert.equal(q('#cmContract').textContent,'120,000円');
+ assert.equal(q('#cmContract').textContent,'—');
  q('#cmThisMonth').click();await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');assert.equal(q('#cmMonth').value,'2026-09');assert.equal(q('#cmSales').textContent,'1,001円');
  console.log('PASS complete pagination beyond 1000 records and explicit month navigation without stale values');
 

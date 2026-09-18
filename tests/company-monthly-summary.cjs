@@ -81,3 +81,43 @@ assert.equal(selected.phaseCount,0);assert.equal(selected.draftCount,0);assert(!
 const none=M.calculate(base,'2026-09',base.sites.map(s=>s.id));assert.equal(none.rows.length,0);assert.equal(none.cost,null);
 assert.equal(M.calculate(base,'2026-09',[]).cost,r.cost);
 console.log('PASS excluded sites removed from all metrics, phases and warnings; original full dataset retained for movement calculation');
+
+// Synthetic multi-month job plus three jobs completed in the selected month.
+const monthBasis={
+ sites:[{id:'long',name:'複数月の工事'},{id:'done1',name:'完工1',completed_on:'2026-09-03'},{id:'done2',name:'完工2',completed_on:'2026-09-03'},{id:'unbilled',name:'未請求完工',completed_on:'2026-09-18'}],
+ contracts:[['long',3000000],['done1',750000],['done2',200000],['unbilled',450000]].map(([site_id,amount])=>({id:site_id,site_id,amount,revenue_type:'contract',revenue_date:'2026-09-01'})),
+ profiles:[{site_id:'long',contract_breakdown:[{target_month:'2026-08',amount:600000,status:'complete'},{target_month:'2026-09',amount:3000000,status:'planned'}]}],
+ laborSheets:[['long',2300000],['done1',170000.17],['done2',30000],['unbilled',100000]].map(([site_id,cost_total])=>({id:site_id,site_id,work_date:'2026-09-08',cost_total,revenue_total:0})),
+ documents:[bill('done1',750000,{site_id:'done1'}),bill('done2',200000,{site_id:'done2'})]
+};
+const mr=calculate(monthBasis);
+assert.equal(mr.cost,2600000.17);assert.equal(mr.sales,950000);assert.equal(mr.profit,-1650000.17);
+assert.equal(mr.monthlyContractTotal,4400000);assert.equal(mr.monthlyProfit,1799999.83);
+assert.equal(mr.rows.find(r=>r.site.id==='long').monthlyContractSource,'breakdown');
+assert.equal(mr.rows.find(r=>r.site.id==='long').contractMismatch,true);
+assert.equal(mr.rows.find(r=>r.site.id==='unbilled').monthlyContractSource,'completion');
+const billed=structuredClone(monthBasis);billed.documents.push(bill('new',3000000,{site_id:'long'}));
+assert.equal(calculate(billed).monthlyProfit,mr.monthlyProfit);assert.equal(calculate(billed).sales,3950000);
+assert.equal(M.calculate(monthBasis,'2026-09',['long']).monthlyContractTotal,1400000);
+const older=M.calculate(monthBasis,'2026-08');assert.equal(older.monthlyContractTotal,600000);assert.equal(older.monthlyProfit,null);
+assert.equal(older.rows.length,1);
+console.log('PASS monthly contract basis includes unbilled completions, uses only matching phases and never adds invoices twice');
+
+const unsafe=structuredClone(monthBasis);unsafe.sites[3].completed_on=null;
+assert.equal(calculate(unsafe).monthlyContractTotal,null);assert.equal(calculate(unsafe).monthlyProfit,null);assert.equal(calculate(unsafe).missingMonthlyContracts,1);
+unsafe.profiles.push({site_id:'unbilled',contract_breakdown:[{target_month:'2026-09',amount:450000,status:'planned'}]});
+assert.equal(calculate(unsafe).monthlyProfit,mr.monthlyProfit);
+unsafe.profiles[1].contract_breakdown[0].amount=null;
+assert.equal(calculate(unsafe).monthlyProfit,null);assert.equal(calculate(unsafe).rows.find(r=>r.site.id==='unbilled').monthlyContractSource,'invalid');
+unsafe.profiles[1].contract_breakdown='malformed';
+assert.equal(calculate(unsafe).monthlyContractTotal,null);
+const missingMonthlyCost=structuredClone(monthBasis);missingMonthlyCost.laborSheets.pop();
+assert.equal(calculate(missingMonthlyCost).monthlyContractTotal,4400000);assert.equal(calculate(missingMonthlyCost).monthlyProfit,null);assert.equal(calculate(missingMonthlyCost).missingMonthlyCosts,1);
+const explicitZero=structuredClone(monthBasis);explicitZero.profiles[0].contract_breakdown[1].amount=0;explicitZero.laborSheets[0].cost_total=0;
+assert.equal(calculate(explicitZero).monthlyContractTotal,1400000);assert.equal(calculate(explicitZero).monthlyProfit,1099999.83);
+const otherOnly=structuredClone(monthBasis);otherOnly.profiles[0].contract_breakdown.pop();otherOnly.sites[0].completed_on='2026-09-30';
+assert.equal(calculate(otherOnly).monthlyContractTotal,null);assert.equal(calculate(otherOnly).rows.find(r=>r.site.id==='long').monthlyContractSource,'missing');
+const overrun=structuredClone(monthBasis);overrun.laborSheets[0].cost_total=5000000;
+assert.equal(calculate(overrun).monthlyProfit,-900000.17);
+assert.equal(calculate(orphan).monthlyProfit,null);
+console.log('PASS missing month allocation/costs and malformed phases block misleading profit; explicit zero and genuine losses are preserved');
