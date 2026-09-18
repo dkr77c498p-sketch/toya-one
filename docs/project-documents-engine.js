@@ -211,7 +211,9 @@
  .te2-summary{padding-top:24.86mm}.te2-summary .te2-sheet-head{top:19.2mm}
  .te2-conditions{width:177.46mm;border:.6mm solid #111;border-collapse:collapse;table-layout:fixed}.te2-conditions th,.te2-conditions td{border:.3mm solid #111;height:7.75mm;padding:.4mm 3mm;font-size:7.92pt;line-height:1.12;vertical-align:middle;overflow-wrap:anywhere}.te2-conditions th{font-size:15.84pt;line-height:1;text-align:center;border-bottom:.6mm solid #111;white-space:nowrap}.te2-conditions tr{break-inside:avoid}
  @media screen{html{background:#eee}body{width:794px;min-width:794px;padding:8px;background:#eee;transform-origin:top left}.te2-page{margin:0 0 12px;box-shadow:0 0 0 1px #ddd}}
- @media print{html,body{zoom:1!important}}
+ /* Physical full-page minimums can round past Safari's printable height,
+    producing an empty overflow page. Content is already paginated above. */
+ @media print{html,body{zoom:1!important;width:auto;min-width:0;margin:0;padding:0}.te2-page{min-height:0;height:auto;padding-bottom:0;break-after:page;page-break-after:always}.te2-cover,.te2-main{height:280mm}.te2-page:last-child{break-after:auto;page-break-after:auto}}
  `;
  return {kinds,escape,yen,lineAmount,total,billed,progress,percentAmount,draft,printHTML,estimateConditions,estimateWorkPeriod};
 });

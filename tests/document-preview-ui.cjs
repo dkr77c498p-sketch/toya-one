@@ -57,6 +57,15 @@ const {setup,pause}=require('./project-business-ui.cjs');
   let prints=0;frame.contentWindow.focus=()=>{};
   frame.contentWindow.print=()=>{prints++;assert.equal(inner.documentElement.outerHTML,original);};
   q('#pbPrint').click();assert.equal(prints,1,'print the original A4 document, not the scaled outer page');
+  if(kind==='estimate'){
+   if(q('#pbReviewFields'))q('#pbReviewFields').open=false;
+   q('#pbEstimateConditions').scrollIntoView=()=>{};
+   q('#pbPreviewConditions').click();
+   assert.equal(q('#pbPreview'),null);
+   if(q('#pbReviewFields'))assert.equal(q('#pbReviewFields').open,true);
+   assert.equal(w.document.activeElement,q('#pbEstimateConditions'));
+   q('#pbShowPreview').focus();q('#pbShowPreview').click();
+  }
   const oldStyle=frame.getAttribute('style');
   q('#pbPreview').dispatchEvent(new w.Event('cancel',{cancelable:true}));
   assert.equal(q('#pbPreview'),null);assert.equal(w.document.activeElement,q('#pbShowPreview'));
