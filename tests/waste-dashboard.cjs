@@ -1,0 +1,20 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {JSDOM}=require('jsdom');
+const html=fs.readFileSync(require.resolve('../docs/index.html'),'utf8');
+const src=html.slice(html.indexOf('let wasteDashboardRequest=0;'),html.indexOf('function renderWasteSummary(reports)'));
+const ids=['wasteEntryCount','wasteManifestOk','wasteManifestNone','wasteSiteCount','wasteBreakdown','wasteRecent'];
+const dom=new JSDOM('<div id="wasteDashboardCard">'+ids.map(id=>'<div id="'+id+'"></div>').join('')+'</div>');
+let rows=[],fail=false,waiter=null,calls=[];
+const ctx={document:dom.window.document,console:{error(){}},cloudProfile:{id:'admin',company_id:'a',role:'admin',active:true},today:()=> '2026-09-18',cloudHtml:v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),cloudClient:{from(table){assert.equal(table,'waste_entries');const call={};calls.push(call);const q={select(){return q;},eq(k,v){call[k]=v;return q;},gte(k,v){call.start=v;return q;},lt(k,v){call.end=v;return q;},order(){return q;},range(a,b){call.offset=a;return waiter?new Promise(r=>waiter=r):Promise.resolve(fail?{error:{message:'offline'}}:{data:rows.slice(a,b+1)});}};return q;}}};
+ctx.$=s=>ctx.document.querySelector(s);vm.createContext(ctx);vm.runInContext(src,ctx);
+const run=()=>vm.runInContext('renderWasteSummaryFromCloudTable()',ctx),text=id=>ctx.$('#'+id).textContent;
+(async()=>{
+ rows=Array.from({length:1001},(_,i)=>({id:String(i),site_id:i%2?'site-a':'site-b',report_date:'2026-09-18',waste_type:i===0?'<script>':'木くず',unit:i%2?'t':'㎥',quantity:1,manifest_type:i%3===0?'paper':i%3===1?'electronic':'none'}));
+ await run();assert.equal(text('wasteEntryCount'),'1001');assert.equal(text('wasteManifestOk'),'668');assert.equal(text('wasteManifestNone'),'333');assert.equal(text('wasteSiteCount'),'2');assert.equal(calls.length,3);calls.forEach(c=>{assert.equal(c.company_id,'a');assert.equal(c.start,'2026-09-01');assert.equal(c.end,'2026-10-01');});assert(!ctx.$('#wasteBreakdown script'));
+ fail=true;await run();assert.equal(text('wasteEntryCount'),'—');assert(ctx.$('#wasteDashboardStatus button'));fail=false;rows=[];await run();assert.equal(text('wasteEntryCount'),'0');assert(text('wasteRecent').includes('まだありません'));
+ waiter=true;const pending=run();ctx.cloudProfile={id:'other',company_id:'b',role:'admin',active:true};await Promise.resolve();waiter({data:[{id:'old',site_id:'old',quantity:123}]});waiter=null;await pending;assert.equal(text('wasteEntryCount'),'—');
+ ctx.cloudProfile.role='employee';const before=calls.length;await run();assert.equal(calls.length,before);assert.equal(text('wasteRecent'),'');
+ const home=html.slice(html.indexOf('async function renderHome(){'),html.indexOf('function masterRows('));assert(home.includes('await renderWasteSummaryFromCloudTable();'));
+ console.log('PASS home loads monthly waste; pagination, company scope, manifest counts, units, escaping, errors, empty data and account-switch protection');
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -185,7 +185,7 @@ textarea{min-height:105px;resize:vertical}
 </div>
 <div style="margin-top:12px"><div style="font-weight:900;margin-bottom:7px">日報提出状況</div><div id="dailySubmissionList"></div><div class="note" style="margin-top:7px">夕方に日報を入力すると「提出済み」に変わります。1日に複数現場の日報があっても、提出者は1人として数えます。</div></div>
 </div>
-<div class="card admin-home-only" id="siteSummaryCard"><h2>現場別集計</h2><label>現場を選択</label><select id="siteSummarySelect" onchange="renderSiteSummary()"></select><div id="siteSummaryBody" style="margin-top:12px"></div></div><div class="card admin-home-only" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">0</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">0</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">0</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">0</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card admin-home-only"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
+<div class="card admin-home-only" id="siteSummaryCard"><h2>現場別集計</h2><label>現場を選択</label><select id="siteSummarySelect" onchange="renderSiteSummary()"></select><div id="siteSummaryBody" style="margin-top:12px"></div></div><div class="card admin-home-only" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">—</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">—</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">—</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">—</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card admin-home-only"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
 <div class="card"><h2>本日の現場</h2><div id="todayList"></div></div>
 </section>
 
@@ -926,7 +926,6 @@ async function cloudLoadReports(){
     applyHomeRoleVisibility();
     await renderHome();
     if(cloudProfile?.role==='admin')renderSiteSummary();
-    if(cloudProfile?.role==='admin')await renderWasteSummaryFromCloudTable();
     if($('#recordsPage')?.classList.contains('active'))await renderRecords();
   }catch(e){box.innerHTML=`<div class="cloud-bad">読込エラー：${cloudHtml(e?.message||e)}</div>`;}
 }
@@ -1625,18 +1624,31 @@ function applyHomeRoleVisibility(){
   $$('.admin-home-only').forEach(el=>el.style.display=isAdmin?'':'none');
 }
 
+let wasteDashboardRequest=0;
 async function renderWasteSummaryFromCloudTable(){
-  if(!cloudProfile)return;
+  const request=++wasteDashboardRequest;
+  const company=cloudProfile?.company_id, user=cloudProfile?.id;
+  const current=()=>request===wasteDashboardRequest&&cloudProfile?.company_id===company&&cloudProfile?.id===user&&cloudProfile?.role==='admin'&&cloudProfile?.active===true;
+  const clear=()=>{for(const id of ['wasteEntryCount','wasteManifestOk','wasteManifestNone','wasteSiteCount'])if($('#'+id))$('#'+id).textContent='—';for(const id of ['wasteBreakdown','wasteRecent'])if($('#'+id))$('#'+id).innerHTML='';};
+  let status=$('#wasteDashboardStatus');
+  if(!status&&$('#wasteDashboardCard')){status=document.createElement('p');status.id='wasteDashboardStatus';status.className='note';status.setAttribute('role','status');$('#wasteDashboardCard').appendChild(status);}
+  if(!company||!current()){clear();if(status)status.textContent='';return;}
+  clear();if(status)status.textContent='今月の産廃を読み込み中…';
   try{
     const month=today().slice(0,7),start=month+'-01';
     const nextDate=new Date(Number(month.slice(0,4)),Number(month.slice(5,7)),1);
     const z=n=>String(n).padStart(2,'0');
     const next=`${nextDate.getFullYear()}-${z(nextDate.getMonth()+1)}-01`;
+    const rows=[],seen=new Set();
+    for(let offset=0;;offset+=500){
     const {data,error}=await cloudClient.from('waste_entries')
       .select('id,report_id,site_id,report_date,waste_type,quantity,unit,manifest_type,manifest_number,disposer_name,disposal_site,notes,created_at')
-      .eq('company_id',cloudProfile.company_id).gte('report_date',start).lt('report_date',next).order('report_date',{ascending:false}).order('created_at',{ascending:false});
+      .eq('company_id',company).gte('report_date',start).lt('report_date',next).order('report_date',{ascending:false}).order('created_at',{ascending:false}).order('id').range(offset,offset+499);
+    if(!current())return;
     if(error)throw error;
-    const rows=data||[];
+    for(const row of data||[])if(!seen.has(row.id)){seen.add(row.id);rows.push(row);}
+    if((data||[]).length<500)break;
+    }
     const paper=rows.filter(x=>x.manifest_type==='paper').length,electronic=rows.filter(x=>x.manifest_type==='electronic').length,none=rows.filter(x=>!x.manifest_type||x.manifest_type==='none').length;
     const sites=new Set(rows.map(x=>x.site_id).filter(Boolean));
     if($('#wasteEntryCount'))$('#wasteEntryCount').textContent=rows.length;
@@ -1646,7 +1658,8 @@ async function renderWasteSummaryFromCloudTable(){
     const by={};rows.forEach(x=>{const key=(x.waste_type||'産廃')+'__'+(x.unit||'');if(!by[key])by[key]={name:x.waste_type||'産廃',unit:x.unit||'',qty:0,count:0};by[key].qty+=Number(x.quantity||0);by[key].count++});
     const b=$('#wasteBreakdown');if(b)b.innerHTML=Object.keys(by).length?Object.values(by).sort((a,b)=>b.qty-a.qty).map(v=>`<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(v.name)}</b><div class="meta" style="margin:3px 0 0">${v.qty.toLocaleString(undefined,{maximumFractionDigits:2})}${cloudHtml(v.unit)} ／ ${v.count}件</div></div>`).join(''):'<div class="empty" style="padding:18px 8px">今月の産廃入力はまだありません。</div>';
     const recent=$('#wasteRecent');if(recent)recent.innerHTML=rows.length?rows.slice(0,8).map(x=>{const type=x.manifest_type==='paper'?'紙':x.manifest_type==='electronic'?'電子':'なし';const no=x.manifest_number?` ／ No.${cloudHtml(x.manifest_number)}`:'';const dest=x.disposal_site?` ／ ${cloudHtml(x.disposal_site)}`:(x.disposer_name?` ／ ${cloudHtml(x.disposer_name)}`:'');return `<div class="record" style="padding:9px;margin-bottom:6px"><b>${cloudHtml(x.report_date)}　${cloudHtml(x.waste_type||'産廃')}</b><div class="meta" style="margin:3px 0 0">${Number(x.quantity||0).toLocaleString(undefined,{maximumFractionDigits:2})}${cloudHtml(x.unit||'')} ／ マニフェスト：${type}${no}${dest}</div></div>`}).join(''):'<div class="empty" style="padding:18px 8px">マニフェスト記録はまだありません。</div>';
-  }catch(e){console.error('waste dashboard load',e)}
+    if(status)status.textContent=month.replace('-','年')+'月 ／ クラウド記録 '+rows.length+'件';
+  }catch(e){if(!current())return;clear();if(status){status.textContent='産廃を読み込めませんでした。';const retry=document.createElement('button');retry.type='button';retry.className='btn light';retry.textContent='再読み込み';retry.onclick=()=>renderWasteSummaryFromCloudTable();status.appendChild(retry);}console.error('waste dashboard load',e)}
 }
 
 function renderWasteSummary(reports){
@@ -2231,6 +2244,7 @@ async function renderHome(){
     }).join('');
   }
   renderFuelSummary(a);
+  await renderWasteSummaryFromCloudTable();
   const b=$('#todayList');
   b.innerHTML=todayA.length?todayA.map(d=>`<div class="record"><div class="record-title">${cloudHtml(d.site)}</div><div class="meta">記入者：${cloudHtml(d.writer||'未設定')}${cloudProfile?`／クラウド登録者：${cloudHtml(d.cloudCreatedByName)}`:''}／${cloudHtml(d.start)}〜${cloudHtml(d.end)}</div>${cloudProfile?cloudReportButtons(d):''}</div>`).join(''):'<div class="empty">本日の日報はまだありません。夕方の提出後にここへ表示されます。</div>';
 }
