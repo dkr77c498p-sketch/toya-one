@@ -29,6 +29,18 @@ async function setup(role='admin'){
  return{w,dom,db,calls,state,q:s=>w.document.querySelector(s)};
 }
 (async()=>{
+ {
+ const f=await setup(),{w,q}=f;
+ const check=q('#cmSiteChoices input[data-site-id="a"]');assert(check.checked);
+ check.checked=false;check.dispatchEvent(new w.Event('change'));
+ assert.equal(q('#cmSales').textContent,'0円');assert.equal(q('#cmCost').textContent,'1,600円');
+ assert.deepEqual(JSON.parse(w.localStorage.getItem('toya-monthly-excluded:company-a')),['a']);
+ q('#cmRefresh').click();await until(()=>q('#companyMonthlySummary').getAttribute('aria-busy')==='false');
+ assert.equal(q('#cmSiteChoices input[data-site-id="a"]').checked,false);assert.equal(q('#cmCost').textContent,'1,600円');
+ assert.equal(q('#cmScope').textContent,'選択現場・税別');assert(!q('#cmSiteChoices img'));
+ f.dom.window.close();console.log('PASS selected-site totals, persisted exclusions, escaped names and refresh');
+ }
+
  for(const role of ['employee','inactive']){
   const f=await setup(role);assert.equal(f.q('#companyMonthlySummary'),null);assert.equal(f.calls.length,0);f.dom.window.close();
  }

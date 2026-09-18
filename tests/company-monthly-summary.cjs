@@ -74,3 +74,10 @@ const invalid=calculate(repeated);assert.equal(invalid.contractTotal,null);asser
 const malformed=structuredClone(contracted);malformed.contracts[0].amount=null;
 assert.equal(calculate(malformed).contractTotal,null);assert.equal(calculate(malformed).rows.find(r=>r.site.id==='a').contractState,'invalid');
 console.log('PASS new contract-only jobs, explicit zero, missing contracts, pagination duplicates and conflicting/invalid contracts');
+
+const selected=M.calculate(base,'2026-09',['a']);
+assert.equal(selected.sales,0);assert.equal(selected.cost,1600);assert.equal(selected.profit,-1600);
+assert.equal(selected.phaseCount,0);assert.equal(selected.draftCount,0);assert(!selected.rows.some(r=>r.site.id==='a'));
+const none=M.calculate(base,'2026-09',base.sites.map(s=>s.id));assert.equal(none.rows.length,0);assert.equal(none.cost,null);
+assert.equal(M.calculate(base,'2026-09',[]).cost,r.cost);
+console.log('PASS excluded sites removed from all metrics, phases and warnings; original full dataset retained for movement calculation');

@@ -24,7 +24,8 @@
   ['documents','project_documents','id,site_id,kind,status,document_date,subtotal,updated_at','document_date','id'],
   ['profiles','site_project_profiles','site_id,contract_breakdown,updated_at',null,'site_id']
  ];
- function calculate(input,month){
+ function calculate(input,month,excludedIds=[]){
+  const excluded=new Set(excludedIds);
   const bounds=S.periodBounds('month',month),within=d=>typeof d==='string'&&d>=bounds.start&&d<bounds.end;
   const data={revenues:[]};
   for(const [key,,,dateField,idField] of sources()){
@@ -33,13 +34,14 @@
   const rows=new Map(data.sites.map(site=>[site.id,{site,sales:0,invoiceCount:0,draftCount:0,draftAmount:0,cost:0,hasCosts:false,warnings:[],planned:0,completed:0,phaseCount:0,outgoing:0}]));
   const rowFor=id=>{if(!rows.has(id))rows.set(id,{site:{id,name:'現場の紐付けなし'},sales:0,invoiceCount:0,draftCount:0,draftAmount:0,cost:0,hasCosts:false,warnings:[],planned:0,completed:0,phaseCount:0,outgoing:0});return rows.get(id);};
   const contractsBySite=new Map();
-  for(const record of data.contracts.filter(r=>r.revenue_type==='contract')){
+  for(const record of data.contracts.filter(r=>r.revenue_type==='contract'&&!excluded.has(r.site_id))){
    if(!contractsBySite.has(record.site_id))contractsBySite.set(record.site_id,[]);
    contractsBySite.get(record.site_id).push(record);
    if(within(record.revenue_date))rowFor(record.site_id).contractRecorded=true;
   }
   let sales=0,invoiceCount=0,draftCount=0,draftAmount=0,cost=0,hasCosts=false,outgoing=0,planned=0,completed=0,phaseCount=0;
   for(const doc of data.documents){
+   if(excluded.has(doc.site_id))continue;
    if(!['invoice','progress'].includes(doc.kind)||!['issued','draft'].includes(doc.status))continue;
    const amount=S.amount(doc.subtotal);if(amount===null||amount<0)throw Error('請求書の税別金額を確認できません。');
    const row=rowFor(doc.site_id);
@@ -47,6 +49,7 @@
    else{row.draftAmount=add(row.draftAmount,amount);row.draftCount++;draftAmount=add(draftAmount,amount);draftCount++;}
   }
   for(const site of data.sites){
+   if(excluded.has(site.id))continue;
    let result;try{result=S.analyze(data,site);}catch(e){throw Error(site.name+'：'+e.message);}
    const row=rows.get(site.id);
    row.cost=result.subtotal;row.hasCosts=result.hasData;row.warnings=result.warnings;row.outgoing=result.outgoingRevenue;
@@ -56,6 +59,7 @@
   const unlinked=['reports','laborSheets','vehicleSheets','equipmentSheets'].reduce((n,key)=>n+data[key].filter(r=>!siteIds.has(r.site_id)).length,0);
   let invalidPhases=0;
   for(const profile of data.profiles){
+   if(excluded.has(profile.site_id))continue;
    for(const phase of list(profile.contract_breakdown).filter(p=>p?.target_month===month)){
     const amount=S.amount(phase.amount);if(amount===null||amount<0||!['planned','complete'].includes(phase.status)){invalidPhases++;continue;}
     const row=rowFor(profile.site_id),key=phase.status==='complete'?'completed':'planned';
@@ -63,7 +67,7 @@
     if(key==='completed')completed=add(completed,amount);else planned=add(planned,amount);
    }
   }
-  const shown=[...rows.values()].filter(r=>r.hasCosts||r.invoiceCount||r.draftCount||r.phaseCount||r.outgoing||r.contractRecorded)
+  const shown=[...rows.values()].filter(r=>!excluded.has(r.site.id)&&(r.hasCosts||r.invoiceCount||r.draftCount||r.phaseCount||r.outgoing||r.contractRecorded))
    .map(r=>{
     const contracts=contractsBySite.get(r.site.id)||[],amount=contracts.length===1?S.amount(contracts[0].amount):null;
     const contractState=!contracts.length?'missing':contracts.length===1&&amount!==null&&amount>=0&&siteIds.has(r.site.id)?'registered':'invalid';
@@ -90,8 +94,8 @@
  const q=s=>document.querySelector(s);
  const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  const visible=()=>q('#homePage')?.classList.contains('active')&&!document.hidden;
- let owner='',ticket=0,pending='',loaded='',loadedAt=0,month=japanMonth(),followCurrent=true,card=null,timer=null;
- function clear(){ticket++;owner='';pending='';loaded='';loadedAt=0;clearTimeout(timer);card?.remove();card=null;month=japanMonth();followCurrent=true;}
+ let owner='',ticket=0,pending='',loaded='',loadedAt=0,month=japanMonth(),followCurrent=true,card=null,timer=null,excluded=new Set(),selectionReady=false,snapshot=null;
+ function clear(){excluded=new Set();selectionReady=false;snapshot=null;ticket++;owner='';pending='';loaded='';loadedAt=0;clearTimeout(timer);card?.remove();card=null;month=japanMonth();followCurrent=true;}
  function place(){
   const home=q('#homePage'),entry=q('#uxDailyHome');
   if(!card?.isConnected||!home||!entry)return;
@@ -104,16 +108,46 @@
   if(!id)return false;if(card?.isConnected)return true;
   const home=q('#homePage');if(!home)return false;
   card=document.createElement('section');card.id='companyMonthlySummary';card.className='card admin-home-only cm-card';card.setAttribute('aria-labelledby','cmTitle');
-  card.innerHTML='<div class="cm-heading"><h2 id="cmTitle">今月の請負金・売上・原価・利益</h2><span>全現場・税別</span></div>'+
+  card.innerHTML='<div class="cm-heading"><h2 id="cmTitle">今月の請負金・売上・原価・利益</h2><span id="cmScope">選択現場・税別</span></div>'+
    '<div class="cm-controls"><div><label for="cmMonth">対象月</label><input id="cmMonth" type="month" min="2000-01" value="'+month+'"></div><button id="cmThisMonth" class="btn light" type="button">今月</button><button id="cmRefresh" class="btn dark" type="button">更新</button></div>'+
-   '<div class="cm-metrics"><div><span>請負金額（対象現場の総額）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>売上（確定請求分）</span><strong id="cmSales">—</strong></div><div><span>原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（概算）</span><strong id="cmProfit">—</strong></div></div>'+
+   '<details id="cmSiteFilter"><summary>集計する現場を選ぶ</summary><p class="note">チェックした現場の請負金・売上・原価・利益を集計します。日報や保存金額は変更しません。選択はこの端末・会社ごとに保存します。</p><div id="cmSiteChoices"></div></details><p id="cmSelectionNote" class="note"></p>'+
+   '<div class="cm-metrics"><div><span>請負金額（対象現場の総額）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>売上（確定請求分）</span><strong id="cmSales">—</strong></div><div><span>原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>請求済み売上 − 原価</span><strong id="cmProfit">—</strong></div></div>'+
    '<p id="cmContractInfo" class="cm-contract-note"></p>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
-   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>請負金額：対象月に日報・費用・請求書・月別契約内訳・請負金の登録がある現場の、現在の契約総額です。月をまたぐ工事は全工期分を含みます。「対象月の契約内訳」は、月別に割り当てた登録分です。</p><p>売上：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。見積書・下書き・取消済みは含みません。</p><p>原価：対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>利益：売上 − 入力済み原価の概算です。未請求分・未入力の費用・会社全体の管理費は含まず、会計上の確定利益ではありません。</p><p>請負金・月別契約内訳・常用売上は参考表示です。請求書との重複を避けるため、上の売上には追加していません。</p></div></details>';
+   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>請負金額：対象月に日報・費用・請求書・月別契約内訳・請負金の登録がある現場の、現在の契約総額です。月をまたぐ工事は全工期分を含みます。「対象月の契約内訳」は、月別に割り当てた登録分です。</p><p>売上：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>利益：売上 − 入力済み原価の概算です。未請求分・未入力の費用・会社全体の管理費は含まず、会計上の確定利益ではありません。</p><p>請負金・月別契約内訳・常用売上は参考表示です。請求書との重複を避けるため、上の売上には追加していません。</p></div></details>';
   home.prepend(card);place();
   q('#cmMonth').onchange=()=>{month=q('#cmMonth').value;followCurrent=month===japanMonth();ticket++;pending='';loaded='';empty();refresh();};
   q('#cmThisMonth').onclick=()=>{month=japanMonth();followCurrent=true;q('#cmMonth').value=month;ticket++;pending='';loaded='';empty();refresh();};
   q('#cmRefresh').onclick=()=>refresh(true);return true;
+ }
+ function selectionKey(){return 'toya-monthly-excluded:'+cloudProfile.company_id;}
+ function selectSites(data){
+  snapshot=data;
+  if(!selectionReady){
+   let saved=null;try{saved=JSON.parse(localStorage.getItem(selectionKey()));}catch(e){}
+   if(Array.isArray(saved))excluded=new Set(saved.filter(x=>typeof x==='string'));
+   else if(cloudProfile.company_id==='40a7a065-1086-4e62-aa09-f44d6207602c')excluded=new Set(data.sites.filter(s=>s.name.normalize('NFKC').replace(/[\s　]/g,'')==='会社の清掃(犬迫町)').map(s=>s.id));
+   selectionReady=true;
+  }
+  const box=q('#cmSiteChoices');box.replaceChildren();
+  for(const site of [...data.sites].sort((a,b)=>a.name.localeCompare(b.name,'ja'))){
+   const label=document.createElement('label'),check=document.createElement('input');
+   check.type='checkbox';check.checked=!excluded.has(site.id);check.dataset.siteId=site.id;
+   label.append(check,document.createTextNode(site.name));box.append(label);
+   check.onchange=()=>{
+    if(!snapshot||pending){check.checked=!excluded.has(site.id);return;}
+    if(check.checked)excluded.delete(site.id);else excluded.add(site.id);
+    let saved=true;try{localStorage.setItem(selectionKey(),JSON.stringify([...excluded]));}catch(e){saved=false;}
+    render(calculate(snapshot,month,[...excluded]));selectionNote();
+    if(!saved)setStatus('集計は更新しました。現場の選択を端末に保存できませんでした。',true);
+   };
+  }
+  selectionNote();
+ }
+ function selectionNote(){
+  const sites=list(snapshot?.sites),off=sites.filter(s=>excluded.has(s.id));
+  q('#cmScope').textContent=(off.length?'選択現場':'全現場')+'・税別';
+  q('#cmSelectionNote').textContent=sites.length===off.length?'集計する現場を選んでください。':off.length?'集計対象外：'+off.map(s=>s.name).join('・'):'すべての現場を集計しています。';
  }
  async function read([key,table,fields,dateField,idField],company,bounds,t,mine){
   const rows=[];
@@ -153,14 +187,14 @@
   if(result.outgoing)references.push('常用売上の記録：'+yen(result.outgoing));
   if(result.invalidPhases)references.push('金額・状態を確認できない月別契約内訳：'+result.invalidPhases+'件');
   const cells=result.rows.map(row=>'<tr><th scope="row">'+escape(row.site.name)+(row.site.completed_on?'<small>完工済み</small>':'')+'</th><td data-label="請負金（全工期）">'+(row.contractState==='registered'?yen(row.contractAmount):row.contractState==='invalid'?'要確認':'未登録')+'</td><td data-label="売上">'+yen(row.sales)+'</td><td data-label="原価">'+(row.hasCosts?yen(row.cost):'記録なし')+'</td><td data-label="概算利益">'+yen(row.profit)+'</td></tr>').join('');
-  q('#cmBreakdown').innerHTML=references.map(s=>'<p class="cm-reference">'+escape(s)+'</p>').join('')+(result.rows.length?'<div class="cm-table-wrap"><table><caption>対象月の全現場</caption><thead><tr><th>現場</th><th>請負金（全工期）</th><th>売上</th><th>原価</th><th>概算利益</th></tr></thead><tbody>'+cells+'</tbody></table></div>':'')+
+  q('#cmBreakdown').innerHTML=references.map(s=>'<p class="cm-reference">'+escape(s)+'</p>').join('')+(result.rows.length?'<div class="cm-table-wrap"><table><caption>選択した現場の月別集計</caption><thead><tr><th>現場</th><th>請負金（全工期）</th><th>売上</th><th>原価</th><th>概算利益</th></tr></thead><tbody>'+cells+'</tbody></table></div>':'')+
    result.rows.filter(r=>r.warnings.length).map(r=>'<details class="cm-site-warnings"><summary>'+escape(r.site.name)+'：原価の確認 '+r.warnings.length+'件</summary>'+r.warnings.map(w=>'<p>'+escape(w)+'</p>').join('')+'</details>').join('');
   setStatus('確定請求 '+result.invoiceCount+'件 ／ '+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+' 更新');
  }
  async function refresh(force=false){
   if(!mount()||!visible())return;
   const key=owner+':'+month;if(pending===key||(!force&&loaded===key&&Date.now()-loadedAt<60000))return;
-  const mine=owner,t=++ticket,company=cloudProfile.company_id,currentMonth=month;pending=key;
+  const mine=owner,t=++ticket,company=cloudProfile.company_id,currentMonth=month;pending=key;snapshot=null;card.querySelectorAll('#cmSiteChoices input').forEach(x=>x.disabled=true);
   q('#cmTitle').textContent=month===japanMonth()?'今月の請負金・売上・原価・利益':'月別の請負金・売上・原価・利益';
   q('#cmRefresh').disabled=true;card.setAttribute('aria-busy','true');setStatus('全現場の月合計を読み込み中…');
   try{
@@ -168,9 +202,9 @@
    const bounds=S.periodBounds('month',currentMonth),results=await Promise.allSettled(sources().map(def=>read(def,company,bounds,t,mine)));
    if(t!==ticket||identity()!==mine||month!==currentMonth)return;
    const failed=results.find(r=>r.status==='rejected');if(failed)throw failed.reason;
-   const result=calculate(Object.fromEntries(results.map(r=>r.value)),currentMonth);render(result);loaded=key;loadedAt=Date.now();
+   const data=Object.fromEntries(results.map(r=>r.value));selectSites(data);const result=calculate(data,currentMonth,[...excluded]);render(result);loaded=key;loadedAt=Date.now();
   }catch(e){if(t===ticket&&identity()===mine){empty();loaded='';setStatus('集計できませんでした：'+e.message,true);}}
-  finally{if(t===ticket&&identity()===mine){pending='';q('#cmRefresh').disabled=false;card.setAttribute('aria-busy','false');}}
+  finally{if(t===ticket&&identity()===mine){pending='';q('#cmRefresh').disabled=false;card.querySelectorAll('#cmSiteChoices input').forEach(x=>x.disabled=!snapshot);card.setAttribute('aria-busy','false');}}
  }
  function schedule(force=false){clearTimeout(timer);timer=setTimeout(()=>refresh(force),180);}
  function start(){
