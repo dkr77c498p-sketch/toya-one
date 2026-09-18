@@ -1,17 +1,18 @@
 .cm-card{border-top:5px solid var(--lime,#b8ff00)}
 .cm-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .cm-heading h2{margin:0}.cm-heading>span{font-size:12px;color:#667057}
-.cm-controls{display:flex;align-items:flex-end;gap:8px;margin:16px 0}
+.cm-controls{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:end;gap:8px;margin:16px 0}
 .cm-controls>div{flex:1;min-width:0}.cm-controls label{font-size:13px;margin-top:0}
-.cm-controls input{width:100%;box-sizing:border-box;min-width:0;min-height:46px;padding:10px;border:1px solid #bbb;border-radius:10px;background:#fff;color:#111;font-size:16px}
+.cm-controls input{display:block;width:100%;max-width:100%;box-sizing:border-box;min-width:0;min-height:46px;padding:10px;border:1px solid #bbb;border-radius:10px;background:#fff;color:#111;font-size:16px}
 .cm-controls .btn{min-height:46px;padding:10px 14px;font-size:14px}
-.cm-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.cm-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 .cm-metrics>div{background:#111;color:#fff;border-radius:14px;padding:16px 12px;min-width:0}
 .cm-metrics span{display:block;font-size:13px;color:#ddd;line-height:1.6}
 .cm-metrics strong{display:block;font-size:clamp(19px,3vw,28px);color:var(--lime,#b8ff00);line-height:1.6;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .cm-metrics .cm-negative{color:#ff9898}
 .cm-notice{font-size:13px;line-height:1.7;color:#805510;margin:12px 0 0}
 .cm-notice:empty{display:none}
+.cm-contract-note{font-size:12px;line-height:1.7;color:#666;margin:12px 0 0}.cm-contract-note:empty{display:none}
 #cmStatus{font-size:12px;line-height:1.6;min-height:20px;margin:8px 0 0}
 #cmStatus.cm-error{color:#a72d20}
 #cmDetails{border-top:1px solid #ddd;margin-top:12px}
@@ -24,5 +25,6 @@
 .cm-method{font-size:12px;line-height:1.7;color:#666}.cm-method p{margin:12px 0}
 .cm-site-warnings{margin:10px 0;padding:10px;background:#fff5dd;border-radius:8px;font-size:12px;line-height:1.7}
 .cm-site-warnings summary{cursor:pointer;min-height:32px;font-weight:700}
-@media(max-width:600px){.cm-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.cm-sales{grid-column:1/-1}.cm-metrics .cm-sales strong{font-size:30px}.cm-heading h2{font-size:18px}.cm-controls .btn{padding:10px}.cm-table-wrap thead{display:none}.cm-table-wrap tr{display:block;border-bottom:1px solid #ddd;padding:10px 0}.cm-table-wrap th,.cm-table-wrap td{display:flex;justify-content:space-between;gap:12px;border:0;padding:4px 0}.cm-table-wrap td::before{content:attr(data-label);font-weight:500}.cm-table-wrap th:first-child{display:block}}
+@media(min-width:900px){.cm-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}}
+@media(max-width:600px){.cm-heading h2{font-size:18px}.cm-controls .btn{padding:10px}.cm-table-wrap thead{display:none}.cm-table-wrap tr{display:block;border-bottom:1px solid #ddd;padding:10px 0}.cm-table-wrap th,.cm-table-wrap td{display:flex;justify-content:space-between;gap:12px;border:0;padding:4px 0}.cm-table-wrap td::before{content:attr(data-label);font-weight:500}.cm-table-wrap th:first-child{display:block}}
 @media print{#companyMonthlySummary{display:none!important}}

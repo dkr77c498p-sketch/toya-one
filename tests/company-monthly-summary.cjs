@@ -49,3 +49,28 @@ assert.equal(M.japanMonth(new Date('2026-08-31T15:00:00Z')),'2026-09');
 assert.throws(()=>M.calculate(base,''),/対象月/);assert.throws(()=>M.calculate(base,'2026-13'),/対象月/);
 const decimals=calculate({sites:base.sites,documents:[bill('p1',0.1),bill('p2',0.2)]});assert.equal(decimals.sales,0.3);
 console.log('PASS date boundaries, JST current month, decimal precision and outgoing revenue kept separate from invoiced sales');
+
+const contracted=structuredClone(base);
+contracted.contracts=structuredClone(contracted.revenues).map(r=>({...r,revenue_date:'2026-07-01'}));
+contracted.profiles=[{site_id:'a',contract_breakdown:[{target_month:'2026-08',amount:30000,status:'complete'},{target_month:'2026-09',amount:70000,status:'planned'}]}];
+const before=JSON.stringify(contracted),cr=calculate(contracted);
+assert.equal(cr.contractTotal,110000);assert.equal(cr.contractCount,2);assert.equal(cr.missingContracts,1);assert.equal(cr.allocatedContract,70000);
+assert.equal(cr.rows.find(r=>r.site.id==='a').contractAmount,100000);assert.equal(cr.rows.find(r=>r.site.id==='d').contractState,'missing');
+assert.equal(cr.rows.find(r=>r.site.id==='c'),undefined);
+assert.equal(cr.sales,130000);assert.equal(cr.cost,36300);assert.equal(cr.profit,93700);assert.equal(JSON.stringify(contracted),before);
+const august=M.calculate({...contracted,documents:[]},'2026-08');
+assert.equal(august.contractTotal,100000);assert.equal(august.allocatedContract,30000);
+console.log('PASS monthly scope includes completed/unbilled jobs; whole-job contract and month allocation stay distinct without changing sales/cost/profit or records');
+
+const newJob=structuredClone(contracted);newJob.contracts[2].revenue_date='2026-09-18';
+assert.equal(calculate(newJob).contractTotal,160000);assert.equal(calculate(newJob).rows.find(r=>r.site.id==='c').hasCosts,false);
+const zeroContract=structuredClone(contracted);zeroContract.contracts[0].amount=0;
+assert.equal(calculate(zeroContract).contractCount,2);assert.equal(calculate(zeroContract).rows.find(r=>r.site.id==='a').contractAmount,0);
+const noContract=calculate({...contracted,contracts:[]});assert.equal(noContract.contractTotal,null);assert.equal(noContract.missingContracts,3);
+const repeated=structuredClone(contracted);repeated.contracts.push(structuredClone(repeated.contracts[0]));
+assert.equal(calculate(repeated).contractTotal,110000);
+repeated.contracts.at(-1).id='second-contract-for-a';
+const invalid=calculate(repeated);assert.equal(invalid.contractTotal,null);assert.equal(invalid.invalidContracts,1);assert.equal(invalid.sales,130000);assert.equal(invalid.profit,93700);
+const malformed=structuredClone(contracted);malformed.contracts[0].amount=null;
+assert.equal(calculate(malformed).contractTotal,null);assert.equal(calculate(malformed).rows.find(r=>r.site.id==='a').contractState,'invalid');
+console.log('PASS new contract-only jobs, explicit zero, missing contracts, pagination duplicates and conflicting/invalid contracts');
