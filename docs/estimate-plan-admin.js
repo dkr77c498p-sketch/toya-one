@@ -3,6 +3,7 @@
  'use strict';
  const C=window.ToyaEstimatePlan,E=window.ToyaProjectDocuments,A=window.ToyaEstimateAuto;if(!C||!E||!A||window.__toyaEstimatePlans)return;window.__toyaEstimatePlans=true;
  const q=(s,r=document)=>r.querySelector(s),esc=E.escape,yen=E.yen,copy=x=>JSON.parse(JSON.stringify(x));
+ const savedPlan=row=>({...copy(row),title:E.estimateSubject({kind:'estimate',subject:row.title,site_name:row.site_name,estimate_snapshot:row})});
  const identity=()=>window.ToyaCompanyAccess?.allows('estimate')===true&&typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  let owner='',sites=[],plans=[],quotes=[],rates=[],selected='',plan=null,dirty=false,busy=false,ready=false,ticket=0,quoteRequest=null,simpleStep=1;
  const selectedSite=()=>sites.find(s=>s.id===selected);
@@ -35,7 +36,7 @@
    sites=result[0].sort((a,b)=>(a.status==='active'?0:1)-(b.status==='active'?0:1)||a.name.localeCompare(b.name,'ja'));plans=result[1];quotes=result[2];ready=true;
    q('#epSite').innerHTML='<option value="">現場を選択</option>'+optionSites();if(!selectedSite())selected='';q('#epSite').value=selected;renderLists();note(dirty?'未保存の積算表を表示しています。':'新しい工事の見積を作るか、保存済みの見積を開いてください。');await loadRates(company,mine);
    if(identity()===mine&&t===ticket&&opened&&plan===opened&&!dirty&&!busy&&opened.site_id===renamedSiteId&&!q('#epEditor')?.contains(document.activeElement)){
-    const saved=plans.find(p=>p.id===opened.id);if(saved){plan=copy(saved);renderPlan(false);}
+    const saved=plans.find(p=>p.id===opened.id);if(saved){plan=savedPlan(saved);dirty=plan.title!==saved.title;renderPlan(false);}
    }
   }catch(e){if(identity()===mine&&t===ticket)note('読み込みできませんでした：'+e.message,true);}
  }
@@ -61,7 +62,7 @@
   if(!q('#epSavedPlans'))return;updateNewButton();
   const rows=[...plans].sort((a,b)=>b.updated_at.localeCompare(a.updated_at));
   q('#epSavedPlans').innerHTML=rows.length?'<details open><summary>保存した見積を開く（'+rows.length+'件）</summary>'+rows.map(p=>'<div class="pb-document-row"><div><b>'+esc(p.title)+'</b><p>'+esc(p.customer_name||'宛先未入力')+'</p><strong>'+(p.calculation?.complete?'見積 '+yen(p.calculation.price):(p.entry_mode==='quote'?'入力済み見積 '+yen(p.calculation?.known_price||0):'積算途中 / 入力済原価 '+yen(p.calculation?.known_cost||0)))+'</strong></div><button class="btn light" type="button" data-ep-open="'+esc(p.id)+'">開く</button></div>').join('')+'</details>':'<p class="note">保存済みの見積積算はまだありません。</p>';
-  q('#epSavedPlans').querySelectorAll('[data-ep-open]').forEach(b=>b.onclick=()=>{if(!discard()||!closeQuote())return;plan=copy(plans.find(p=>p.id===b.dataset.epOpen));dirty=false;quoteRequest=null;simpleStep=2;renderPlan();});
+  q('#epSavedPlans').querySelectorAll('[data-ep-open]').forEach(b=>b.onclick=()=>{if(!discard()||!closeQuote())return;const saved=plans.find(p=>p.id===b.dataset.epOpen);plan=savedPlan(saved);dirty=plan.title!==saved.title;quoteRequest=null;simpleStep=2;renderPlan();});
   const quoteRows=[...quotes].sort((a,b)=>b.created_at.localeCompare(a.created_at));
   q('#epQuoteList').innerHTML=quoteRows.length?quoteRows.map(d=>'<div class="pb-document-row"><div><b>'+esc(d.document_number||'下書き')+'</b><span class="pb-badge">'+({draft:'下書き',issued:'確定',void:'取消済み'}[d.status])+'</span><p>'+esc(d.subject)+' / '+esc(d.document_date)+'</p><strong>'+yen(d.total)+'（税込）</strong></div><button type="button" class="btn light" data-ep-quote="'+esc(d.id)+'">開く</button></div>').join(''):'<p class="note">保存済みの見積書はありません。</p>';
   q('#epQuoteList').querySelectorAll('[data-ep-quote]').forEach(b=>b.onclick=()=>{if(!discard()||!closeQuote())return;window.ToyaProjectBusiness?.openEstimate(copy(quotes.find(d=>d.id===b.dataset.epQuote)));});
@@ -271,7 +272,7 @@
  }
  function gather(){
   if(!plan||!q('#epTitle'))return plan;
-  plan.site_name=q('#epJobName').value.trim();plan.site_address=q('#epJobAddress').value.trim();plan.title=q('#epTitle').value.trim()||(plan.site_name?(plan.site_name+' 見積').slice(0,200):'');plan.customer_name=q('#epCustomer').value.trim();plan.customer_address=q('#epAddress').value.trim();plan.quote_notes=q('#epQuoteNotes').value;plan.work_period=q('#epWorkPeriod').value;plan.estimate_conditions=q('#epEstimateConditions').value;plan.internal_notes=q('#epInternalNotes').value;
+  plan.site_name=q('#epJobName').value.trim();plan.site_address=q('#epJobAddress').value.trim();plan.title=q('#epTitle').value.trim()||plan.site_name.slice(0,200);plan.customer_name=q('#epCustomer').value.trim();plan.customer_address=q('#epAddress').value.trim();plan.quote_notes=q('#epQuoteNotes').value;plan.work_period=q('#epWorkPeriod').value;plan.estimate_conditions=q('#epEstimateConditions').value;plan.internal_notes=q('#epInternalNotes').value;
   if(plan.entry_mode==='quote'){
    plan.tax_rate=Number(q('#epTax').value);plan.groups=gatherSimpleGroups();
    const autoHost=q('.ep-auto');
@@ -329,7 +330,7 @@
   },
   documentOpened(row){
    if(row.estimate_snapshot?.entry_mode!=='quote')return;
-   if(!plan||plan.id!==row.estimate_plan_id||dirty){plan=copy(plans.find(p=>p.id===row.estimate_plan_id)||row.estimate_snapshot);dirty=false;simpleStep=3;renderPlan();}else setSimpleStep(3,false);
+   if(!plan||plan.id!==row.estimate_plan_id||dirty){const saved=plans.find(p=>p.id===row.estimate_plan_id)||row.estimate_snapshot;plan=savedPlan(saved);dirty=plan.title!==saved.title;simpleStep=3;renderPlan();}else setSimpleStep(3,false);
   },
   returnToInput(row){if(plan?.id===row.estimate_plan_id&&plan.entry_mode==='quote'){
    for(const [key,id] of [['work_period','epWorkPeriod'],['estimate_conditions','epEstimateConditions']]){const source=quotes.find(d=>d.id===row.id)||row,value=source[key];if(value!=null&&value!==plan[key]){plan[key]=value;q('#'+id).value=value;dirty=true;}}

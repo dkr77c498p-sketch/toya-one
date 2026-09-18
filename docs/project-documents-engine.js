@@ -5,6 +5,17 @@
  const defaultEstimateConditions=['アスベスト・PCB等の有害物質の撤去及び処分費用は、明細に記載がない限り含まれておりません。','基礎杭の撤去費用は含まれておりません。','内部残置物があった場合、別途請求いたしますのでご了承ください。','水道メーター撤去費用は含まれておりません。','建物基礎以外の埋設物が出た場合は別途費用が発生します。','工事御依頼決定後、3営業日以内に注文書及び注文請書を作成します。'].map((s,j)=>(j+1)+'. '+s).join('\n');
  const estimateConditions=d=>d.estimate_conditions??defaultEstimateConditions;
  const estimateWorkPeriod=d=>String(d.work_period||'').trim()||[d.transaction_start,d.transaction_end].filter(Boolean).join(' ～ ')||(d.work_period==null?'着工依り1か月':'');
+ function estimateSubject(d){
+  const subject=d.subject||d.site_name||'',p=d.estimate_snapshot;
+  // Older blank-title forms stored site_name + ' 見積'. Correct that exact
+  // legacy shape for display, without rewriting an issued document. The cutoff
+  // protects intentionally entered titles saved after this fix.
+  const savedAt=Date.parse(p?.updated_at||p?.created_at||'');
+  if(d.kind==='estimate'&&p?.site_name&&p.site_name===d.site_name&&
+     savedAt<Date.parse('2026-09-18T06:24:27Z')&&p.title===subject&&
+     subject===(p.site_name+' 見積').slice(0,200))return p.site_name;
+  return subject;
+ }
  const kinds={estimate:'見積書',invoice:'請求書',progress:'出来高請求書'};
  const escape=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const yen=n=>Number(n).toLocaleString('ja-JP')+'円';
@@ -116,7 +127,7 @@
   const wrapped=(s,n)=>String(s||'').split('\n').reduce((a,x)=>a+Math.max(1,Math.ceil(textWidth(x)/n)),0);
   const logo=isToyaDocument(d)?'<img class="te2-logo" src="toya-document-logo.svg" alt="TOYA.Co. Ltd">':'';
   const company='<div class="te2-company"><b class="te2-trade">解体工事業</b><div class="te2-permit">'+(isToyaDocument(d)?'建設業許可：鹿児島県知事（般-7）第16963号':'')+'</div><strong class="te2-company-name">'+e(i.issuer_name||'')+'</strong><div class="te2-representative">'+e(i.representative||(isToyaDocument(d)?'代表取締役　宮下 直也':''))+'</div><div class="te2-address">'+(i.postal_code?'〒'+e(i.postal_code)+'　':'')+nl(i.address)+'</div>'+(i.phone?'<div class="te2-contact">TEL：'+e(i.phone)+'</div>':'')+(i.fax?'<div class="te2-contact">FAX：'+e(i.fax)+'</div>':'')+'</div>';
-  const customerText=(d.customer_name||'御見積先')+(/(?:御中|様)$/.test(d.customer_name||'')?'':'　御中'),customer=e(customerText),subject=d.subject||d.site_name||'';
+  const customerText=(d.customer_name||'御見積先')+(/(?:御中|様)$/.test(d.customer_name||'')?'':'　御中'),customer=e(customerText),subject=estimateSubject(d);
   const fitFont=(text,width,max,min=8)=>Math.max(min,Math.min(max,width*72/25.4/Math.max(1,textWidth(text)))).toFixed(2);
   const m=String(d.document_date||'').match(/^(\d{4})-(\d{2})-(\d{2})$/),jpDate=m?(Number(m[1])>=2019?'令　和　'+(Number(m[1])-2018)+'　年　'+Number(m[2])+'　月　'+Number(m[3])+'　日':m[1]+'年'+m[2]+'月'+m[3]+'日'):String(d.document_date||'');
   const state=d.status==='draft'?'<b class="te2-state">下書き</b>':d.status==='void'?'<b class="te2-state">取消済み</b>':'';
@@ -215,5 +226,5 @@
     producing an empty overflow page. Content is already paginated above. */
  @media print{html,body{zoom:1!important;width:auto;min-width:0;margin:0;padding:0}.te2-page{min-height:0;height:auto;padding-bottom:0;break-after:page;page-break-after:always}.te2-cover,.te2-main{height:280mm}.te2-page:last-child{break-after:auto;page-break-after:auto}}
  `;
- return {kinds,escape,yen,lineAmount,total,billed,progress,percentAmount,draft,printHTML,estimateConditions,estimateWorkPeriod};
+ return {kinds,escape,yen,lineAmount,total,billed,progress,percentAmount,draft,printHTML,estimateConditions,estimateWorkPeriod,estimateSubject};
 });
