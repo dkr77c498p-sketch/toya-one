@@ -61,14 +61,30 @@
   if(kind==='dispatch')return dispatchCatalog.entries(d).some(e=>norm(e.name)===norm(name)&&e.count>0);
   return arr(d[fields[kind]]).some(v=>key(label(v).replace(/\s*[×x]\s*\d+\s*[台本個]$/,''))===key(name));
  }
- // A company name is not a crew identity. Only current administrator
- // confirmations may distinguish separate crews; unconfirmed reports remain ambiguous.
+ // Crew identity follows the originating site, not the supplier name.
+ // Current administrator confirmations override this convention.
  function dispatchCrew(data,r,name){
   const code=dispatchCatalog.code(r.report_data,name);
   const stamp=v=>{const t=Date.parse(v);return Number.isFinite(t)?t+':'+(String(v).match(/\.(\d+)/)?.[1]?.padEnd(6,'0').slice(3,6)||'000'):'';};
   const time=stamp(r.updated_at);
   const rows=arr(data.dispatchCrews).filter(c=>c.report_id===r.id&&c.site_id===r.site_id&&c.work_date===r.report_date&&c.dispatch_code===code&&time&&stamp(c.report_updated_at)===time);
-  return rows.length===1&&typeof rows[0].crew_key==='string'?rows[0].crew_key:'';
+  if(rows.length===1&&typeof rows[0].crew_key==='string')return rows[0].crew_key;
+  // A supplier can send independent crews to multiple sites. A report describes
+  // its origin crew; explicit multi-site allocations travel with that crew.
+  // Keep ambiguous destination-only copies pending rather than counting twice.
+  const entries=arr(r.report_data?.usageHours?.entries).filter(e=>e.kind==='dispatch'&&norm(e.label)===norm(name));
+  const first=entries.length===1?entries[0].allocations?.[0]?.site:null;
+  const origin=norm(first||r.report_data?.site);
+  if(!origin)return '';
+  const confirmations=arr(data.dispatchCrews).filter(c=>c.report_id===r.id&&c.dispatch_code===code);
+  if(confirmations.length)return ''; // stale or conflicting administrator decision
+  if(!entries.length&&arr(r.report_data?.siteMoves).length)return '';
+  const incoming=arr(data.reports).some(other=>other.id!==r.id&&other.report_date===r.report_date&&
+   arr(other.report_data?.usageHours?.entries).some(e=>e.kind==='dispatch'&&norm(e.label)===norm(name)&&
+    norm(e.allocations?.[0]?.site)!==origin&&arr(e.allocations).some(a=>norm(a.site)===origin&&a.minutes!==0)));
+  if(incoming)return '';
+  const originSite=arr(data.sites).filter(s=>norm(s.name)===origin);
+  return originSite.length===1?originSite[0].id:'origin:'+origin;
  }
  function sameDispatchCrew(data,a,b,name){const x=dispatchCrew(data,a,name),y=dispatchCrew(data,b,name);return !x||!y||x===y;}
  function build(data){
@@ -92,7 +108,8 @@
     if(g.kind==='dispatch'&&!sameDispatchCrew(data,c.r,r,g.label))continue;
     if(!g.sites.includes(norm(r.report_data?.site)))g.errors.push('時間を指定した現場以外にも使用記録があります。配分を確認してください。');
    }
-   if(!['tool','attachment'].includes(g.kind)&&g.sites.length>1&&arr(data[sheetKey(g.kind)]).some(s=>s.work_date===g.date&&arr(data.sites).some(t=>t.id===s.site_id&&g.sites.includes(norm(t.name)))))g.errors.push('配分先に保存済みの費用があります。保存額を残すため、この時間配分は保留しています。');
+   // Saved totals override only their own site/day in the summary. They must
+   // not suppress correctly recorded hours at other destinations.
    g.errors=[...new Set(g.errors)];g.valid=!g.errors.length;
   }
   return groups;

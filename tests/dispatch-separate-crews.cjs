@@ -13,16 +13,47 @@ test('confirmed separate legacy crews retain each site headcount and travel',()=
   assert.equal(a.categories.labor.value,24800);assert.equal(b.categories.labor.value,36800);
   assert.equal(a.partial,false);assert.equal(b.partial,false);assert.equal(JSON.stringify(d),before);
 });
-test('unconfirmed, stale and duplicate confirmations cannot resolve an ambiguity',()=>{
-  for(const mode of ['none','stale','duplicate']){
+test('stale and duplicate administrator confirmations remain pending',()=>{
+  for(const mode of ['stale','duplicate']){
     const d=data([report(0),report(1)],mode!=='none');
     if(mode==='stale')d.reports[0].updated_at='2026-09-03T10:00:00.123457Z';
     if(mode==='duplicate')d.dispatchCrews.push({...d.dispatchCrews[0],id:'duplicate'});
     const x=S.analyze(d,sites[0]);assert.equal(x.partial,true);assert.equal(x.categories.labor.value,0);
   }
 });
+test('independent local reports count each crew without repeated confirmations',()=>{
+ const d=data([report(0,2),report(1,3)],false);
+ assert.equal(S.analyze(d,sites[0]).categories.labor.value,24800);
+ assert.equal(S.analyze(d,sites[1]).categories.labor.value,36800);
+});
+test('independent timed origin crews can move to one destination',()=>{
+ const a=report(0,1,[{site:sites[0].name,minutes:240},{site:sites[2].name,minutes:240}]);
+ const b=report(1,2,[{site:sites[1].name,minutes:240},{site:sites[2].name,minutes:240}]);
+ const d=data([a,b],false),before=JSON.stringify(d);
+ assert.equal(S.analyze(d,sites[0]).categories.labor.value,6800);
+ assert.equal(S.analyze(d,sites[1]).categories.labor.value,12800);
+ assert.equal(S.analyze(d,sites[2]).categories.labor.value,18000);
+ assert.equal(JSON.stringify(d),before);
+});
+test('an ambiguous destination-only crew is not double counted',()=>{
+ const a=report(0,2,[{site:sites[0].name,minutes:240},{site:sites[1].name,minutes:240}]);
+ const b=report(1,2,[{site:sites[1].name,minutes:480}]);
+ const d=data([a,b],false);assert.equal(S.analyze(d,sites[0]).partial,true);
+});
+test('saved origin overrides only origin; destination people and vehicle still count',()=>{
+ const a=report(0,1,[{site:sites[0].name,minutes:240},{site:sites[1].name,minutes:240}]);
+ a.report_data.workers=['Worker'];a.report_data.vehicles=['Truck'];
+ for(const [kind,label] of [['labor','Worker'],['vehicle','Truck']])a.report_data.usageHours.entries.push({kind,label,quantity:1,allocations:[{site:sites[0].name,minutes:240},{site:sites[1].name,minutes:240}]});
+ const d=data([a],false);d.laborRates.push({code:'worker',kind:'own',label:'Worker',day_rate:16000});d.vehicleRates=[{code:'truck',label:'Truck',daily_rate:20000}];
+ d.laborSheets=[{site_id:'a',work_date:a.report_date,entries:[],cost_total:0,revenue_total:0,source_reports:[a]}];
+ d.vehicleSheets=[{site_id:'a',work_date:a.report_date,entries:[],gross_total:7000,net_total:7000,source_reports:[a]}];
+ const x=S.analyze(d,sites[0]),y=S.analyze(d,sites[1]);
+ assert.equal(x.categories.labor.value,0);assert.equal(x.categories.vehicle.value,7000);
+ assert.equal(y.categories.labor.value,14000);assert.equal(y.categories.vehicle.value,10000);
+});
 test('confirmation date, site, company code and exact timestamp must match',()=>{
   const r=report(0);
+  r.report_data.siteMoves=[{site:sites[1].name}];
   for(const change of [{work_date:'2026-09-04'},{site_id:'b'},{dispatch_code:'asahi'},{report_updated_at:null}]){
     const d=data([r]);Object.assign(d.dispatchCrews[0],change);assert.equal(H.dispatchCrew(d,r,'明建'),'');
   }

@@ -456,7 +456,16 @@
       }).join(' ／ ');
       return '<div class="sf-day"><b>' + escape(d.date) + '　小計 ' + yen(d.subtotal) + '</b><div class="sf-note">' + escape(costs) + '<br>燃料 ' + yen(d.fuel) + ' ／ 処分費 ' + yen(d.waste) + ' ／ 回送費 ' + yen(d.transport) + ' ／ アタッチメント ' + yen(d.attachments) + ' ／ 小型機械・工具 ' + yen(d.tools) + ' ／ その他 ' + yen(d.other) + (d.unknown ? '<br>金額未入力 ' + d.unknown + '件' : '') + '</div></div>';
     }).join('') + '</details>';
-    if (result.warnings.length) html += '<details><summary>追加入力・配分待ちの記録（' + result.warnings.length + '件）</summary><div class="sf-alert">' + result.warnings.map(escape).join('<br><br>') + '</div></details>';
+    if (result.warnings.length) {
+      const grouped = new Map();
+      result.warnings.forEach(w => {
+        const match = w.match(/^(\d{4}-\d{2}-\d{2})\s*[：:]\s*(.*)$/s);
+        const message = match ? match[2] : w;
+        if (!grouped.has(message)) grouped.set(message, new Set());
+        if (match) grouped.get(message).add(match[1]);
+      });
+      html += '<details><summary>確認が必要な内容（' + grouped.size + '種類）</summary>' + [...grouped].map(([message, dates]) => '<div class="sf-alert">' + (dates.size ? '<b>' + escape([...dates].sort().join('・')) + '</b><br>' : '') + escape(message) + '</div>').join('') + '</details>';
+    }
     if (result.notes.length) html += '<details><summary>現場移動の記録（' + result.notes.length + '件）</summary><p class="sf-note">' + result.notes.map(escape).join('<br><br>') + '</p></details>';
     q('#sfResult').innerHTML = html;
     bindContractEditor(result, site);
