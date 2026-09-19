@@ -152,7 +152,7 @@
    selectionReady=true;
   }
   const box=q('#cmSiteChoices');box.replaceChildren();
-  for(const site of [...data.sites].sort((a,b)=>a.name.localeCompare(b.name,'ja'))){
+  for(const site of [...data.sites].filter(s=>s.name.normalize('NFKC').replace(/[\s　]/g,'')!=='現場名をあとで変更').sort((a,b)=>a.name.localeCompare(b.name,'ja'))){
    const label=document.createElement('label'),check=document.createElement('input');
    check.type='checkbox';check.checked=!excluded.has(site.id);check.dataset.siteId=site.id;
    label.append(check,document.createTextNode(site.name));box.append(label);
