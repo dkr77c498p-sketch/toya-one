@@ -72,6 +72,7 @@
  async function deleteSavedPlan(id){
   const saved=plans.find(p=>p.id===id);if(!saved)return;
   if(!confirm('「'+saved.title+'」を削除しますか？\n元には戻せません。'))return;
+  note('見積を削除しています…');
   const r=await cloudClient.rpc('toya_delete_estimate_plan',{p_id:id,p_expected_updated_at:saved.updated_at});
   if(r.error)return note('削除できませんでした：'+r.error.message,true);
   plans=plans.filter(p=>p.id!==id);if(plan?.id===id){plan=null;dirty=false;q('#epEditor').innerHTML='';}renderLists();note('見積を削除しました。');
