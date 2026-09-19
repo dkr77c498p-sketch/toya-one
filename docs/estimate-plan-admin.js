@@ -78,10 +78,12 @@
  }
  async function deleteDraftQuote(id){
   const saved=quotes.find(d=>d.id===id);if(!saved)return;
-  if(!confirm('「'+saved.subject+'」の下書きを削除しますか？\n元には戻せません。'))return;
-  const r=await cloudClient.rpc('toya_delete_unissued_document',{p_id:id,p_expected_updated_at:saved.updated_at});
+  const confirmed=saved.status==='issued'||!!saved.document_number;
+  const message=confirmed?'確定済みの見積書「'+(saved.document_number||saved.subject)+'」です。\n本当に削除しますか？\n\n削除すると元には戻せません。':'「'+saved.subject+'」の下書きを削除しますか？\n元には戻せません。';
+  if(!confirm(message))return;
+  const r=await cloudClient.rpc('toya_delete_document_admin',{p_id:id,p_expected_updated_at:saved.updated_at});
   if(r.error)return note('削除できませんでした：'+r.error.message,true);
-  quotes=quotes.filter(d=>d.id!==id);renderLists();note('見積書の下書きを削除しました。');
+  quotes=quotes.filter(d=>d.id!==id);renderLists();note(confirmed?'確定済みの見積書を削除しました。':'見積書の下書きを削除しました。');
  }
  function renderPlan(scroll=true){
   const host=q('#epEditor');if(!host)return;if(!plan){host.innerHTML='';return;}
