@@ -99,9 +99,10 @@
   const missingCosts=shown.filter(r=>r.invoiceCount&&!r.hasCosts).length;
   const warningCount=shown.reduce((n,r)=>n+r.warnings.length,0);
   const knownCost=hasCosts&&!unlinked?cost:null;
-  const missingMonthlyContracts=shown.filter(r=>r.monthlyContractAmount===null).length;
+  const startedRows=shown.filter(r=>r.hasCosts);
+  const missingMonthlyContracts=startedRows.filter(r=>r.monthlyContractAmount===null).length;
   const missingMonthlyCosts=shown.filter(r=>r.monthlyContractAmount!==null&&!r.hasCosts).length;
-  const monthlyContractTotal=shown.length&&!missingMonthlyContracts?shown.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
+  const monthlyContractTotal=startedRows.length&&!missingMonthlyContracts?startedRows.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
   const monthlyProfit=monthlyContractTotal!==null&&knownCost!==null?add(monthlyContractTotal,-knownCost):null;
   return {month,rows:shown,sales,invoiceCount,cost:knownCost,profit:knownCost===null?null:add(sales,-knownCost),
    contractTotal,contractCount,missingContracts,invalidContracts,allocatedContract,
@@ -196,7 +197,7 @@
   q('#cmProfit').classList.toggle('cm-negative',result.monthlyProfit!==null&&result.monthlyProfit<0);
   const notices=[];
   if(!result.hasData)notices.push('この月の記録はまだありません。');
-  if(result.missingMonthlyContracts)notices.push('対象月の出来高が未確定・要確認の現場 '+result.missingMonthlyContracts+'件。月末に「現場内容・契約内訳」でその月の出来高を入力・確定してください。確定までは原価だけを表示し、出来高と利益は未確定です。');
+  if(result.missingMonthlyContracts)notices.push('着工済みで対象月の出来高が未確定の現場 '+result.missingMonthlyContracts+'件。月末に「現場内容・契約内訳」でその月の出来高を入力・確定してください。確定までは原価だけを表示し、出来高と利益は未確定です。');
   if(result.missingMonthlyCosts)notices.push('請負分は登録済みですが、原価の記録がない現場 '+result.missingMonthlyCosts+'件。入力済み原価だけで暫定利益を表示しています。');
   if(result.warningCount)notices.push('原価に未入力・確認待ちがあります。内訳で確認できます。');
   if(result.unlinked)notices.push('現場の紐付けを確認できない日報・費用 '+result.unlinked+'件。原価と利益の合計は表示していません。');
