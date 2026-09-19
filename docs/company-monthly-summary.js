@@ -197,7 +197,7 @@
   q('#cmProfit').classList.toggle('cm-negative',result.monthlyProfit!==null&&result.monthlyProfit<0);
   const notices=[];
   if(!result.hasData)notices.push('この月の記録はまだありません。');
-  if(result.missingMonthlyContracts)notices.push('着工済みで対象月の出来高が未確定の現場 '+result.missingMonthlyContracts+'件。月末に「現場内容・契約内訳」でその月の出来高を入力・確定してください。確定までは原価だけを表示し、出来高と利益は未確定です。');
+  if(result.missingMonthlyContracts){const pendingNames=result.rows.filter(r=>r.hasCosts&&r.monthlyContractAmount===null).map(r=>r.site.name);notices.push('着工済みで対象月の出来高が未確定：'+pendingNames.join('・')+'（'+result.missingMonthlyContracts+'件）。月末に「現場内容・契約内訳」でその月の出来高を入力・確定してください。確定までは原価だけを表示し、出来高と利益は未確定です。');}
   if(result.missingMonthlyCosts)notices.push('請負分は登録済みですが、原価の記録がない現場 '+result.missingMonthlyCosts+'件。入力済み原価だけで暫定利益を表示しています。');
   if(result.warningCount)notices.push('原価に未入力・確認待ちがあります。内訳で確認できます。');
   if(result.unlinked)notices.push('現場の紐付けを確認できない日報・費用 '+result.unlinked+'件。原価と利益の合計は表示していません。');
