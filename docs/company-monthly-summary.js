@@ -78,9 +78,9 @@
     if(!siteIds.has(r.site.id)||r.invalidPhases||malformedPhases)monthlyContractSource='invalid';
     else if(r.phaseCount){monthlyContractAmount=add(r.planned,r.completed);monthlyContractSource='breakdown';}
     else if(!phases.length&&contractState==='registered'){
-      const hasMonthActivity=r.hasCosts||r.invoiceCount||r.draftCount||r.outgoing||r.contractRecorded;
+      const startedThisMonth=r.hasCosts;
       if(within(r.site.completed_on)){monthlyContractAmount=amount;monthlyContractSource='completion';}
-      else if(within(contracts[0]?.revenue_date)||hasMonthActivity){monthlyContractAmount=amount;monthlyContractSource=within(contracts[0]?.revenue_date)?'contract-month':'active-month';}
+      else if(startedThisMonth){monthlyContractAmount=amount;monthlyContractSource='active-month';}
     }
     const validPhases=phases.length&&phases.every(p=>p&&/^\d{4}-(0[1-9]|1[0-2])$/.test(p.target_month)&&S.amount(p.amount)!==null&&S.amount(p.amount)>=0&&['planned','complete'].includes(p.status));
     const phaseTotal=validPhases?phases.reduce((sum,p)=>add(sum,S.amount(p.amount)),0):null;
@@ -211,7 +211,7 @@
   if(result.outgoing)references.push('常用売上の記録：'+yen(result.outgoing));
   if(result.invalidPhases)references.push('金額・状態を確認できない月別契約内訳：'+result.invalidPhases+'件');
   for(const row of result.rows.filter(r=>r.contractMismatch))references.push(row.site.name+'：請負総額 '+yen(row.contractAmount)+' と月別内訳の全期間合計 '+yen(row.phaseTotal)+' が異なります。対象月に登録された内訳を優先して集計しています。');
-  const cells=result.rows.map(row=>'<tr><th scope="row">'+escape(row.site.name)+(row.site.completed_on?'<small>完工済み</small>':'')+'</th><td data-label="対象月の請負分"><span>'+(row.monthlyContractAmount!==null?yen(row.monthlyContractAmount)+'<small>'+(row.monthlyContractSource==='breakdown'?'月別内訳':'完工月の請負金')+'</small>':row.monthlyContractSource==='invalid'?'要確認':row.contractState==='missing'?'請負金未登録':'月割り未登録')+'</span></td><td data-label="請求済み">'+yen(row.sales)+'</td><td data-label="原価">'+(row.hasCosts?yen(row.cost):'記録なし')+'</td><td data-label="暫定利益">'+yen(row.monthlyProfit)+'</td></tr>').join('');
+  const cells=result.rows.map(row=>'<tr><th scope="row">'+escape(row.site.name)+(row.site.completed_on?'<small>完工済み</small>':'')+'</th><td data-label="対象月の請負分"><span>'+(row.monthlyContractAmount!==null?yen(row.monthlyContractAmount)+'<small>'+(row.monthlyContractSource==='breakdown'?'月別内訳':row.monthlyContractSource==='active-month'?'着工月の請負金':'完工月の請負金')+'</small>':row.monthlyContractSource==='invalid'?'要確認':row.contractState==='missing'?'請負金未登録':'月割り未登録')+'</span></td><td data-label="請求済み">'+yen(row.sales)+'</td><td data-label="原価">'+(row.hasCosts?yen(row.cost):'記録なし')+'</td><td data-label="暫定利益">'+yen(row.monthlyProfit)+'</td></tr>').join('');
   q('#cmBreakdown').innerHTML=(result.rows.length?'<div class="cm-table-wrap"><table><caption>選択した現場の月別集計</caption><thead><tr><th>現場</th><th>対象月の請負分</th><th>請求済み</th><th>原価</th><th>暫定利益</th></tr></thead><tbody>'+cells+'</tbody></table></div>':'')+references.map(s=>'<p class="cm-reference">'+escape(s)+'</p>').join('')+
    result.rows.filter(r=>r.warnings.length).map(r=>'<details class="cm-site-warnings"><summary>'+escape(r.site.name)+'：原価の確認 '+r.warnings.length+'件</summary>'+r.warnings.map(w=>'<p>'+escape(w)+'</p>').join('')+'</details>').join('');
   setStatus('確定請求 '+result.invoiceCount+'件 ／ '+new Date().toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})+' 更新');
