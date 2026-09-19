@@ -192,7 +192,7 @@
   const notices=[];
   if(!result.hasData)notices.push('この月の記録はまだありません。');
   if(result.missingMonthlyContracts)notices.push('対象月の請負分が未登録・要確認の現場 '+result.missingMonthlyContracts+'件。内訳を開き、現場設定で月別契約内訳または完工日・請負金を確認してください。請負分と利益の合計は表示していません。');
-  if(result.missingMonthlyCosts)notices.push('請負分は登録済みですが、原価の記録がない現場 '+result.missingMonthlyCosts+'件。利益の合計は表示していません。');
+  if(result.missingMonthlyCosts)notices.push('請負分は登録済みですが、原価の記録がない現場 '+result.missingMonthlyCosts+'件。入力済み原価だけで暫定利益を表示しています。');
   if(result.warningCount)notices.push('原価に未入力・確認待ちがあります。内訳で確認できます。');
   if(result.unlinked)notices.push('現場の紐付けを確認できない日報・費用 '+result.unlinked+'件。原価と利益の合計は表示していません。');
   q('#cmNotice').textContent=notices.join(' ');
