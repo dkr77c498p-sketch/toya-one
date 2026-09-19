@@ -133,9 +133,9 @@
   if(!identity()||busy)return;const mine=owner,t=++ticket,company=cloudProfile.company_id;note('現場と書類を読み込み中…');
   const opened=editor;
   try{
-   const results=await Promise.all([read('sites','id,name,status,completed_on,lifecycle_version',company),read('billing_profiles','*',company)]);
+   const results=await Promise.all([read('sites','id,name,status,completed_on,lifecycle_version',company),read('billing_profiles','*',company),read('business_customers','*',company)]);
    if(t!==ticket||identity()!==mine)return;
-   sites=results[0];profile=results[1][0]||{};
+   sites=results[0];profile=results[1][0]||{};customers=(results[2]||[]).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
    const current=siteId||'',linked=siteByName(summarySite());q('#pbSite').innerHTML='<option value="">現場を選択</option>'+[...sites].sort((a,b)=>(a.status==='active'?0:1)-(b.status==='active'?0:1)||a.name.localeCompare(b.name,'ja')).map(s=>'<option value="'+esc(s.id)+'">'+esc(s.name)+(s.completed_on?'（完工）':s.status==='active'?'':'（過去・未整理）')+'</option>').join('');siteId=sites.some(s=>s.id===current)?current:linked?.id||'';q('#pbSite').value=siteId;
    if(!profileDirty&&!q('#pbCompany')?.contains(document.activeElement))renderProfile();await loadSite();loadRates(company,mine);
    if(identity()===mine&&opened&&editor===opened&&!dirty&&!busy&&siteLoaded&&opened.site_id===renamedSiteId&&!q('#pbEditor')?.contains(document.activeElement)&&!q('#estimateDocumentHost')?.contains(document.activeElement)){
