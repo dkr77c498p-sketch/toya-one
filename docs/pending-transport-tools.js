@@ -40,7 +40,8 @@
    const engine=window.ToyaTransportEngine;if(!engine)throw new Error('回送の計算を読み込めませんでした。');
    for(const r of reports)arr(r.report_data?.items).forEach((item,index)=>{if(!engine.parse(item))return;const c=engine.calculate(item,rr.data);if(c.value===null)missing.push({r,item,index,issue:c.issue});});
    missing.sort((a,b)=>a.r.report_date.localeCompare(b.r.report_date));
-   q('#ptStatus').textContent=missing.length?'回送費の金額未入力・要確認：'+missing.length+'件':'重機回送の金額未入力はありません。';
+   const pendingCard=q('#ptPending');if(pendingCard)pendingCard.style.display=missing.length?'':'none';
+   q('#ptStatus').textContent=missing.length?'回送費の金額未入力・要確認：'+missing.length+'件':'';
    q('#ptList').innerHTML=missing.map((x,i)=>'<div class="pt-entry"><b>'+esc(x.r.report_date)+' ／ '+esc(x.r.report_data?.site)+'</b><p>'+esc(x.item.name)+'</p><p class="note">'+esc(x.item.qty)+'片道回 ／ '+esc(x.issue)+'</p><label>後から確定した合計金額（円）<input type="number" data-pt-amount="'+i+'" min="0" step="0.01" placeholder="未入力（0円と区別）"></label><button type="button" class="btn dark" data-pt-save="'+i+'">この回送の金額を保存</button><p class="note" data-pt-result="'+i+'"></p></div>').join('');
    q('#ptList').oninput=()=>{editingAmount=true;};
    q('#ptList').onclick=e=>{const b=e.target.closest('[data-pt-save]');if(b)saveAmount(Number(b.dataset.ptSave),b);};
