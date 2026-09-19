@@ -30,3 +30,5 @@
 @media print{#companyMonthlySummary{display:none!important}}
 
 #cmSiteFilter{margin:12px 0}#cmSiteFilter summary{min-height:44px;cursor:pointer;font-weight:700}#cmSiteChoices label{display:flex;align-items:center;gap:10px;min-height:44px;font-size:14px}#cmSiteChoices input{width:22px;height:22px;flex:none}#cmSelectionNote{font-size:12px;overflow-wrap:anywhere}
+
+.cm-site-cards{display:grid;gap:12px;margin:12px 0}.cm-site-card{border:1px solid #d9d9d9;border-radius:14px;padding:14px;background:#fff}.cm-site-card h3{margin:0 0 10px;font-size:18px}.cm-site-card>div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-top:1px solid #eee}.cm-site-card>div:first-of-type{border-top:0}.cm-site-card b{text-align:right}
