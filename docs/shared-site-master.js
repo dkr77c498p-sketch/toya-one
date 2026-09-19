@@ -37,8 +37,8 @@
   }
   list.filter(ordinary).sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(r=>add(r));
   if(showHistory){
-   list.filter(r=>!ordinary(r)).sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(r=>add(r,true));
-   if(!byId)arr(history).filter(n=>typeof n==='string'&&n.trim()).forEach(n=>add({id:'history:'+n,name:n},true));
+   list.filter(r=>!ordinary(r)&&!placeholder(r.name)).sort((a,b)=>a.name.localeCompare(b.name,'ja')).forEach(r=>add(r,true));
+   if(!byId)arr(history).filter(n=>typeof n==='string'&&n.trim()&&!placeholder(n)).forEach(n=>add({id:'history:'+n,name:n},true));
   }
   if(current){
    const known=list.find(r=>byId?String(r.id)===current:norm(r.name)===norm(current));
