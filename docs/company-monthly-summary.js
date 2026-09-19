@@ -124,7 +124,7 @@
   if(entry.nextElementSibling!==card)entry.after(card);
  }
  function setStatus(text,error=false){if(!q('#cmStatus'))return;q('#cmStatus').textContent=text;q('#cmStatus').classList.toggle('cm-error',error);}
- function empty(){for(const id of ['cmContract','cmSales','cmCost','cmProfit'])if(q('#'+id))q('#'+id).textContent='—';if(q('#cmProfit'))q('#cmProfit').classList.remove('cm-negative');if(q('#cmBreakdown'))q('#cmBreakdown').replaceChildren();for(const id of ['cmNotice','cmContractInfo'])if(q('#'+id))q('#'+id).textContent='';}
+ function empty(){for(const id of ['cmActiveContract','cmContract','cmSales','cmCost','cmProfit'])if(q('#'+id))q('#'+id).textContent='—';if(q('#cmProfit'))q('#cmProfit').classList.remove('cm-negative');if(q('#cmBreakdown'))q('#cmBreakdown').replaceChildren();for(const id of ['cmNotice','cmContractInfo'])if(q('#'+id))q('#'+id).textContent='';}
  function mount(){
   const id=identity();if(id!==owner){clear();if(!id)return false;owner=id;}
   if(!id)return false;if(card?.isConnected)return true;
@@ -133,7 +133,7 @@
   card.innerHTML='<div class="cm-heading"><h2 id="cmTitle">今月の請負金・売上・原価・利益</h2><span id="cmScope">選択現場・税別</span></div>'+
    '<div class="cm-controls"><div><label for="cmMonth">対象月</label><input id="cmMonth" type="month" min="2000-01" value="'+month+'"></div><button id="cmThisMonth" class="btn light" type="button">今月</button><button id="cmRefresh" class="btn dark" type="button">更新</button></div>'+
    '<details id="cmSiteFilter"><summary>集計する現場を選ぶ</summary><p class="note">チェックした現場の請負金・売上・原価・利益を集計します。日報や保存金額は変更しません。選択はこの端末・会社ごとに保存します。</p><div id="cmSiteChoices"></div></details><p id="cmSelectionNote" class="note"></p>'+
-   '<div class="cm-metrics"><div><span>対象月の請負分（未請求含む）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>請求済み（参考）</span><strong id="cmSales">—</strong></div><div><span>対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（請負分基準・暫定）</span><strong id="cmProfit">—</strong></div></div>'+
+   '<div class="cm-metrics"><div><span>着工中の請負金 合計</span><strong id="cmActiveContract">—</strong></div><div><span>対象月の出来高（未請求含む）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>請求済み（参考）</span><strong id="cmSales">—</strong></div><div><span>対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（請負分基準・暫定）</span><strong id="cmProfit">—</strong></div></div>'+
    '<p id="cmContractInfo" class="cm-contract-note"></p>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
    '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。月途中は出来高を推測せず未確定とします。月末に「現場内容・契約内訳」で対象月の出来高を入力すると、その金額を対象月の請負分として集計します。前月までの出来高は翌月へ二重計上しません。</p><p>請求済み：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。請負分との重複を避けるため、利益には加算しません。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
@@ -187,6 +187,8 @@
   throw Error('記録の全件を確認できませんでした。途中の合計は表示していません。');
  }
  function render(result){
+  const activeContractTotal=result.rows.filter(r=>r.hasCosts&&r.contractAmount!==null).reduce((sum,r)=>add(sum,r.contractAmount),0);
+  q('#cmActiveContract').textContent=yen(activeContractTotal);
   q('#cmContract').textContent=yen(result.monthlyContractTotal);
   q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);
   const contractText=q('#cmContract').textContent,costText=q('#cmCost').textContent;
