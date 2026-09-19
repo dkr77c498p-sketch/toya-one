@@ -186,7 +186,7 @@
  }
  function render(result){
   q('#cmContract').textContent=yen(result.monthlyContractTotal);
-  q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);q('#cmProfit').textContent=yen(result.monthlyProfit);
+  q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);const displayProfit=result.monthlyContractTotal!==null&&result.cost!==null?Math.round((Number(result.monthlyContractTotal)-Number(result.cost))*100)/100:result.monthlyProfit;q('#cmProfit').textContent=yen(displayProfit);result.monthlyProfit=displayProfit;
   q('#cmContractInfo').textContent=result.hasData?'利益は「対象月の請負分 − 対象月の入力済み原価」です。未請求分を含む途中の差額で、追加費用により変わります。':'';
   q('#cmProfit').classList.toggle('cm-negative',result.monthlyProfit!==null&&result.monthlyProfit<0);
   const notices=[];
