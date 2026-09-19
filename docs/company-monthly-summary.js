@@ -134,13 +134,13 @@
    '<div class="cm-controls"><div><label for="cmMonth">対象月</label><input id="cmMonth" type="month" min="2000-01" value="'+month+'"></div><button id="cmThisMonth" class="btn light" type="button">今月</button><button id="cmRefresh" class="btn dark" type="button">更新</button></div>'+
    '<details id="cmSiteFilter"><summary>集計する現場を選ぶ</summary><p class="note">チェックした現場の請負金・売上・原価・利益を集計します。日報や保存金額は変更しません。選択はこの端末・会社ごとに保存します。</p><div id="cmSiteChoices"></div></details><p id="cmSelectionNote" class="note"></p>'+
    '<div class="cm-metrics"><div><span>着工中の請負金 合計</span><strong id="cmActiveContract">—</strong></div><div><span>対象月の出来高（未請求含む）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>請求済み（参考）</span><strong id="cmSales">—</strong></div><div><span>対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（請負分基準・暫定）</span><strong id="cmProfit">—</strong></div></div>'+
-   '<p id="cmContractInfo" class="cm-contract-note"></p>'+
+   '<button id="cmProgressOpen" class="btn lime" type="button" style="width:100%;margin-top:12px">今月の出来高を入力</button><div id="cmProgressEditor"></div><p id="cmContractInfo" class="cm-contract-note"></p>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
    '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。月途中でも「現場内容・契約内訳」で現時点の出来高を入力すると、その金額を対象月の出来高として集計し、暫定利益を表示します。月末に最終出来高へ変更して確定してください。前月までの出来高は翌月へ二重計上しません。</p><p>請求済み：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。請負分との重複を避けるため、利益には加算しません。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
   home.prepend(card);place();
   q('#cmMonth').onchange=()=>{month=q('#cmMonth').value;followCurrent=month===japanMonth();ticket++;pending='';loaded='';empty();refresh();};
   q('#cmThisMonth').onclick=()=>{month=japanMonth();followCurrent=true;q('#cmMonth').value=month;ticket++;pending='';loaded='';empty();refresh();};
-  q('#cmRefresh').onclick=()=>refresh(true);return true;
+  q('#cmRefresh').onclick=()=>refresh(true);q('#cmProgressOpen').onclick=()=>renderProgressEditor();return true;
  }
  function selectionKey(){return 'toya-monthly-excluded:'+cloudProfile.company_id;}
  function selectSites(data){
@@ -185,6 +185,16 @@
    rows.push(...page);if(page.length<500)return [key,rows];
   }
   throw Error('記録の全件を確認できませんでした。途中の合計は表示していません。');
+ }
+ function renderProgressEditor(){
+  const host=q('#cmProgressEditor');if(!host||!snapshot)return;const result=calculate(snapshot,month,[...excluded]),rows=result.rows.filter(r=>r.hasCosts&&r.contractAmount!==null);
+  host.innerHTML='<div class="cm-progress-editor"><h3>'+escape(month)+' 出来高</h3>'+rows.map(r=>'<label>'+escape(r.site.name)+'<input type="number" min="0" step="1" inputmode="numeric" data-cm-progress="'+escape(r.site.id)+'" value="'+(r.monthlyContractAmount??'')+'" placeholder="現時点の出来高"></label>').join('')+'<button class="btn dark" id="cmProgressSave" type="button">出来高を保存・反映</button><button class="btn light" id="cmProgressClose" type="button">閉じる</button><p class="note" id="cmProgressStatus"></p></div>';
+  q('#cmProgressClose').onclick=()=>host.replaceChildren();q('#cmProgressSave').onclick=saveProgress;
+ }
+ async function saveProgress(){
+  if(!snapshot)return;const inputs=[...document.querySelectorAll('[data-cm-progress]')],company=cloudProfile.company_id,status=q('#cmProgressStatus');q('#cmProgressSave').disabled=true;
+  try{for(const input of inputs){if(input.value.trim()==='')continue;const amount=Number(input.value);if(!Number.isSafeInteger(amount)||amount<0)throw Error('出来高は0円以上の整数で入力してください。');const sid=input.dataset.cmProgress,existing=(snapshot.profiles||[]).find(p=>p.site_id===sid),breakdown=Array.isArray(existing?.contract_breakdown)?structuredClone(existing.contract_breakdown):[];const idx=breakdown.findIndex(x=>x&&x.target_month===month);const row={label:'出来高',target_month:month,amount,status:'planned',notes:'ホームから入力'};if(idx>=0)breakdown[idx]={...breakdown[idx],...row};else breakdown.push(row);let r;if(existing)r=await cloudClient.from('site_project_profiles').update({contract_breakdown:breakdown,updated_by:cloudProfile.id,updated_at:new Date().toISOString()}).eq('company_id',company).eq('site_id',sid);else r=await cloudClient.from('site_project_profiles').insert({company_id:company,site_id:sid,contract_breakdown:breakdown,updated_by:cloudProfile.id});if(r.error)throw r.error;}status.textContent='保存しました。出来高と暫定利益を更新します。';loaded='';await refresh(true);renderProgressEditor();}
+  catch(e){status.textContent='保存できませんでした：'+e.message;}finally{if(q('#cmProgressSave'))q('#cmProgressSave').disabled=false;}
  }
  function render(result){
   const activeContractTotal=result.rows.filter(r=>r.hasCosts&&r.contractAmount!==null).reduce((sum,r)=>add(sum,r.contractAmount),0);
