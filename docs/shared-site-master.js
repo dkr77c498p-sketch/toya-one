@@ -119,7 +119,7 @@
   const drafts=local().filter((n,i,a)=>!placeholder(n)&&!known.has(norm(n))&&a.findIndex(v=>norm(v)===norm(n))===i);
   const sharedRow=r=>{
    if(editingId===r.id)return '<div class="ss-row ss-edit"><label for="ssRenameName">新しい現場名</label><input id="ssRenameName" type="text" maxlength="120" value="'+esc(editName)+'"><div class="ss-edit-actions"><button type="button" class="btn lime" id="ssRenameSave">この名前に変更</button><button type="button" class="btn light" id="ssRenameCancel">やめる</button></div></div>';
-   return '<div class="ss-row"><b>'+esc(r.name)+(r.status==='active'?'':'（完工・過去）')+'</b><div class="ss-row-actions"><span class="ss-shared">社員と共有済み</span><button type="button" class="btn light" data-ss-rename="'+esc(r.id)+'">名前を変更</button></div></div>';
+   return '<div class="ss-row"><b>'+esc(r.name)+(r.status==='active'?'':'（完工・過去）')+'</b><div class="ss-row-actions"><span class="ss-shared">社員と共有済み</span><button type="button" class="btn light" data-ss-rename="'+esc(r.id)+'">名前を変更</button><button type="button" class="btn danger" data-ss-delete="'+esc(r.id)+'">削除</button></div></div>';
   };
   const active=rows.filter(r=>r.status==='active'&&!placeholder(r.name));
   const past=rows.filter(r=>r.status!=='active'&&!placeholder(r.name));
@@ -128,10 +128,19 @@
   q('#ssRegister').disabled=writing;q('#ssRegister').onclick=()=>registerName(draftName);
   q('#ssAdminStatus').textContent=message||(loaded?'共有済みの現場は下に表示しています。':'会社共通の一覧を読み込み中…');
   host.querySelectorAll('[data-ss-rename]').forEach(b=>{b.disabled=writing;b.onclick=()=>startRename(b.dataset.ssRename);});
+  host.querySelectorAll('[data-ss-delete]').forEach(b=>{b.disabled=writing;b.onclick=()=>deleteSite(b.dataset.ssDelete);});
   if(q('#ssRenameName'))q('#ssRenameName').oninput=e=>{editName=e.target.value;};
   if(q('#ssRenameSave')){q('#ssRenameSave').disabled=writing;q('#ssRenameSave').onclick=saveRename;}
   if(q('#ssRenameCancel')){q('#ssRenameCancel').disabled=writing;q('#ssRenameCancel').onclick=()=>{editingId='';editName='';message='';renderMaster();};}
   host.querySelectorAll('[data-ss-draft]').forEach(b=>{b.disabled=writing;b.onclick=()=>registerName(drafts[Number(b.dataset.ssDraft)]);});
+ }
+ async function deleteSite(id){
+  if(!isAdmin()||writing)return;const site=rows.find(r=>r.id===id);if(!site)return;
+  if(!confirm('「'+site.name+'」を削除しますか？\n\n日報・書類・請負金などの記録がある現場は削除できません。'))return;
+  writing=true;message='削除できる現場か確認しています…';renderMaster();const mine=identity();
+  try{const r=await cloudClient.rpc('toya_delete_empty_site',{p_site_id:site.id,p_expected_version:site.lifecycle_version});if(r.error)throw r.error;if(identity()!==mine)return;rows=rows.filter(x=>x.id!==site.id);message=site.name+'：削除しました。';renderMaster();await refresh(true);document.dispatchEvent(new CustomEvent('toya-shared-sites-updated'));}
+  catch(e){if(identity()===mine){message='削除できませんでした：'+String(e.message||e);renderMaster();}}
+  finally{writing=false;if(identity()===mine)renderMaster();}
  }
  function startRename(id){
   const site=rows.find(r=>r.id===id);if(!site||writing)return;
