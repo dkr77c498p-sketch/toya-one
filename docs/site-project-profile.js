@@ -6,7 +6,7 @@
  const yen=v=>'¥'+Math.round(Number(v)||0).toLocaleString('ja-JP');
  const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  const blank=()=>({project_category:'',structure_type:'',floors_above:null,floors_below:null,floor_area_sqm:null,site_area_sqm:null,foundation_volume_m3:null,work_start:null,work_end:null,scope_notes:'',exclusion_notes:'',contract_breakdown:[],updated_at:null});
- const categoryOptions=[['','選択してください'],['full_demolition','建物全解体'],['interior_demolition','内部解体'],['skeleton','スケルトン解体'],['renovation','内部改修'],['exterior','外構撤去'],['pavement','舗装撤去'],['clearing','伐採・造成'],['other','その他工事']];
+ const categoryOptions=[['','選択してください'],['full_demolition','建物全解体'],['interior_demolition','内部解体'],['skeleton','スケルトン解体'],['renovation','内部改修'],['exterior','外構撤去'],['pavement','舗装撤去'],['remaining_items','残置物撤去'],['clearing','伐採・造成'],['other','その他工事']];
  const structureOptions=[['','未入力'],['wood','木造'],['steel','鉄骨造'],['rc','RC造'],['src','SRC造'],['mixed','混構造・複数棟'],['none','建物なし'],['other','その他']];
  let owner='',siteId='',profile=blank(),contract=null,loading=false,saving=false,token=0,mountedFor=null;
  const optionHTML=(rows,current)=>rows.map(([v,l])=>'<option value="'+v+'"'+(v===current?' selected':'')+'>'+l+'</option>').join('');
