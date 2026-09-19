@@ -101,7 +101,7 @@
   const missingMonthlyContracts=shown.filter(r=>r.monthlyContractAmount===null).length;
   const missingMonthlyCosts=shown.filter(r=>r.monthlyContractAmount!==null&&!r.hasCosts).length;
   const monthlyContractTotal=shown.length&&!missingMonthlyContracts?shown.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
-  const monthlyProfit=monthlyContractTotal!==null&&knownCost!==null&&!missingMonthlyCosts?add(monthlyContractTotal,-knownCost):null;
+  const monthlyProfit=monthlyContractTotal!==null&&knownCost!==null?add(monthlyContractTotal,-knownCost):null;
   return {month,rows:shown,sales,invoiceCount,cost:knownCost,profit:knownCost===null?null:add(sales,-knownCost),
    contractTotal,contractCount,missingContracts,invalidContracts,allocatedContract,
    monthlyContractTotal,monthlyProfit,missingMonthlyContracts,missingMonthlyCosts,
