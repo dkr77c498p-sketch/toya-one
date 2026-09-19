@@ -186,6 +186,7 @@ textarea{min-height:105px;resize:vertical}
 <div style="margin-top:12px"><div style="font-weight:900;margin-bottom:7px">日報提出状況</div><div id="dailySubmissionList"></div><div class="note" style="margin-top:7px">夕方に日報を入力すると「提出済み」に変わります。1日に複数現場の日報があっても、提出者は1人として数えます。</div></div>
 </div>
 <div class="card admin-home-only" id="siteSummaryCard"><h2>現場別集計</h2><label>現場を選択</label><select id="siteSummarySelect" onchange="renderSiteSummary()"></select><div id="siteSummaryBody" style="margin-top:12px"></div></div><div class="card admin-home-only" id="wasteDashboardCard"><h2>今月の産廃・マニフェスト</h2><div class="statgrid"><div class="stat"><b id="wasteEntryCount">—</b><span>産廃入力 件</span></div><div class="stat"><b id="wasteManifestOk">—</b><span>紙・電子 件</span></div><div class="stat"><b id="wasteManifestNone">—</b><span>マニフェストなし 件</span></div><div class="stat"><b id="wasteSiteCount">—</b><span>産廃搬出 現場</span></div></div><div style="margin-top:12px"><b>品目別 搬出量</b><div id="wasteBreakdown" style="margin-top:7px"></div></div><div style="margin-top:12px"><b>最近のマニフェスト</b><div id="wasteRecent" style="margin-top:7px"></div></div></div><div class="card admin-home-only"><h2>今月の燃料・経費</h2><div class="statgrid"><div class="stat"><b id="monthFuelLiters">0</b><span>軽油・ガソリン L</span></div><div class="stat"><b id="monthAdBlueLiters">0</b><span>AdBlue L</span></div><div class="stat"><b id="monthGreaseCount">0</b><span>グリース 本</span></div><div class="stat"><b id="monthFuelAmount">¥0</b><span>燃料・油脂費</span></div><div class="stat"><b id="monthOtherExpense">¥0</b><span>材料・処分・経費</span></div><div class="stat"><b id="monthExpenseTotal">¥0</b><span>月間合計</span></div></div><div style="margin-top:12px"><b>車両・重機別 燃料・油脂費</b><div id="fuelBreakdown" style="margin-top:7px"></div></div></div>
+<div class="card admin-home-only" id="inventoryCard"><h2>在庫管理</h2><p class="note">日報で使用した分を登録すると在庫から差し引きます。入荷は「＋入庫」から追加できます。</p><div id="inventoryList">読み込み中…</div></div>
 <div class="card"><h2>本日の現場</h2><div id="todayList"></div></div>
 </section>
 
@@ -2323,5 +2324,6 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="company-registry.js?v=20260914-onboarding-v1"></script>
 <script src="company-members.js?v=20260914-access-v1"></script>
 <script src="company-dispatch.js?v=20260914-v1"></script>
-<script src="company-plan-ui.js?v=20260919-hide-internal-v1"></script><script src="usability.js?v=20260916-slogan-v1"></script><script src="company-slogan.js?v=20260916-slogan-v1"></script><script src="company-monthly-summary.js?v=20260919-hide-placeholder-v16"></script></body>
+<script src="company-plan-ui.js?v=20260919-hide-internal-v1"></script><script src="usability.js?v=20260916-slogan-v1"></script><script src="company-slogan.js?v=20260916-slogan-v1"></script><script src="company-monthly-summary.js?v=20260919-hide-placeholder-v16"></script><script src="inventory-management.js?v=20260919-inventory-v1"></script>
+</body>
 </html>
