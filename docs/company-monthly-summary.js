@@ -77,7 +77,11 @@
     let monthlyContractAmount=null,monthlyContractSource='missing';
     if(!siteIds.has(r.site.id)||r.invalidPhases||malformedPhases)monthlyContractSource='invalid';
     else if(r.phaseCount){monthlyContractAmount=add(r.planned,r.completed);monthlyContractSource='breakdown';}
-    else if(!phases.length&&contractState==='registered'&&(within(r.site.completed_on)||within(contracts[0]?.revenue_date))){monthlyContractAmount=amount;monthlyContractSource=within(r.site.completed_on)?'completion':'contract-month';}
+    else if(!phases.length&&contractState==='registered'){
+      const hasMonthActivity=r.hasCosts||r.invoiceCount||r.draftCount||r.outgoing||r.contractRecorded;
+      if(within(r.site.completed_on)){monthlyContractAmount=amount;monthlyContractSource='completion';}
+      else if(within(contracts[0]?.revenue_date)||hasMonthActivity){monthlyContractAmount=amount;monthlyContractSource=within(contracts[0]?.revenue_date)?'contract-month':'active-month';}
+    }
     const validPhases=phases.length&&phases.every(p=>p&&/^\d{4}-(0[1-9]|1[0-2])$/.test(p.target_month)&&S.amount(p.amount)!==null&&S.amount(p.amount)>=0&&['planned','complete'].includes(p.status));
     const phaseTotal=validPhases?phases.reduce((sum,p)=>add(sum,S.amount(p.amount)),0):null;
     const contractMismatch=contractState==='registered'&&phaseTotal!==null&&phaseTotal!==amount;
