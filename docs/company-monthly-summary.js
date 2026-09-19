@@ -186,7 +186,7 @@
  }
  function render(result){
   q('#cmContract').textContent=yen(result.monthlyContractTotal);
-  q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);const displayedContract=Number(String(q('#cmContract').textContent).replace(/[^0-9.-]/g,'')),displayedCost=Number(String(q('#cmCost').textContent).replace(/[^0-9.-]/g,''));const displayProfit=Number.isFinite(displayedContract)&&Number.isFinite(displayedCost)?Math.round((displayedContract-displayedCost)*100)/100:result.monthlyProfit;q('#cmProfit').textContent=yen(displayProfit);result.monthlyProfit=displayProfit;
+  q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);const displayedContract=Number(String(q('#cmContract').textContent).replace(/[^0-9.-]/g,'')),displayedCost=Number(String(q('#cmCost').textContent).replace(/[^0-9.-]/g,''));const displayProfit=Number.isFinite(displayedContract)&&Number.isFinite(displayedCost)?Math.round((displayedContract-displayedCost)*100)/100:result.monthlyProfit;q('#cmProfit').textContent=yen(displayProfit);q('#cmProfit').dataset.calculated='1';result.monthlyProfit=displayProfit;
   q('#cmContractInfo').textContent=result.hasData?'利益は「対象月の請負分 − 対象月の入力済み原価」です。未請求分を含む途中の差額で、追加費用により変わります。':'';
   q('#cmProfit').classList.toggle('cm-negative',result.monthlyProfit!==null&&result.monthlyProfit<0);
   const notices=[];
@@ -228,8 +228,14 @@
   finally{if(t===ticket&&identity()===mine){pending='';q('#cmRefresh').disabled=false;card.querySelectorAll('#cmSiteChoices input').forEach(x=>x.disabled=!snapshot);card.setAttribute('aria-busy','false');}}
  }
  function schedule(force=false){clearTimeout(timer);timer=setTimeout(()=>refresh(force),180);}
+ function enforceVisibleProfit(){
+  const a=q('#cmContract'),b=q('#cmCost'),p=q('#cmProfit');if(!a||!b||!p)return;
+  const parse=x=>Number(String(x.textContent||'').replace(/[^0-9.-]/g,''));
+  const av=parse(a),bv=parse(b);if(Number.isFinite(av)&&Number.isFinite(bv)&&a.textContent!=='—'&&b.textContent!=='—')p.textContent=yen(Math.round((av-bv)*100)/100);
+ }
+ const profitObserver=new MutationObserver(()=>enforceVisibleProfit());
  function start(){
-  if(mount())schedule();
+  if(mount()){schedule();const root=q('#companyMonthlySummary');if(root)profitObserver.observe(root,{subtree:true,childList:true,characterData:true});}
   document.addEventListener('toya-role-changed',()=>{if(mount())schedule();});
   document.addEventListener('click',e=>{if(e.target.closest?.('nav [data-page="homePage"]')){if(mount())schedule(true);}});
   window.addEventListener('pageshow',()=>{if(mount())schedule();});
