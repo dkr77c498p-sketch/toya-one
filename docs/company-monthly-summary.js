@@ -136,7 +136,7 @@
    '<div class="cm-metrics"><div><span>着工中の請負金 合計</span><strong id="cmActiveContract">—</strong></div><div><span>対象月の出来高（未請求含む）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>請求済み（参考）</span><strong id="cmSales">—</strong></div><div><span>対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（請負分基準・暫定）</span><strong id="cmProfit">—</strong></div></div>'+
    '<p id="cmContractInfo" class="cm-contract-note"></p>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
-   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。月途中は出来高を推測せず未確定とします。月末に「現場内容・契約内訳」で対象月の出来高を入力すると、その金額を対象月の請負分として集計します。前月までの出来高は翌月へ二重計上しません。</p><p>請求済み：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。請負分との重複を避けるため、利益には加算しません。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
+   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。月途中でも「現場内容・契約内訳」で現時点の出来高を入力すると、その金額を対象月の出来高として集計し、暫定利益を表示します。月末に最終出来高へ変更して確定してください。前月までの出来高は翌月へ二重計上しません。</p><p>請求済み：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。請負分との重複を避けるため、利益には加算しません。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
   home.prepend(card);place();
   q('#cmMonth').onchange=()=>{month=q('#cmMonth').value;followCurrent=month===japanMonth();ticket++;pending='';loaded='';empty();refresh();};
   q('#cmThisMonth').onclick=()=>{month=japanMonth();followCurrent=true;q('#cmMonth').value=month;ticket++;pending='';loaded='';empty();refresh();};
@@ -199,7 +199,7 @@
   q('#cmProfit').classList.toggle('cm-negative',result.monthlyProfit!==null&&result.monthlyProfit<0);
   const notices=[];
   if(!result.hasData)notices.push('この月の記録はまだありません。');
-  if(result.missingMonthlyContracts){const pendingNames=result.rows.filter(r=>r.hasCosts&&r.monthlyContractAmount===null).map(r=>r.site.name);notices.push('着工済みで対象月の出来高が未確定：'+pendingNames.join('・')+'（'+result.missingMonthlyContracts+'件）。月末に「現場内容・契約内訳」でその月の出来高を入力・確定してください。確定までは原価だけを表示し、出来高と利益は未確定です。');}
+  if(result.missingMonthlyContracts){const pendingNames=result.rows.filter(r=>r.hasCosts&&r.monthlyContractAmount===null).map(r=>r.site.name);notices.push('着工済みで対象月の出来高が未確定：'+pendingNames.join('・')+'（'+result.missingMonthlyContracts+'件）。「現場内容・契約内訳」で現時点の出来高を入力すると、出来高と暫定利益を表示します。月末に最終出来高へ変更して確定してください。');}
   if(result.missingMonthlyCosts)notices.push('請負分は登録済みですが、原価の記録がない現場 '+result.missingMonthlyCosts+'件。入力済み原価だけで暫定利益を表示しています。');
   if(result.warningCount)notices.push('原価に未入力・確認待ちがあります。内訳で確認できます。');
   if(result.unlinked)notices.push('現場の紐付けを確認できない日報・費用 '+result.unlinked+'件。原価と利益の合計は表示していません。');
