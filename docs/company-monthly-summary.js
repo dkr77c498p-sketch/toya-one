@@ -99,7 +99,7 @@
   const missingCosts=shown.filter(r=>r.invoiceCount&&!r.hasCosts).length;
   const warningCount=shown.reduce((n,r)=>n+r.warnings.length,0);
   const knownCost=hasCosts&&!unlinked?cost:null;
-  const startedRows=shown.filter(r=>r.hasCosts);
+  const startedRows=shown.filter(r=>r.site.status==='active'&&r.hasCosts);
   const missingMonthlyContracts=startedRows.filter(r=>r.monthlyContractAmount===null).length;
   const missingMonthlyCosts=shown.filter(r=>r.monthlyContractAmount!==null&&!r.hasCosts).length;
   const monthlyContractTotal=startedRows.length&&!missingMonthlyContracts?startedRows.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
@@ -197,7 +197,7 @@
   catch(e){status.textContent='保存できませんでした：'+e.message;}finally{if(q('#cmProgressSave'))q('#cmProgressSave').disabled=false;}
  }
  function render(result){
-  const activeContractTotal=result.rows.filter(r=>r.hasCosts&&r.contractAmount!==null).reduce((sum,r)=>add(sum,r.contractAmount),0);
+  const activeContractTotal=result.rows.filter(r=>r.site.status==='active'&&r.contractAmount!==null).reduce((sum,r)=>add(sum,r.contractAmount),0);
   q('#cmActiveContract').textContent=yen(activeContractTotal);
   q('#cmContract').textContent=yen(result.monthlyContractTotal);
   q('#cmSales').textContent=yen(result.sales);q('#cmCost').textContent=yen(result.cost);
