@@ -85,7 +85,7 @@
  }
  function render(){
   const total=totals(rows);
-  q('#alRows').innerHTML=rows.length?tableHTML(rows,true)+(total.count?'<p class="al-aggregate">日報・費用と請負金額が揃う '+total.count+'現場の合計<br>売上 '+yen(total.sales)+' ／ 原価 '+yen(total.cost)+' ／ 概算利益 '+yen(total.profit)+(total.partial?'（要確認あり）':'')+(total.excluded?'<br>比較対象外 '+total.excluded+'現場（記録なし・請負未登録・集計エラー）':'')+'</p>':''):'<p class="note">現場を登録すると、日報と費用が自動でここに集まります。</p>';
+  q('#alRows').innerHTML=rows.length?tableHTML(rows,true)+(total.count?'<p class="al-aggregate"><b>会社全体合計</b><br>請負金合計 '+yen(total.contract)+'<br>売上合計 '+yen(total.sales)+' ／ 原価合計 '+yen(total.cost)+' ／ 利益合計 '+yen(total.profit)+(total.partial?'（要確認あり）':'')+(total.excluded?'<br>集計対象外 '+total.excluded+'現場（社内作業・記録なし・請負未登録・集計エラー）':'')+'</p>':''):'<p class="note">現場を登録すると、日報と費用が自動でここに集まります。</p>';
   q('#alRows').querySelectorAll('[data-al-site]').forEach(b=>b.onclick=()=>{if(busy())return;const select=q('#epSite');if(![...select.options].some(o=>o.value===b.dataset.alSite)){status('現場一覧を読み込み中です。少し待って内訳を開いてください。');return;}select.value=b.dataset.alSite;select.dispatchEvent(new Event('change',{bubbles:true}));q('#epActualDetail').scrollIntoView({block:'start',behavior:'smooth'});});
   status('全 '+rows.length+'現場を自動集計しました。'+stamp+' 更新。費用の再入力・積算表の作成操作は不要です。最新の内容は「日報から再集計」で確認できます。');
  }
