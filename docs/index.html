@@ -171,7 +171,7 @@ textarea{min-height:105px;resize:vertical}
     <div><label>メールアドレス</label><input id="cloudEmail" type="email" autocomplete="username" placeholder="社員ログイン用メール"></div>
     <div><label>パスワード</label><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="パスワード"></div>
   </div>
-  <button class="btn lime" style="width:100%;margin-top:9px" onclick="cloudLogin()">ログイン</button>
+  <button id="cloudLoginButton" class="btn lime" style="width:100%;margin-top:9px" type="button">ログイン</button>
 </div>
 <div id="cloudLoggedIn" style="display:none">
   <div class="cloud-row"><div><b id="cloudUserName">ログイン中</b><div class="meta" id="cloudUserMeta"></div></div></div>
@@ -2302,7 +2302,7 @@ const fuelInputObserver=new MutationObserver(()=>syncFuelInputs());
 for(const id of ['vehicleChoices','machineChoices','smallToolChoices','leaseVehicles','leaseMachines']){
   const el=$('#'+id);if(el)fuelInputObserver.observe(el,{childList:true});
 }
-renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessionListener();cloudRefreshSession();
+const cloudLoginButton=$('#cloudLoginButton');if(cloudLoginButton)cloudLoginButton.addEventListener('click',async()=>{cloudLoginButton.disabled=true;try{await cloudLogin();}catch(e){cloudMsg('ログイン処理エラー：'+(e?.message||e),'bad');}finally{cloudLoginButton.disabled=false;}});\nrenderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessionListener();cloudRefreshSession();
 
 
 
