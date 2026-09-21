@@ -1,0 +1,99 @@
+name: Verify isolated recovery login
+on:
+  push:
+    branches: [repair/login-readonly-diagnostic-20260921]
+    paths: [.github/workflows/verify-restore-login.yml]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Prepare browser verification
+        run: |
+          mkdir -p verification-output
+          npm install --no-save --ignore-scripts playwright@1.55.1
+          npx playwright install --with-deps chromium webkit
+      - name: Verify public recovery page without real credentials
+        shell: bash
+        run: |
+          cat > verify.cjs <<'NODE'
+          const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict'),crypto=require('node:crypto');
+          const {chromium,webkit}=require('playwright');
+          const base='https://dkr77c498p-sketch.github.io/toya-one/';
+          const sha=s=>crypto.createHash('sha1').update('blob '+Buffer.byteLength(s)+'\0').update(s).digest('hex');
+          const results=[];
+          (async()=>{
+            let response,html;
+            const url=base+'restore-login.html?verified=20260921-r1';
+            for(let i=0;i<15;i++){
+              response=await fetch(url,{signal:AbortSignal.timeout(20000)});html=await response.text();
+              if(response.ok&&sha(html)==='25daca178eb2c1c00f48a50ba83d35df506cc6a7')break;
+              await new Promise(r=>setTimeout(r,5000));
+            }
+            assert.equal(response.status,200);assert.equal(sha(html),'25daca178eb2c1c00f48a50ba83d35df506cc6a7');
+            for(const match of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)){
+              const src=match[1].match(/\bsrc\s*=\s*["']([^"']+)["']/i)?.[1];let code=match[2];
+              if(src){const r=await fetch(new URL(src,url));assert.equal(r.status,200);code=await r.text();}
+              new vm.Script(code);
+            }
+            const unchanged={};
+            for(const [name,expected] of [['index.html','b2a13ab5a557181753afdfd33cc46ddfe468b6aa'],['employee.html','d2bd48108b0b11daae8b525a044a1678333cb302']]){
+              const r=await fetch(base+name+'?unchanged='+Date.now());assert.equal(r.status,200);unchanged[name]=sha(await r.text());assert.equal(unchanged[name],expected);
+            }
+            results.push({publicUrl:url,httpStatus:200,sourceMatchesTestedFile:true,existingAppAndEmployeePageUnchanged:unchanged});
+            for(const [engineName,engine] of [['chromium',chromium],['webkit',webkit]]){
+              const browser=await engine.launch({headless:true});
+              for(const outcome of ['rejected','accepted']){
+                const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+                const page=await context.newPage(),errors=[];let intercepted=0,returned=false;
+                page.on('pageerror',e=>errors.push(e.message));
+                await context.route('**/*',async route=>{
+                  const u=new URL(route.request().url());
+                  if(u.hostname.endsWith('.supabase.co')||u.hostname.endsWith('.supabase.in')){
+                    assert.equal(u.pathname,'/auth/v1/token');intercepted++;
+                    if(outcome==='rejected')return route.fulfill({status:400,contentType:'application/json',body:JSON.stringify({code:'invalid_credentials',msg:'Invalid login credentials',message:'Invalid login credentials'})});
+                    const fakeId='00000000-0000-4000-8000-000000000001',expires=Math.floor(Date.now()/1000)+3600;
+                    const b64=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
+                    const token=b64({alg:'HS256',typ:'JWT'})+'.'+b64({sub:fakeId,exp:expires,role:'authenticated',aud:'authenticated',iss:'TEST_ONLY_NOT_A_REAL_SESSION'})+'.TEST_ONLY_INVALID_SIGNATURE';
+                    return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({access_token:token,refresh_token:'TEST_ONLY_INVALID_REFRESH',token_type:'bearer',expires_in:3600,expires_at:expires,user:{id:fakeId,email:'test@example.invalid',aud:'authenticated',role:'authenticated',app_metadata:{},user_metadata:{},created_at:'2026-01-01T00:00:00Z'}})});
+                  }
+                  if(u.hostname==='dkr77c498p-sketch.github.io'&&u.pathname==='/toya-one/index.html'&&u.searchParams.get('restored')==='20260921-r1'){
+                    returned=true;return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Test return target</title><p>Normal application return URL verified. No database access.</p>'});
+                  }
+                  if(!['dkr77c498p-sketch.github.io','cdn.jsdelivr.net'].includes(u.hostname))return route.abort();
+                  return route.continue();
+                });
+                await page.goto(url,{waitUntil:'networkidle',timeout:45000});
+                await page.waitForFunction(()=>document.getElementById('repairSubmit')?.disabled===false);
+                assert.match(await page.locator('#repairStatus').textContent(),/接続準備ができました/);
+                if(outcome==='rejected')await page.screenshot({path:'verification-output/ready-'+engineName+'.png'});
+                await page.locator('#repairEmail').fill('test@example.invalid');await page.locator('#repairPassword').fill('TEST_ONLY_NOT_A_REAL_PASSWORD');
+                await page.locator('#repairSubmit').click();
+                if(outcome==='accepted'){
+                  await page.waitForURL(/\/toya-one\/index\.html\?restored=20260921-r1$/);
+                  assert.equal(returned,true);
+                  assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('sb-hmxntxrxelswjmzghoxf-auth-token')).user.id),'00000000-0000-4000-8000-000000000001');
+                }else{
+                  await page.waitForFunction(()=>document.getElementById('repairStatus')?.classList.contains('error'));
+                  assert.match(await page.locator('#repairStatus').textContent(),/メールアドレスまたはパスワードを確認/);
+                  assert.equal(await page.locator('#repairSubmit').isEnabled(),true);assert.equal(returned,false);
+                }
+                assert.equal(intercepted,1);assert.deepEqual(errors,[]);
+                results.push({engine:engineName,mockedAuthentication:outcome,result:'PASS',authenticationRequestsIntercepted:intercepted,realAccountOrDatabaseRequests:0,returnedToNormalAppEntry:returned,javascriptErrors:errors});
+                await context.close();
+              }
+              await browser.close();
+            }
+            console.log(JSON.stringify(results,null,2));fs.writeFileSync('verification-output/result.json',JSON.stringify(results,null,2));
+          })().catch(e=>{console.error(e);fs.writeFileSync('verification-output/result.json',JSON.stringify({completed:results,error:String(e)},null,2));process.exitCode=1;});
+          NODE
+          node verify.cjs
+      - name: Preserve verification results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verified-recovery-login
+          path: verification-output/
+          retention-days: 3
