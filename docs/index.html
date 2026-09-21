@@ -154,6 +154,16 @@ textarea{min-height:105px;resize:vertical}
 
 <main>
 <section id="homePage" class="page active">
+<div class="card admin-home-only" id="companyTotalStaticCard" style="border-top:5px solid var(--lime)">
+<h2>会社全体・月間合計</h2>
+<div class="statgrid">
+<div class="stat"><b id="staticContractTotal">集計中</b><span>請負金合計</span></div>
+<div class="stat"><b id="staticProgressTotal">集計中</b><span>出来高合計</span></div>
+<div class="stat"><b id="staticCostTotal">集計中</b><span>原価合計</span></div>
+<div class="stat"><b id="staticProfitTotal">集計中</b><span>利益合計</span></div>
+</div>
+<p class="note" style="margin-top:8px">会社の清掃（犬迫町）は請負・出来高から除外。完工・過去現場も対象月の出来高は計上します。</p>
+</div>
 <div class="card" id="cloudCard">
 <h2>クラウド接続</h2>
 <div id="cloudLoggedOut">
