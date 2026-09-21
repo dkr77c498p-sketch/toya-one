@@ -171,7 +171,7 @@ textarea{min-height:105px;resize:vertical}
     <div><label>メールアドレス</label><input id="cloudEmail" type="email" autocomplete="username" placeholder="社員ログイン用メール"></div>
     <div><label>パスワード</label><input id="cloudPassword" type="password" autocomplete="current-password" placeholder="パスワード"></div>
   </div>
-  <button id="cloudLoginButton" class="btn lime" style="width:100%;margin-top:9px" type="button">ログイン</button>
+  <button class="btn lime" style="width:100%;margin-top:9px" onclick="cloudLogin()">ログイン</button>
 </div>
 <div id="cloudLoggedIn" style="display:none">
   <div class="cloud-row"><div><b id="cloudUserName">ログイン中</b><div class="meta" id="cloudUserMeta"></div></div></div>
@@ -582,21 +582,12 @@ async function cloudLogin(){
   const password=$('#cloudPassword').value;
   if(!email||!password)return alert('メールアドレスとパスワードを入力してください。');
   cloudMsg('ログイン中…');
-  let auth;
-  try{auth=await cloudClient.auth.signInWithPassword({email,password});}
-  catch(e){cloudMsg('通信・認証エラーです。パスワードは変更せず、通信状態を確認してください。詳細：'+(e?.message||'不明'),'bad');return;}
-  if(auth.error){
-    const msg=String(auth.error.message||'');
-    const jp=/invalid login credentials/i.test(msg)?'メールアドレスまたはパスワードを確認してください。パスワード変更はしていません。':/rate limit|too many/i.test(msg)?'ログイン試行が多いため一時的に制限されています。少し待ってから同じパスワードで試してください。':'認証エラー：'+msg;
-    cloudMsg('ログインできません：'+jp,'bad'); return;
-  }
+  const {error}=await cloudClient.auth.signInWithPassword({email,password});
+  if(error){ cloudMsg('ログインできません：'+error.message,'bad'); return; }
   $('#cloudPassword').value='';
-  cloudMsg('認証できました。会社情報を確認中…');
-  const state=await cloudRefreshSession();
-  if(state?.status!=='ready'){cloudMsg('パスワード認証は成功しましたが、会社情報の読み込みで止まりました：'+(state?.message||state?.status||'不明'),'bad');return;}
+  await cloudRefreshSession();
   await cloudLogActivity('login');
   await cloudLoadReports();
-  cloudMsg('管理者としてクラウドに接続しました。','ok');
 }
 async function cloudLogout(){
   if(!cloudClient)return;
@@ -2302,7 +2293,6 @@ const fuelInputObserver=new MutationObserver(()=>syncFuelInputs());
 for(const id of ['vehicleChoices','machineChoices','smallToolChoices','leaseVehicles','leaseMachines']){
   const el=$('#'+id);if(el)fuelInputObserver.observe(el,{childList:true});
 }
-const cloudLoginButton=$('#cloudLoginButton');if(cloudLoginButton){cloudLoginButton.onclick=async()=>{cloudMsg('ログインボタンを受け付けました。');cloudLoginButton.textContent='ログイン中…';cloudLoginButton.disabled=true;try{await cloudLogin();}catch(e){cloudMsg('ログイン処理エラー：'+(e?.message||e),'bad');}finally{cloudLoginButton.disabled=false;cloudLoginButton.textContent='ログイン';}};}
 renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessionListener();cloudRefreshSession();
 
 
