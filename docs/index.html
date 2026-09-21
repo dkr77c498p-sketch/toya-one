@@ -2302,7 +2302,7 @@ const fuelInputObserver=new MutationObserver(()=>syncFuelInputs());
 for(const id of ['vehicleChoices','machineChoices','smallToolChoices','leaseVehicles','leaseMachines']){
   const el=$('#'+id);if(el)fuelInputObserver.observe(el,{childList:true});
 }
-const cloudLoginButton=$('#cloudLoginButton');if(cloudLoginButton)cloudLoginButton.addEventListener('click',async()=>{cloudLoginButton.disabled=true;try{await cloudLogin();}catch(e){cloudMsg('ログイン処理エラー：'+(e?.message||e),'bad');}finally{cloudLoginButton.disabled=false;}});
+const cloudLoginButton=$('#cloudLoginButton');if(cloudLoginButton){cloudLoginButton.onclick=async()=>{cloudMsg('ログインボタンを受け付けました。');cloudLoginButton.textContent='ログイン中…';cloudLoginButton.disabled=true;try{await cloudLogin();}catch(e){cloudMsg('ログイン処理エラー：'+(e?.message||e),'bad');}finally{cloudLoginButton.disabled=false;cloudLoginButton.textContent='ログイン';}};}
 renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessionListener();cloudRefreshSession();
 
 
