@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#111111">
+<title>TOYA One｜復旧用ログイン</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f2f3f3;color:#171717;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif}header{background:#111;color:white;border-bottom:5px solid #b8ff00;padding:20px}.brand{font-size:24px;font-weight:900}.brand span{color:#b8ff00}main{max-width:520px;margin:20px auto;padding:0 16px}.card{background:white;border:1px solid #ddd;border-radius:16px;padding:22px}h1{font-size:22px;margin:0 0 12px}.note{font-size:14px;line-height:1.7;color:#555}label{display:block;font-weight:700;margin:20px 0 8px}input,button{font:inherit;width:100%;min-height:50px;border-radius:10px}input{border:1px solid #aaa;padding:12px;font-size:16px}button{border:0;background:#b8ff00;color:#111;font-weight:900;margin-top:20px;padding:12px;cursor:pointer}button:disabled{background:#ddd;color:#555;cursor:wait}#repairStatus{padding:12px;border-radius:10px;background:#f0f5e7;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;font-size:14px}#repairStatus.error{background:#fff1f0;color:#a42318}.version{font-size:12px;color:#777;margin-top:18px}a{color:#255300}
+</style>
+<script defer src="signup-config.js?v=20260921-restore-r1"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
+</head>
+<body>
+<header><div class="brand">TOYA <span>One</span></div></header>
+<main><section class="card">
+<h1>復旧用ログイン</h1>
+<p class="note">今までと同じメールアドレス・パスワードで入るための専用画面です。パスワード変更やアプリの削除は不要です。</p>
+<form id="repairLoginForm">
+<label for="repairEmail">メールアドレス</label>
+<input id="repairEmail" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+<label for="repairPassword">パスワード</label>
+<input id="repairPassword" type="password" autocomplete="current-password" required>
+<button id="repairSubmit" type="submit" disabled>接続準備中…</button>
+</form>
+<p id="repairStatus" role="status" aria-live="polite">接続プログラムを読み込んでいます。</p>
+<p class="note">この画面は日報・現場・社員設定を変更しません。認証ができたら、通常のTOYA Oneへ移動します。</p>
+<p class="version">復旧用ログイン：2026-09-21 / R1</p>
+</section></main>
+<script>
+(() => {
+  'use strict';
+  const form=document.getElementById('repairLoginForm');
+  const button=document.getElementById('repairSubmit');
+  const status=document.getElementById('repairStatus');
+  let client=null,busy=false;
+  const message=(text,error=false)=>{status.textContent=text;status.classList.toggle('error',error);};
+  const loadingWatch=setTimeout(()=>message('接続プログラムの読み込みに時間がかかっています。通信状態を確認してください。パスワード変更は不要です。',true),15000);
+  function initialize(){
+    clearTimeout(loadingWatch);
+    try{
+      const config=window.ToyaSignupConfig;
+      if(!config?.url||!config?.key||typeof window.supabase?.createClient!=='function')throw new Error('接続プログラムを読み込めませんでした。通信状態を確認して、このページを開き直してください。');
+      // Use the existing project and default storage key. Do not erase or migrate storage.
+      client=window.supabase.createClient(config.url,config.key,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}});
+      button.disabled=false;button.textContent='同じパスワードでログイン';
+      message('接続準備ができました。今までと同じメールアドレスとパスワードを入力してください。');
+    }catch(error){button.textContent='接続を確認してください';message(error.message||'接続準備に失敗しました。',true);}
+  }
+  form.addEventListener('submit',async event=>{
+    event.preventDefault();
+    if(busy)return;
+    if(!client){message('接続準備がまだ完了していません。',true);return;}
+    const email=document.getElementById('repairEmail').value.trim();
+    const password=document.getElementById('repairPassword').value;
+    if(!email||!password){message('メールアドレスとパスワードを入力してください。',true);return;}
+    busy=true;button.disabled=true;button.textContent='認証中…';message('ログインボタンを受け付けました。認証サーバーに確認しています。');
+    const slowWatch=setTimeout(()=>message('認証サーバーの応答を待っています。連続して押さずにお待ちください。パスワードは変更していません。'),15000);
+    let navigating=false;
+    try{
+      const result=await client.auth.signInWithPassword({email,password});
+      if(result.error)throw result.error;
+      if(!result.data?.session||!result.data?.user)throw new Error('認証結果を確認できませんでした。');
+      document.getElementById('repairPassword').value='';
+      message('認証できました。通常のTOYA Oneを開きます。');
+      // The normal application performs its existing profile, company and role checks.
+      window.location.replace(new URL('./index.html?restored=20260921-r1',window.location.href).href);
+      navigating=true;
+    }catch(error){
+      const text=String(error?.message||'');
+      if(error?.status===429||/rate limit|too many/i.test(text))message('試行回数が多いため一時的に制限されています。少し時間を置いてください。',true);
+      else if(error?.code==='invalid_credentials'||/invalid login credentials/i.test(text))message('メールアドレスまたはパスワードを確認してください。この操作でパスワードは変更していません。',true);
+      else message('ログインを完了できませんでした。\n'+(text||'通信状態を確認してください。'),true);
+    }finally{
+      clearTimeout(slowWatch);
+      if(!navigating){busy=false;button.disabled=false;button.textContent='同じパスワードでログイン';}
+    }
+  });
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize,{once:true});else initialize();
+})();
+</script>
+</body>
+</html>
