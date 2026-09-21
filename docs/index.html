@@ -139,7 +139,7 @@ textarea{min-height:105px;resize:vertical}
 @media(max-width:650px){.records-filter{grid-template-columns:1fr}.calendar-day{min-height:62px;padding:4px}.calendar-day .mini{display:none}}
 </style>
 <link rel="stylesheet" href="usability.css?v=20260916-slogan-v1">
-<link rel="stylesheet" href="company-monthly-summary.css?v=20260921-company-total-v1">
+<link rel="stylesheet" href="company-monthly-summary.css?v=20260919-direct-progress-v4">
 </head>
 <body>
 <header>
@@ -154,16 +154,6 @@ textarea{min-height:105px;resize:vertical}
 
 <main>
 <section id="homePage" class="page active">
-<div class="card admin-home-only" id="companyTotalStaticCard" style="border-top:5px solid var(--lime)">
-<h2>会社全体・月間合計</h2>
-<div class="statgrid">
-<div class="stat"><b id="staticContractTotal">集計中</b><span>請負金合計</span></div>
-<div class="stat"><b id="staticProgressTotal">集計中</b><span>出来高合計</span></div>
-<div class="stat"><b id="staticCostTotal">集計中</b><span>原価合計</span></div>
-<div class="stat"><b id="staticProfitTotal">集計中</b><span>利益合計</span></div>
-</div>
-<p class="note" style="margin-top:8px">会社の清掃（犬迫町）は請負・出来高から除外。完工・過去現場も対象月の出来高は計上します。</p>
-</div>
 <div class="card" id="cloudCard">
 <h2>クラウド接続</h2>
 <div id="cloudLoggedOut">
@@ -2010,7 +2000,7 @@ async function printSiteLedger(){
     <script>
       window.onload=()=>setTimeout(()=>window.print(),250);
     <\/script>
-<script src="company-total-stable.js?v=20260921-v1"></script>\n</body>
+</body>
   </html>`;
 
   const w=window.open('','_blank');
@@ -2330,11 +2320,11 @@ renderSelectors();enhanceNumericInputs(document);renderHome();installCloudSessio
 <script src="estimate-concrete-engine.js?v=20260915-building-use-v1"></script>
 <script src="estimate-auto-builder.js?v=20260915-manual-kind-v1"></script>
 <script src="estimate-plan-admin.js?v=20260919-delete-fix-v5"></script>
-<script src="site-auto-ledger.js?v=20260921-company-total-v2"></script>
+<script src="site-auto-ledger.js?v=20260916-scroll-stable-v1"></script>
 <script src="estimate-quantities.js?v=20260914-plans-v1"></script>
 <script src="company-registry.js?v=20260914-onboarding-v1"></script>
 <script src="company-members.js?v=20260919-login-label-v1"></script>
 <script src="company-dispatch.js?v=20260914-v1"></script>
-<script src="company-plan-ui.js?v=20260919-hide-internal-v1"></script><script src="usability.js?v=20260916-slogan-v1"></script><script src="company-slogan.js?v=20260916-slogan-v1"></script><script src="company-monthly-summary.js?v=20260921-mount-reset-v6"></script><script src="inventory-management.js?v=20260919-inventory-v1"></script><script src="company-total-stable.js?v=20260921-v3"></script>
+<script src="company-plan-ui.js?v=20260919-hide-internal-v1"></script><script src="usability.js?v=20260916-slogan-v1"></script><script src="company-slogan.js?v=20260916-slogan-v1"></script><script src="company-monthly-summary.js?v=20260919-progress-button-v19"></script><script src="inventory-management.js?v=20260919-inventory-v1"></script>
 </body>
 </html>
