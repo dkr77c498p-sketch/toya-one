@@ -582,12 +582,21 @@ async function cloudLogin(){
   const password=$('#cloudPassword').value;
   if(!email||!password)return alert('メールアドレスとパスワードを入力してください。');
   cloudMsg('ログイン中…');
-  const {error}=await cloudClient.auth.signInWithPassword({email,password});
-  if(error){ cloudMsg('ログインできません：'+error.message,'bad'); return; }
+  let auth;
+  try{auth=await cloudClient.auth.signInWithPassword({email,password});}
+  catch(e){cloudMsg('通信・認証エラーです。パスワードは変更せず、通信状態を確認してください。詳細：'+(e?.message||'不明'),'bad');return;}
+  if(auth.error){
+    const msg=String(auth.error.message||'');
+    const jp=/invalid login credentials/i.test(msg)?'メールアドレスまたはパスワードを確認してください。パスワード変更はしていません。':/rate limit|too many/i.test(msg)?'ログイン試行が多いため一時的に制限されています。少し待ってから同じパスワードで試してください。':'認証エラー：'+msg;
+    cloudMsg('ログインできません：'+jp,'bad'); return;
+  }
   $('#cloudPassword').value='';
-  await cloudRefreshSession();
+  cloudMsg('認証できました。会社情報を確認中…');
+  const state=await cloudRefreshSession();
+  if(state?.status!=='ready'){cloudMsg('パスワード認証は成功しましたが、会社情報の読み込みで止まりました：'+(state?.message||state?.status||'不明'),'bad');return;}
   await cloudLogActivity('login');
   await cloudLoadReports();
+  cloudMsg('管理者としてクラウドに接続しました。','ok');
 }
 async function cloudLogout(){
   if(!cloudClient)return;
