@@ -148,11 +148,11 @@
   if(!selectionReady){
    let saved=null;try{saved=JSON.parse(localStorage.getItem(selectionKey()));}catch(e){}
    if(Array.isArray(saved))excluded=new Set(saved.filter(x=>typeof x==='string'));
-   else if(cloudProfile.company_id==='40a7a065-1086-4e62-aa09-f44d6207602c')excluded=new Set(data.sites.filter(s=>s.name.normalize('NFKC').replace(/[\s　]/g,'')==='会社の清掃(犬迫町)').map(s=>s.id));
+   else excluded=new Set(data.sites.filter(s=>{const n=s.name.normalize('NFKC').replace(/[\s　]/g,'');return s.status==='completed'||s.status==='past'||n==='会社の清掃(犬迫町)';}).map(s=>s.id));
    selectionReady=true;
   }
   const box=q('#cmSiteChoices');box.replaceChildren();
-  for(const site of [...data.sites].filter(s=>s.name.normalize('NFKC').replace(/[\s　]/g,'')!=='現場名をあとで変更').sort((a,b)=>a.name.localeCompare(b.name,'ja'))){
+  const visibleSites=[...data.sites].filter(s=>s.name.normalize('NFKC').replace(/[\s　]/g,'')!=='現場名をあとで変更');\n  const byName=new Map();for(const s of visibleSites){const k=s.name.normalize('NFKC').replace(/[\\s　]/g,'');if(!byName.has(k))byName.set(k,[]);byName.get(k).push(s);}\n  for(const site of visibleSites.sort((a,b)=>a.name.localeCompare(b.name,'ja'))){
    const label=document.createElement('label'),check=document.createElement('input');
    check.type='checkbox';check.checked=!excluded.has(site.id);check.dataset.siteId=site.id;
    label.append(check,document.createTextNode(site.name));box.append(label);
