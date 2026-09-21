@@ -137,7 +137,7 @@
    '<div id="cmProgressAction"><button id="cmProgressOpen" class="btn lime" type="button" style="width:100%;margin:14px 0;font-weight:900">今月の出来高を入力</button><div id="cmProgressEditor"></div></div><p id="cmContractInfo" class="cm-contract-note"></p>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
    '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。月途中でも「現場内容・契約内訳」で現時点の出来高を入力すると、その金額を対象月の出来高として集計し、暫定利益を表示します。月末に最終出来高へ変更して確定してください。前月までの出来高は翌月へ二重計上しません。</p><p>請求済み：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。請負分との重複を避けるため、利益には加算しません。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
-  home.prepend(card);place();
+  const anchor=q('#pbHomeActions')||q('#uxDailyHome')||q('#cloudCard');if(anchor)anchor.after(card);else home.prepend(card);
   q('#cmMonth').onchange=()=>{month=q('#cmMonth').value;followCurrent=month===japanMonth();ticket++;pending='';loaded='';empty();refresh();};
   q('#cmThisMonth').onclick=()=>{month=japanMonth();followCurrent=true;q('#cmMonth').value=month;ticket++;pending='';loaded='';empty();refresh();};
   q('#cmRefresh').onclick=()=>refresh(true);q('#cmProgressOpen').onclick=()=>renderProgressEditor();return true;
