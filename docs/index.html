@@ -132,7 +132,7 @@ textarea{min-height:105px;resize:vertical}
 .calendar-week{font-size:11px;text-align:center;font-weight:900;color:#666;padding:4px 0}
 .calendar-day{min-height:72px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:6px;text-align:left;position:relative;overflow:hidden}
 .calendar-day.other{opacity:.32}.calendar-day.has{border:2px solid #111}.calendar-day.selected{background:#efffc4;border-color:#7fac00}
-.calendar-day .daynum{font-weight:900;font-size:13px}.calendar-day .count{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:2px 6px;font-size:10px;margin-top:4px}
+.calendar-day .daynum{font-weight:900;font-size:13px}.calendar-week.sun,.calendar-day.sun .daynum{color:#d92d20}.calendar-day.holiday{background:#fff1f0;border-color:#e7a19b}.calendar-day.holiday .daynum{color:#d92d20}.calendar-day .holiday-name{display:block;font-size:8px;color:#d92d20;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}.calendar-day .count{display:inline-block;background:#111;color:#fff;border-radius:999px;padding:2px 6px;font-size:10px;margin-top:4px}
 .calendar-day .mini{display:block;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}
 .edit-banner{display:none;background:#fff4d6;border:2px solid #f0b429;border-radius:12px;padding:11px 12px;margin-bottom:12px;font-weight:900}
 .edit-banner.show{display:flex;justify-content:space-between;gap:8px;align-items:center}
@@ -2075,12 +2075,13 @@ function renderRecordCalendar(a){
   if(!recordCalendarMonth)recordCalendarMonth=today().slice(0,7);
   const [y,m]=recordCalendarMonth.split('-').map(Number),first=new Date(y,m-1,1),start=new Date(y,m-1,1-first.getDay());
   const counts={};a.forEach(d=>{if(d.date)(counts[d.date]||(counts[d.date]=[])).push(d)});
-  const weeks=['日','月','火','水','木','金','土'].map(x=>`<div class="calendar-week">${x}</div>`).join('');
+  const weeks=['日','月','火','水','木','金','土'].map((x,i)=>`<div class="calendar-week${i===0?' sun':''}">${x}</div>`).join('');
+  const holidayName=(date)=>{const fixed={'01-01':'元日','02-11':'建国記念の日','02-23':'天皇誕生日','04-29':'昭和の日','05-03':'憲法記念日','05-04':'みどりの日','05-05':'こどもの日','08-11':'山の日','11-03':'文化の日','11-23':'勤労感謝の日'};const md=date.slice(5);if(fixed[md])return fixed[md];const dt=new Date(date+'T00:00:00'),yy=dt.getFullYear(),mm=dt.getMonth()+1,dd=dt.getDate(),nth=Math.floor((dd-1)/7)+1,w=dt.getDay();if(mm===1&&w===1&&nth===2)return'成人の日';if(mm===7&&w===1&&nth===3)return'海の日';if(mm===9&&w===1&&nth===3)return'敬老の日';if(mm===10&&w===1&&nth===2)return'スポーツの日';if(date==='2026-09-21')return'敬老の日';if(date==='2026-09-22')return'国民の休日';if(date==='2026-09-23')return'秋分の日';if(date==='2026-03-20')return'春分の日';return'';};
   const days=[];
   for(let i=0;i<42;i++){
     const d=new Date(start);d.setDate(start.getDate()+i);
     const ds=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,arr=counts[ds]||[],other=d.getMonth()!==m-1;
-    days.push(`<button type="button" class="calendar-day${other?' other':''}${arr.length?' has':''}${recordSelectedDate===ds?' selected':''}" onclick="selectRecordDate('${ds}')"><span class="daynum">${d.getDate()}</span>${arr.length?`<span class="count">${arr.length}件</span><span class="mini">${cloudHtml(arr[0].site||'')}</span>`:''}</button>`);
+    const holiday=holidayName(ds),sun=d.getDay()===0;days.push(`<button type="button" class="calendar-day${other?' other':''}${arr.length?' has':''}${recordSelectedDate===ds?' selected':''}${sun?' sun':''}${holiday?' holiday':''}" onclick="selectRecordDate('${ds}')"><span class="daynum">${d.getDate()}</span>${holiday?`<span class="holiday-name">${holiday}</span>`:''}${arr.length?`<span class="count">${arr.length}件</span><span class="mini">${cloudHtml(arr[0].site||'')}</span>`:''}</button>`);
   }
   box.style.display='block';box.innerHTML=`<div class="calendar-head"><button class="btn light" type="button" onclick="shiftRecordMonth(-1)">‹</button><b>${y}年 ${m}月</b><button class="btn light" type="button" onclick="shiftRecordMonth(1)">›</button></div><div class="calendar-grid">${weeks}${days.join('')}</div>`;
 }
