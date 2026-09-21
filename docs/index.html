@@ -2081,7 +2081,7 @@ function renderRecordCalendar(a){
   for(let i=0;i<42;i++){
     const d=new Date(start);d.setDate(start.getDate()+i);
     const ds=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,arr=counts[ds]||[],other=d.getMonth()!==m-1;
-    const holiday=holidayName(ds),sun=d.getDay()===0;days.push(`<button type="button" class="calendar-day${other?' other':''}${arr.length?' has':''}${recordSelectedDate===ds?' selected':''}${sun?' sun':''}${holiday?' holiday':''}" onclick="selectRecordDate('${ds}')"><span class="daynum">${d.getDate()}</span>${holiday?`<span class="holiday-name">${holiday}</span>`:''}${arr.length?`<span class="count">${arr.length}件</span><span class="mini">${cloudHtml(arr[0].site||'')}</span>`:''}</button>`);
+    const holiday=holidayName(ds),sun=d.getDay()===0;days.push(`<button type="button" class="calendar-day${other?' other':''}${arr.length?' has':''}${recordSelectedDate===ds?' selected':''}${sun?' sun':''}${holiday?' holiday':''}" onclick="selectRecordDate('${ds}')"><span class="daynum" style="${sun||holiday?'color:#d92d20!important;':''}">${d.getDate()}</span>${holiday?`<span class="holiday-name" style="color:#d92d20!important">${holiday}</span>`:''}${arr.length?`<span class="count">${arr.length}件</span><span class="mini">${cloudHtml(arr[0].site||'')}</span>`:''}</button>`);
   }
   box.style.display='block';box.innerHTML=`<div class="calendar-head"><button class="btn light" type="button" onclick="shiftRecordMonth(-1)">‹</button><b>${y}年 ${m}月</b><button class="btn light" type="button" onclick="shiftRecordMonth(1)">›</button></div><div class="calendar-grid">${weeks}${days.join('')}</div>`;
 }
