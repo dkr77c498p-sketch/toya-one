@@ -99,7 +99,7 @@
   const missingCosts=shown.filter(r=>r.invoiceCount&&!r.hasCosts).length;
   const warningCount=shown.reduce((n,r)=>n+r.warnings.length,0);
   const knownCost=hasCosts&&!unlinked?cost:null;
-  const startedRows=shown.filter(r=>r.site.status==='active'&&r.hasCosts);
+  const startedRows=shown.filter(r=>r.hasCosts);
   const missingMonthlyContracts=startedRows.filter(r=>r.monthlyContractAmount===null).length;
   const missingMonthlyCosts=shown.filter(r=>r.monthlyContractAmount!==null&&!r.hasCosts).length;
   const monthlyContractTotal=startedRows.length&&!missingMonthlyContracts?startedRows.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
