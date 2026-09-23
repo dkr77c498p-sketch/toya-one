@@ -1,0 +1,96 @@
+name: Verify compact quotation overhead row
+on:
+  push:
+    branches: [fix/quote-overhead-row-20260923]
+    paths: ['.github/workflows/fix-overhead-print-row.yml']
+permissions:
+  contents: write
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/fix/quote-overhead-row-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/quote-overhead-row-20260923
+      - name: Apply exact print-only patch with guarded hashes
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          def sha(b):return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+          src=Path('docs/project-documents-engine.quote5-r1.js').read_bytes()
+          assert sha(src)=='ac042f30398dd292374515f1781e62851e960031'
+          old="  const shownSpec=r=>{let spec=String(r.spec||'');"
+          new="""  // Shorten only the app-generated overhead formula in the customer printout.
+            // Keep saved data, the input-screen explanation and all manual remarks intact.
+            const shownSpec=r=>{let spec=String(r.spec||'');const formula=r.auto_percent==='quote_overhead_v1'&&spec.match(/^直接工事費 ([0-9,]+)円 × ([0-9]+(?:\\.[0-9]{1,2})?)%（1円未満切捨て）$/);if(formula)return '直接工事費×'+formula[2]+'%';"""
+          # Match the locally reviewed two-space indentation exactly.
+          new=new.replace('\n    ','\n  ')
+          s=src.decode();assert s.count(old)==1
+          output=s.replace(old,new,1).encode();assert sha(output)=='ebcbf3d3af0f4c08ff9df30bbe230a13eb505e45',sha(output)
+          target=Path('docs/project-documents-engine.quote5-r2.js');assert not target.exists();target.write_bytes(output)
+          index=Path('docs/index.html');b=index.read_bytes();assert sha(b)=='4e5815fa21f838d2fc3a739d73dfd4be45fcb42f'
+          oldref='project-documents-engine.quote5-r1.js?v=20260923-r1'
+          newref='project-documents-engine.quote5-r2.js?v=20260923-r2'
+          text=b.decode();assert text.count(oldref)==1
+          index.write_text(text.replace(oldref,newref,1))
+          PY
+          node --check docs/project-documents-engine.quote5-r2.js
+          OVERHEAD_RENDER_OUT=preview node --test tests/overhead-print-row.cjs
+      - name: Measure equal row height in Chromium and WebKit using synthetic data
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+          from playwright.sync_api import sync_playwright
+          output=Path('preview');results=[]
+          with sync_playwright() as pw:
+            for engine in ['chromium','webkit']:
+              b=getattr(pw,engine).launch(headless=True)
+              c=b.new_context(viewport={'width':390,'height':844})
+              c.route('**/*',lambda r:r.abort())
+              page=c.new_page()
+              for name in ['before','after','max-rate']:
+                page.set_content((output/(name+'.html')).read_text());page.emulate_media(media='print');page.evaluate('document.fonts.ready')
+                m=page.evaluate('''() => {
+                  const rows=[...document.querySelector('.te2-summary table').querySelectorAll('tbody tr')];
+                  const row=rows.find(r=>r.cells[1]?.textContent==='諸経費');
+                  const normal=rows.find(r=>r.cells[1]?.textContent==='直接工事費');
+                  const last=row.cells[6];return {overhead:row.getBoundingClientRect().height,normal:normal.getBoundingClientRect().height,text:last.textContent,cellWidth:last.clientWidth,scrollWidth:last.scrollWidth};
+                }''')
+                if name!='before':
+                  assert abs(m['overhead']-m['normal'])<0.5,m
+                  assert m['scrollWidth']<=m['cellWidth']+1,m
+                else:assert m['overhead']>m['normal']*1.8,m
+                results.append({'browser':engine,'file':name,**m})
+                if engine=='chromium':page.pdf(path=str(output/(name+'.pdf')),format='A4',print_background=True,prefer_css_page_size=True)
+              b.close()
+          (output/'browser-results.json').write_text(json.dumps(results,ensure_ascii=False,indent=2));print(json.dumps(results,ensure_ascii=False))
+          PY
+      - name: Commit only the renderer and its single loader reference on this branch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/quote-overhead-row-20260923'
+          python3 - <<'PY'
+          import subprocess
+          assert subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()==['docs/index.html']
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/project-documents-engine.quote5-r2.js
+          git diff --cached --check
+          git commit -m 'Keep printed overhead at normal row height; preserve all amounts and saved remarks'
+          git push origin HEAD:refs/heads/fix/quote-overhead-row-20260923
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-overhead-row-verification
+          path: preview/
+          retention-days: 3
