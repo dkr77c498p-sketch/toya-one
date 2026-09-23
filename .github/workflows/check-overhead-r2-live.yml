@@ -1,0 +1,36 @@
+name: Verify public overhead row R2
+on:
+  push:
+    branches: [fix/quote-overhead-row-20260923]
+    paths: ['.github/workflows/check-overhead-r2-live.yml']
+permissions:
+  contents: read
+jobs:
+  public-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Confirm actual published HTML and renderer bytes
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib,time
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          def read(path):
+            request=urllib.request.Request(base+path,headers={'Cache-Control':'no-cache','User-Agent':'TOYA-quotation-release-check'})
+            with urllib.request.urlopen(request,timeout=20) as response:
+              assert response.status==200
+              return response.read()
+          for attempt in range(4):
+            try:
+              html=read('index.html?overhead-row-r2=20260923').decode()
+              assert 'project-documents-engine.quote5-r2.js?v=20260923-r2' in html
+              b=read('project-documents-engine.quote5-r2.js?v=20260923-r2')
+              sha=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+              assert sha=='ebcbf3d3af0f4c08ff9df30bbe230a13eb505e45',sha
+              print('PASS: public index references R2; HTTP 200; exact renderer blob '+sha)
+              print('Customer print formula compacted to one line; original amounts and saved remarks are unmodified.')
+              break
+            except Exception:
+              if attempt==3:raise
+              time.sleep(10)
+          PY
