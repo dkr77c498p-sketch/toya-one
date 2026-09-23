@@ -1,0 +1,37 @@
+name: Verify quotation editor in Chromium and WebKit
+on:
+  push:
+    branches: [work/quote-options-20260923]
+    paths:
+      - '.github/workflows/verify-quote-options-ui.yml'
+      - 'tests/quote_browser_test.py'
+      - 'tests/quote-browser.html'
+permissions:
+  contents: read
+jobs:
+  quote-ui:
+    if: github.ref == 'refs/heads/work/quote-options-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install pinned test browser
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps ${{ matrix.browser }}
+      - name: Exercise only offline synthetic quotation data
+        env:
+          QUOTE_TEST_BROWSER: ${{ matrix.browser }}
+        run: python3 tests/quote_browser_test.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quote-options-${{ matrix.browser }}
+          path: test-output/${{ matrix.browser }}/
+          retention-days: 3
