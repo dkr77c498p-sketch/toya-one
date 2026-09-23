@@ -1,0 +1,46 @@
+name: Verify public nearby discount display
+on:
+  push:
+    branches: [fix/quote-discount-nearby-20260923]
+    paths: ['.github/workflows/verify-discount-nearby-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 70b87b5791cd542a92fbdade564ac21c2e7cacd6
+          persist-credentials: false
+      - name: Read exact public HTML and assets without account access
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import urllib.request,hashlib,json,time
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={'index.html':'f66bff1691e029dbcaf49f4c43cc95a7cb7d72da','estimate-plan-admin.quote5-r2.js':'c38bc1659ebb51b3de6e5ff9446b67781180ba25','project-documents-engine.quote5-r3.js':'11e336fc31cc970e2ae879fcd5698ed15d99e71d'}
+          checks=[]
+          for name,want in expected.items():
+            for attempt in range(5):
+              try:
+                req=urllib.request.Request(base+name+'?verify=nearby-70b87b5',headers={'Cache-Control':'no-cache'})
+                with urllib.request.urlopen(req,timeout=20) as response:
+                  assert response.status==200
+                  data=response.read()
+                got=hashlib.sha1(b'blob '+str(len(data)).encode()+b'\0'+data).hexdigest()
+                assert got==want,(name,got,want)
+                assert data==(Path('docs')/name).read_bytes(),name
+                checks.append({'file':name,'status':200,'sha':got,'result':'matches tested code'})
+                break
+              except Exception:
+                if attempt==4:raise
+                time.sleep(5)
+          html=Path('docs/index.html').read_text()
+          assert 'estimate-plan-admin.quote5-r2.js?v=20260923-discount-r2' in html
+          assert 'project-documents-engine.quote5-r3.js?v=20260923-r3' in html
+          print(json.dumps({'result':'passed','checks':checks,'scope':'public static assets only; no credentials or account data'},ensure_ascii=False,indent=2))
+          PY
+      - name: Verify print assertions on the exact released files
+        run: node --test tests/discount-nearby-print.cjs
