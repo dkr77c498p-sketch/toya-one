@@ -1,0 +1,68 @@
+name: Package quotation 5 percent R1
+on:
+  push:
+    branches: [release/quote5-r1-20260923]
+    paths: ['.github/workflows/package-quote5-r1.yml']
+permissions:
+  contents: write
+jobs:
+  package:
+    if: github.ref == 'refs/heads/release/quote5-r1-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/quote5-r1-20260923
+          path: release
+      - uses: actions/checkout@v4
+        with:
+          ref: 412f935e0937ee737540eb3a1e0273ba348627e6
+          path: candidate
+          persist-credentials: false
+      - name: Verify quote calculations and source hashes
+        run: |
+          set -euo pipefail
+          TOYA_QUOTE_BASELINE="$GITHUB_WORKSPACE/release/docs/project-documents-engine.js" node --test candidate/tests/quote-options-v1.cjs
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,re,subprocess
+          expected={'estimate-plan-engine':'f8933003426f4a4bf84cd751c77c26ccc1ac1947','estimate-auto-builder':'cd5e714b62e27373f57d1de76250f376e971df78','estimate-plan-admin':'4c12e370c8875008759aa2fbb5e0b596b9475145','project-documents-engine':'ac042f30398dd292374515f1781e62851e960031'}
+          p=Path('release/docs/index.html');original=p.read_text()
+          assert hashlib.sha1(b'blob '+str(len(p.read_bytes())).encode()+b'\0'+p.read_bytes()).hexdigest()=='b2a13ab5a557181753afdfd33cc46ddfe468b6aa'
+          h=original
+          for name,sha in expected.items():
+            src=Path('candidate/docs')/(name+'.js');b=src.read_bytes()
+            assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==sha,name
+            target=Path('release/docs')/(name+'.quote5-r1.js');assert not target.exists();target.write_bytes(b)
+            h,n=re.subn(r'(src="'+re.escape(name)+r')\.js\?v=[^"]+',r'\1.quote5-r1.js?v=20260923-r1',h);assert n==1,name
+            subprocess.run(['node','--check',str(target)],check=True)
+          # Only external quote-module references change. All inline app logic is identical.
+          assert re.findall(r'<script>([\s\S]*?)</script>',h)==re.findall(r'<script>([\s\S]*?)</script>',original)
+          p.write_text(h)
+          changed=set(subprocess.check_output(['git','-C','release','diff','--name-only'],text=True).splitlines())
+          assert changed=={'docs/index.html'},changed
+          PY
+      - name: Verify phone-sized quote UI in both browsers without account traffic
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+          QUOTE_TEST_BROWSER=chromium python3 candidate/tests/quote_browser_test.py
+          QUOTE_TEST_BROWSER=webkit python3 candidate/tests/quote_browser_test.py
+      - name: Commit only to the release branch; no deployment
+        working-directory: release
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/release/quote5-r1-20260923'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/estimate-plan-engine.quote5-r1.js docs/estimate-auto-builder.quote5-r1.js docs/estimate-plan-admin.quote5-r1.js docs/project-documents-engine.quote5-r1.js
+          git diff --cached --check
+          git commit -m 'Release isolated quote 5% R1 assets; preserve all original app modules'
+          git push origin HEAD:refs/heads/release/quote5-r1-20260923
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quote5-release-verification
+          path: candidate/test-output/
+          retention-days: 3
