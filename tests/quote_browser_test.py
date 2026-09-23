@@ -18,30 +18,32 @@ with sync_playwright() as pw:
  page.locator('.ep-manual').evaluate('(e)=>e.open=true');page.locator('[data-ep-group="1"]').evaluate('(e)=>e.open=true')
  page.locator('#epNo1_0').fill('001');page.locator('#epGroupNo1').fill('2')
  assert '148,170円' in page.locator('#epTotals').inner_text()
- page.locator('[data-quote-charge="overhead"]').click();page.locator('#epOverheadRate4_0').fill('10')
- assert page.locator('#epQuotePrice4_0').input_value()=='13470'
+ page.locator('[data-quote-charge="overhead"]').click();page.locator('#epOverheadRate4_0').fill('5')
+ assert page.locator('#epQuotePrice4_0').input_value()=='6735'
  page.locator('[data-quote-charge="transport"]').click();page.locator('#epQuotePrice4_1').fill('10000')
  page.locator('[data-quote-charge="discount"]').click();page.locator('#epQuotePrice4_2').fill('8170')
- assert '165,000円' in page.locator('#epTotals').inner_text(),page.locator('#epTotals').inner_text()
+ assert '157,591円' in page.locator('#epTotals').inner_text(),page.locator('#epTotals').inner_text()
  page.locator('[data-ep-group="1"]').evaluate('(e)=>e.open=true')
  page.locator('[data-separate-waste="1,0"]').click()
  page.locator('#epNo2_0').fill('1');page.locator('#epNo2_1').fill('2')
  page.locator('#epQuotePrice2_0').fill('2000');page.locator('#epQuotePrice2_1').fill('5000')
- assert '198,880円' in page.locator('#epTotals').inner_text(),page.locator('#epTotals').inner_text()
- assert page.locator('#epQuotePrice4_0').input_value()=='16270'
+ assert '189,931円' in page.locator('#epTotals').inner_text(),page.locator('#epTotals').inner_text()
+ assert page.locator('#epQuotePrice4_0').input_value()=='8135'
  page.locator('#epTotals').screenshot(path=str(out/'quote-totals.png'))
  page.locator('#epSave').click();page.wait_for_function('window.__savedPlans.length===1')
  p=page.evaluate('window.__savedPlans[0]');assert p['groups'][1]['quote_lines'][0]['item_no']=='001'
- assert p['groups'][1]['item_no']=='2';assert p['calculation']['price']==180800
+ assert p['groups'][1]['item_no']=='2';assert p['calculation']['price']==172665
  assert p['groups'][4]['quote_lines'][2]['quote_amount']=='-8170'
- assert page.locator('#epNo1_0').input_value()=='001';assert page.locator('#epOverheadRate4_0').input_value()=='10'
+ assert page.locator('#epNo1_0').input_value()=='001';assert page.locator('#epOverheadRate4_0').input_value()=='5'
  page.locator('#epCreateQuote').click();page.wait_for_function('!!window.__previewDoc')
  html=page.evaluate('ToyaProjectDocuments.printHTML(window.__previewDoc)')
  (out/'sample-estimate.html').write_text(html)
  preview=context.new_page();preview.set_content(html);preview.emulate_media(media='print')
  if engine=='chromium':preview.pdf(path=str(out/'sample-estimate.pdf'),format='A4',print_background=True,prefer_css_page_size=True)
  text=preview.locator('body').inner_text();assert '産業廃棄物運搬費' in text and '産業廃棄物処分費' in text
- assert '001' in text and '198,880' in text and '-8,170' in text
+ assert '001' in text and '189,931' in text and '-8,170' in text
+ assert page.locator('#epAutoWelfare').count()==0
+ assert '法定福利費' not in text
  assert not errors,errors
  (out/'browser-results.json').write_text(json.dumps({'browser':engine,'viewport':'390x844','network':'offline in-memory page; all network blocked','checks':['numeric group and row IDs','positive discount input stored negative','automatic overhead recalculation','separate haul and disposal entries','mock save and reload preserves fields','customer print totals'],'page_errors':errors,'result':'passed'},ensure_ascii=False,indent=2))
  browser.close()

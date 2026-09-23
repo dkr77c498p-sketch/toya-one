@@ -12,7 +12,7 @@
   steel:{label:'鉄骨造',inside:2150,upper:3900,foundation:11000,slab:7000,waste:{haul:119.5/300,concrete:165/300,wood:48.7/300,glass:16.5/300,plastic:7.9/300,paper:7.5/300,board:14.4/300,rubble:19.5/300,metal:21/300,mixed:5/300},wasteRates:{haul:7000,concreteHaul:2200,wood:15000,glass:9500,plastic:9500,paper:10000,board:25000,concrete:4000,rubble:9500,metal:-37000,mixed:18500}},
   rc:{label:'RC造',inside:2150,upper:3900,foundation:10800,slab:4500,waste:{haul:88.3/300,concrete:120/300,wood:11.2/300,glass:17.1/300,plastic:8.6/300,paper:7.5/300,board:14.4/300,rubble:19.5/300,metal:14.4/300,mixed:10/300},wasteRates:{haul:7000,concreteHaul:2200,wood:15000,glass:9500,plastic:9500,paper:10000,board:25000,concrete:4000,rubble:9500,metal:-37000,mixed:18500}}
  };
- function defaults(){return {kind:'wood',custom_name:'',use:'residential',area_basis:'gross',area_m2:'',area_tsubo:'',floors:'1',upper_method:'ground',elevated_m2:'',elevated_price:'',concrete_scope:'whole',concrete_mode:'reference',concrete_quantity:'',concrete_unit:'t',concrete_price_basis:'t',concrete_haul_price:'',concrete_disposal_price:'',scaffold_m2:'',sound_m2:'',mesh_m2:'',foundation_m3:'',slab_m3:'',asbestos_samples:'',slate_m2:'',exterior_m2:'',garden_m3:'',plants_m3:'',cb_m2:'',residual_m3:'',grading_m2:'',sandbag_m:'',internal_m2:'',internal_wall_m2:'',overhead_rate:'5',welfare_rate:'0'};}
+ function defaults(){return {kind:'wood',custom_name:'',use:'residential',area_basis:'gross',area_m2:'',area_tsubo:'',floors:'1',upper_method:'ground',elevated_m2:'',elevated_price:'',concrete_scope:'whole',concrete_mode:'reference',concrete_quantity:'',concrete_unit:'t',concrete_price_basis:'t',concrete_haul_price:'',concrete_disposal_price:'',scaffold_m2:'',sound_m2:'',mesh_m2:'',foundation_m3:'',slab_m3:'',asbestos_samples:'',slate_m2:'',exterior_m2:'',garden_m3:'',plants_m3:'',cb_m2:'',residual_m3:'',grading_m2:'',sandbag_m:'',internal_m2:'',internal_wall_m2:'',overhead_rate:'5',welfare_rate:null};}
  function normalize(raw={}){const d={...defaults(),...raw};if(num(d.area_m2))d.area_tsubo=round(num(d.area_m2)/TSUBO,2);else if(String(d.area_m2??'').trim()===''&&num(d.area_tsubo))d.area_m2=round(num(d.area_tsubo)*TSUBO,2);return d;}
  function build(raw){
   const a=normalize(raw);
@@ -41,7 +41,7 @@
    waste.push(line('コンクリート運搬費',concrete.quantity,concrete.unit,priceMatches?a.concrete_haul_price:'',spec,extra),line('コンクリート処分費',concrete.quantity,concrete.unit,priceMatches?a.concrete_disposal_price:'',spec,extra));
   }
   const other=[line('解体跡整地',a.grading_m2,'㎡',500),line('土嚢積み',a.sandbag_m,'m',1000)];
-  const groups=[group('A 仮設工事',temporary,a),group('B 解体工事',demolition),group('C 産業廃棄物処理工事',waste),group('D その他工事',other),group('E 諸経費・法定福利費・値引き',[])];
+  const groups=[group('A 仮設工事',temporary,a),group('B 解体工事',demolition),group('C 産業廃棄物処理工事',waste),group('D その他工事',other),group('E 回送費・諸経費・値引き',[])];
   return {input:a,groups};
  }
  function percentRows(groups,raw){
@@ -52,7 +52,9 @@
   if(!v1)for(const g of groups)for(const r of g.quote_lines||[]){if(r.excluded||r.auto_percent)continue;const q=num(r.quantity),p=Number(r.quote_price);if(q&&Number.isFinite(p))base+=Math.floor(q*p);}
   // Keep generated rows at their current indices. Removing then appending them
   // would let the next DOM gather write the welfare fields into the overhead row.
-  for(const [label,key] of [['法定福利費','welfare_rate'],['諸経費','overhead_rate']]){
+  // Statutory welfare is deferred: never infer it from direct-work cost.
+  // Previously saved welfare lines remain untouched, including their exclusions.
+  for(const [label,key] of [['諸経費','overhead_rate']]){
    const explicit=key==='overhead_rate'&&groups.some(g=>(g.quote_lines||[]).some(r=>r.charge_kind==='overhead'));
    const previous=(target.quote_lines||[]).filter(r=>r.auto_percent===key);
    if(previous.length>1)throw Error('自動計算の費目が重複しています。明細を確認してください。');

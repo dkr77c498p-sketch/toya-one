@@ -167,8 +167,8 @@
    f('床・天井面積','epAutoInternal','internal_m2','㎡'),f('壁面積','epAutoWall','internal_wall_m2','㎡'),
    '</div></details><details open><summary>D 整地・土嚢</summary><div class="ep-auto-grid">',
    f('解体跡整地','epAutoGrading','grading_m2','㎡'),f('土嚢積み','epAutoSandbag','sandbag_m','m'),
-   '</div></details><details><summary>諸経費・法定福利費の自動計算率</summary><p class="note">直接工事費に対する率です。率は今回の見積で変更できます。</p><div class="ep-auto-grid">',
-   f('諸経費率','epAutoOverhead','overhead_rate','%'),f('法定福利費率','epAutoWelfare','welfare_rate','%'),
+   '</div></details><details><summary>諸経費の自動計算率</summary><p class="note">新しい見積は直接工事費の5％が初期値です。率の変更・金額入力に対応しています。法定福利費は自動加算しません。既存の登録額は保持します。</p><div class="ep-auto-grid">',
+   f('諸経費率','epAutoOverhead','overhead_rate','%'),
    '</div></details></div><button id="epAutoApply" type="button" class="btn lime pb-wide">この数量で明細を自動作成</button><p id="epAutoPresetNote" class="note">コンクリート以外の産廃は従来の300㎡参考表から面積比例で計算します。SRC造のその他産廃は手入力してください。条件を変えたら明細を作り直し、現場に合わせて数量・単価を確認してください。</p></details>'
   ].join('');
  }

@@ -28,7 +28,7 @@ test('number fields are length limited and escaped before rendering',()=>{const 
 test('incomplete charges are identified, not displayed as a confirmed zero',()=>{const p=draft();charge(p,'overhead','');calculate(p);assert.equal(A.quoteSummary(p.groups).pendingKinds.overhead,true);});
 test('existing negative unit-priced discount opens without changing total',()=>{const p=draft();p.groups[4].quote_lines=[row('値引き',-500,{quantity:'2'})];const before=Q.calculate(p).price;p.groups=A.ensureQuoteCharge(p.groups,'discount').groups;assert.equal(p.groups[4].quote_lines[0].discount_input,true);assert.equal(p.groups[4].quote_lines[0].quote_amount,'-1000');assert.equal(Q.calculate(p).price,before);});
 test('opening an existing positive discount does not silently reverse the sign',()=>{const p=draft();p.groups[4].quote_lines=[row('値引き',500)];assert.throws(()=>A.ensureQuoteCharge(p.groups,'discount'),/プラス/);assert.equal(p.groups[4].quote_lines[0].quote_price,'500');});
-test('legacy welfare row stays at its DOM index when overhead becomes automatic',()=>{const p=draft();p.groups[0].auto_input={kind:'wood',welfare_rate:'3',overhead_rate:'10'};const raw=p.groups[0].auto_input;A.percentRows(p.groups,raw);const before=p.groups[4].quote_lines.map(r=>r.label);const overhead=p.groups[4].quote_lines.find(r=>r.charge_kind==='overhead');assert.ok(overhead);for(let n=0;n<3;n++)A.percentRows(p.groups,raw);assert.deepEqual(p.groups[4].quote_lines.map(r=>r.label),before);assert.equal(p.groups[4].quote_lines.filter(r=>A.chargeKind(r)==='overhead').length,1);assert.equal(overhead.quote_amount,'13470');});
+test('legacy welfare row stays at its DOM index when overhead becomes automatic',()=>{const p=draft();p.groups[0].auto_input={kind:'wood',welfare_rate:'3',overhead_rate:'10'};p.groups[4].quote_lines=[row('法定福利費','',{quantity:'1',unit:'式',amount_mode:true,quote_amount:'4041',auto_percent:'welfare_rate'})];const raw=p.groups[0].auto_input;A.percentRows(p.groups,raw);const before=p.groups[4].quote_lines.map(r=>r.label);const overhead=p.groups[4].quote_lines.find(r=>r.charge_kind==='overhead');assert.ok(overhead);for(let n=0;n<3;n++)A.percentRows(p.groups,raw);assert.deepEqual(p.groups[4].quote_lines.map(r=>r.label),before);assert.equal(p.groups[4].quote_lines.filter(r=>A.chargeKind(r)==='overhead').length,1);assert.equal(overhead.quote_amount,'13470');});
 test('new template auto overhead respects fixed amounts and excludes transport',()=>{const p=draft();p.groups[1].quote_lines[0].amount_mode=true;p.groups[1].quote_lines[0].quote_amount='50001';charge(p,'transport','10000');A.percentRows(p.groups,{kind:'wood',overhead_rate:'2.5',welfare_rate:'0'});assert.equal(A.quoteSummary(p.groups).overhead,1250);assert.equal(Q.calculate(p).price,61251);});
 test('customer adjustments are ordered as original form regardless of input order',()=>{const p=draft();charge(p,'overhead','10');charge(p,'discount','-1000');charge(p,'transport','2000');const html=D.printHTML(document(p));assert.ok(html.indexOf('重機回送費')<html.indexOf('諸経費'));assert.ok(html.indexOf('諸経費')<html.indexOf('値引き'));});
 
@@ -81,4 +81,37 @@ test('loading, printing or duplicating a saved quote does not add overhead',()=>
   assert.equal(JSON.stringify(p),before);
   assert.equal(A.quoteSummary(p.groups).overhead,0);
   assert.equal(A.quoteSummary(copied.groups).overhead,0);
+});
+
+test('deferred welfare defaults to unknown, not a confirmed zero',()=>{
+  assert.equal(A.defaults().overhead_rate,'5');assert.equal(A.defaults().welfare_rate,null);
+});
+test('legacy welfare rate cannot create a new welfare charge',()=>{
+  const p=draft();p.groups[0].auto_input={kind:'wood',overhead_rate:'5',welfare_rate:'18'};
+  A.percentRows(p.groups,p.groups[0].auto_input);
+  assert.equal(p.groups.flatMap(g=>g.quote_lines).some(r=>A.chargeKind(r)==='welfare'),false);
+  assert.equal(A.quoteSummary(p.groups).overhead,6735);
+});
+test('saved welfare amount and exclusion are unchanged by overhead updates',()=>{
+  for(const excluded of [false,true]){
+    const p=draft();const old=row('法定福利費','',{amount_mode:true,quote_amount:'22222',auto_percent:'welfare_rate',excluded});
+    p.groups[4].quote_lines=[old];const before=JSON.stringify(old);
+    A.percentRows(p.groups,{kind:'wood',overhead_rate:'5',welfare_rate:'0'});
+    p.groups[1].quote_lines[0].quote_price='1000000';
+    A.percentRows(p.groups,{kind:'wood',overhead_rate:'5',welfare_rate:'99'});
+    assert.equal(JSON.stringify(p.groups[4].quote_lines[0]),before);
+    assert.equal(A.quoteSummary(p.groups).overhead,50000);
+  }
+});
+test('new auto-generated groups have no statutory-welfare heading or line',()=>{
+  const n=A.build({kind:'wood',area_m2:'100',overhead_rate:'5',welfare_rate:'18'});
+  A.percentRows(n.groups,n.input);
+  assert.ok(n.groups.every(g=>!g.name.includes('法定福利費')));
+  assert.ok(n.groups.flatMap(g=>g.quote_lines).every(r=>A.chargeKind(r)!=='welfare'));
+});
+test('overhead-only customer quote totals before tax have no synthetic welfare',()=>{
+  const p=draft();p.groups[1].quote_lines[0].quote_price='1000000';
+  charge(p,'transport','30000');charge(p,'overhead','5');charge(p,'discount','-80000');
+  const result=calculate(p);assert.equal(result.price,1000000);assert.equal(result.total,1100000);
+  const html=D.printHTML(document(p));assert.ok(!html.includes('法定福利費'));
 });
