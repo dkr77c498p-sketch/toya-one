@@ -1,0 +1,68 @@
+name: Verify nearby quotation discount totals
+on:
+  push:
+    branches: [fix/quote-discount-nearby-20260923]
+    paths: ['.github/workflows/quote-discount-nearby.yml']
+permissions:
+  contents: write
+concurrency:
+  group: quote-discount-nearby-20260923
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/fix/quote-discount-nearby-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/quote-discount-nearby-20260923
+      - uses: actions/checkout@v4
+        with:
+          ref: 90b3d95bc59732f490e2f6cd76ce8b6fe5c7450b
+          path: .quote-fixture-source
+          persist-credentials: false
+          sparse-checkout: tests/quote-browser.html
+          sparse-checkout-cone-mode: false
+      - name: Apply guarded display patch and verify output hashes
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          cp .quote-fixture-source/tests/quote-browser.html tests/quote-browser.html
+          python3 scripts/discount-nearby-patch.py
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,subprocess
+          expected={'estimate-plan-admin.quote5-r2.js':'c38bc1659ebb51b3de6e5ff9446b67781180ba25','project-documents-engine.quote5-r3.js':'11e336fc31cc970e2ae879fcd5698ed15d99e71d','index.html':'f66bff1691e029dbcaf49f4c43cc95a7cb7d72da'}
+          for name,sha in expected.items():
+            b=(Path('docs')/name).read_bytes()
+            assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==sha,name
+          assert subprocess.check_output(['git','diff','--name-only'],text=True).strip()=='docs/index.html'
+          PY
+          node --check docs/estimate-plan-admin.quote5-r2.js
+          node --check docs/project-documents-engine.quote5-r3.js
+          node --test tests/discount-nearby-print.cjs
+      - name: Verify Chromium and WebKit offline with synthetic data
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+          QUOTE_TEST_BROWSER=chromium python3 tests/discount-nearby-browser.py
+          QUOTE_TEST_BROWSER=webkit python3 tests/discount-nearby-browser.py
+      - name: Commit only the two quotation files and two loader references to this branch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/quote-discount-nearby-20260923'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/estimate-plan-admin.quote5-r2.js docs/project-documents-engine.quote5-r3.js docs/index.html
+          git diff --cached --check
+          git commit -m 'Show live quotation total next to discount and omit generated overhead print explanation'
+          git push origin HEAD:refs/heads/fix/quote-discount-nearby-20260923
+          echo 'Display-only candidate verified. No main deployment or database changes.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quote-discount-nearby-tested
+          path: test-output/
+          retention-days: 3
