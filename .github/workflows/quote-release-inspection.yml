@@ -1,0 +1,27 @@
+name: Inspect quotation release candidate
+on:
+  push:
+    branches: [work/quote-options-20260923]
+    paths: ['.github/workflows/quote-release-inspection.yml']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    if: github.ref == 'refs/heads/work/quote-options-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify source syntax
+        run: |
+          set -eu
+          for name in estimate-plan-engine estimate-auto-builder estimate-plan-admin project-documents-engine; do node --check "docs/$name.js"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quotation-release-candidate
+          path: |
+            docs/
+            tests/
+          retention-days: 3
