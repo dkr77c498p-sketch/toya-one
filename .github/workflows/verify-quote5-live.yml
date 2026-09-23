@@ -1,0 +1,61 @@
+name: Verify public quotation R1 release
+on:
+  push:
+    branches: [work/quote-options-20260923]
+    paths: ['.github/workflows/verify-quote5-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-live:
+    if: github.ref == 'refs/heads/work/quote-options-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 412f935e0937ee737540eb3a1e0273ba348627e6
+          persist-credentials: false
+      - name: Verify actual public page and exact deployed asset bytes
+        run: |
+          python3 - <<'PY'
+          import urllib.request,time,hashlib,json,re
+          from pathlib import Path
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={'estimate-plan-engine':'f8933003426f4a4bf84cd751c77c26ccc1ac1947','estimate-auto-builder':'cd5e714b62e27373f57d1de76250f376e971df78','estimate-plan-admin':'4c12e370c8875008759aa2fbb5e0b596b9475145','project-documents-engine':'ac042f30398dd292374515f1781e62851e960031'}
+          old={'estimate-plan-engine.js':'4847a770b77a45e2d4dc838e529022b19167b6da','estimate-auto-builder.js':'e7724b2ffbb0f4b8a44cf0a781e53b8bfe99d9aa','estimate-plan-admin.js':'96d28866f29ec2fcb913b468677c5559956f96bb','project-documents-engine.js':'8605f675690ddc0a64c06c797d462b74de61599b','restore-login.html':'25daca178eb2c1c00f48a50ba83d35df506cc6a7'}
+          def get(path):
+            with urllib.request.urlopen(urllib.request.Request(base+path,headers={'Cache-Control':'no-cache'}),timeout=15) as r:
+              assert r.status==200
+              return r.read()
+          def sha(b):return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+          for attempt in range(12):
+            try:
+              h=get('index.html?verify=quote5-r1-'+str(attempt)).decode()
+              for name in expected:assert 'src="'+name+'.quote5-r1.js?v=20260923-r1"' in h,name
+              break
+            except Exception:
+              if attempt==11:raise
+              time.sleep(5)
+          baseline=Path('docs/index.html').read_text()
+          assert re.findall(r'<script>([\s\S]*?)</script>',h)==re.findall(r'<script>([\s\S]*?)</script>',baseline),'inline login/report code changed'
+          for name,want in expected.items():
+            b=get(name+'.quote5-r1.js?v=20260923-r1');assert sha(b)==want,name
+            # Browser test fixture loads these exact publicly deployed bytes.
+            (Path('docs')/(name+'.js')).write_bytes(b)
+          for name,want in old.items():assert sha(get(name+'?verify=quote5-r1'))==want,name
+          out=Path('test-output');out.mkdir(exist_ok=True)
+          (out/'live-release.json').write_text(json.dumps({'page_status':200,'release':'quote5-r1','public_assets_match':True,'old_assets_unchanged':True,'inline_auth_and_report_code_unchanged':True,'checked_at_utc':time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())},indent=2))
+          print('PASS actual public page, four new assets, unchanged original modules and unchanged inline auth/report code')
+          PY
+      - name: Test the deployed code without real accounts
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+          QUOTE_TEST_BROWSER=chromium python3 tests/quote_browser_test.py
+          QUOTE_TEST_BROWSER=webkit python3 tests/quote_browser_test.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-quote5-r1-confirmed
+          path: test-output/
+          retention-days: 3
