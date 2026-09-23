@@ -1,0 +1,63 @@
+name: Stage isolated quotation options
+on:
+  push:
+    branches: [work/quote-options-20260923]
+    paths:
+      - '.github/workflows/stage-quote-options.yml'
+permissions:
+  contents: write
+concurrency:
+  group: isolated-quote-options-v1
+  cancel-in-progress: false
+jobs:
+  verify-and-stage:
+    if: github.ref == 'refs/heads/work/quote-options-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/quote-options-20260923
+          fetch-depth: 1
+      - name: Verify base and protect unrelated files
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          import hashlib
+          from pathlib import Path
+          expected={'estimate-plan-engine.js':'4847a770b77a45e2d4dc838e529022b19167b6da','estimate-auto-builder.js':'e7724b2ffbb0f4b8a44cf0a781e53b8bfe99d9aa','estimate-plan-admin.js':'96d28866f29ec2fcb913b468677c5559956f96bb','project-documents-engine.js':'8605f675690ddc0a64c06c797d462b74de61599b'}
+          for name,sha in expected.items():
+            b=(Path('docs')/name).read_bytes()
+            assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==sha,name
+          PY
+          cp docs/project-documents-engine.js "$RUNNER_TEMP/quote-invoice-baseline.cjs"
+      - name: Apply quotation-only edits and validate exact tested output
+        run: |
+          set -euo pipefail
+          python3 scripts/quote_feature_patch.py
+          python3 scripts/quote_feature_refine.py
+          python3 - <<'PY'
+          import hashlib,subprocess
+          from pathlib import Path
+          expected={'estimate-plan-engine.js':'f8933003426f4a4bf84cd751c77c26ccc1ac1947','estimate-auto-builder.js':'fc3165162210c00b7755dd62192f767c44f8a080','estimate-plan-admin.js':'5bb3bad3931aa691d054df502eda959b82f93971','project-documents-engine.js':'ac042f30398dd292374515f1781e62851e960031'}
+          for name,sha in expected.items():
+            b=(Path('docs')/name).read_bytes()
+            assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==sha,name
+          changed=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert changed=={'docs/'+name for name in expected},changed
+          PY
+          for name in estimate-plan-engine estimate-auto-builder estimate-plan-admin project-documents-engine; do node --check "docs/$name.js"; done
+          TOYA_QUOTE_BASELINE="$RUNNER_TEMP/quote-invoice-baseline.cjs" node --test tests/quote-options-v1.cjs
+      - name: Commit only to the work branch, not production
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/work/quote-options-20260923'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/estimate-plan-engine.js docs/estimate-auto-builder.js docs/estimate-plan-admin.js docs/project-documents-engine.js
+          git diff --cached --check
+          git commit -m 'Implement verified quotation numbering, adjustments and separated waste entries'
+          git push origin HEAD:refs/heads/work/quote-options-20260923
+          echo 'Quotation-only work branch updated. No deployment, database or account changes.' >> "$GITHUB_STEP_SUMMARY"
