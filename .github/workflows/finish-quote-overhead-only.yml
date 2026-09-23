@@ -1,0 +1,131 @@
+name: Finish quotation with overhead only
+on:
+  push:
+    branches: [work/quote-options-20260923]
+    paths: ['.github/workflows/finish-quote-overhead-only.yml']
+permissions:
+  contents: write
+concurrency:
+  group: finish-quote-overhead-only
+  cancel-in-progress: false
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/work/quote-options-20260923'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/quote-options-20260923
+          fetch-depth: 0
+      - name: Apply small, guarded quotation-only changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          git show 15571509bd64c1289dd512823f157cf22fddc4d4:docs/project-documents-engine.js > "$RUNNER_TEMP/invoice-baseline.cjs"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          def change(name, expected, edits):
+              p=Path(name); b=p.read_bytes()
+              sha=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+              if expected is not None: assert sha==expected,(name,sha)
+              s=b.decode()
+              for old,new in edits:
+                  assert s.count(old)==1,(name,s.count(old),old[:100])
+                  s=s.replace(old,new,1)
+              p.write_text(s)
+          change('docs/estimate-auto-builder.js','22f9391379975eb519605c496faac75b0121ba6f',[
+              ("overhead_rate:'5',welfare_rate:'0'", "overhead_rate:'5',welfare_rate:null"),
+              ("group('E 諸経費・法定福利費・値引き',[])", "group('E 回送費・諸経費・値引き',[])"),
+              ("for(const [label,key] of [['法定福利費','welfare_rate'],['諸経費','overhead_rate']]){", "// Statutory welfare is deferred: never infer it from direct-work cost.\n  // Previously saved welfare lines remain untouched, including their exclusions.\n  for(const [label,key] of [['諸経費','overhead_rate']]){")
+          ])
+          change('docs/estimate-plan-admin.js','5bb3bad3931aa691d054df502eda959b82f93971',[
+              ('<summary>諸経費・法定福利費の自動計算率</summary><p class="note">直接工事費に対する率です。率は今回の見積で変更できます。</p>', '<summary>諸経費の自動計算率</summary><p class="note">新しい見積は直接工事費の5％が初期値です。率の変更・金額入力に対応しています。法定福利費は自動加算しません。既存の登録額は保持します。</p>'),
+              ("f('諸経費率','epAutoOverhead','overhead_rate','%'),f('法定福利費率','epAutoWelfare','welfare_rate','%'),", "f('諸経費率','epAutoOverhead','overhead_rate','%'),")
+          ])
+          # Make the prior regression exercise an actual pre-existing welfare row,
+          # not a new auto-generated one, because generation is now deferred.
+          change('tests/quote-options-v1.cjs',None,[
+              ("p.groups[0].auto_input={kind:'wood',welfare_rate:'3',overhead_rate:'10'};const raw=p.groups[0].auto_input;", "p.groups[0].auto_input={kind:'wood',welfare_rate:'3',overhead_rate:'10'};p.groups[4].quote_lines=[row('法定福利費','',{quantity:'1',unit:'式',amount_mode:true,quote_amount:'4041',auto_percent:'welfare_rate'})];const raw=p.groups[0].auto_input;")
+          ])
+          with Path('tests/quote-options-v1.cjs').open('a') as f:
+              f.write(r'''
+          test('deferred welfare defaults to unknown, not a confirmed zero',()=>{
+            assert.equal(A.defaults().overhead_rate,'5');assert.equal(A.defaults().welfare_rate,null);
+          });
+          test('legacy welfare rate cannot create a new welfare charge',()=>{
+            const p=draft();p.groups[0].auto_input={kind:'wood',overhead_rate:'5',welfare_rate:'18'};
+            A.percentRows(p.groups,p.groups[0].auto_input);
+            assert.equal(p.groups.flatMap(g=>g.quote_lines).some(r=>A.chargeKind(r)==='welfare'),false);
+            assert.equal(A.quoteSummary(p.groups).overhead,6735);
+          });
+          test('saved welfare amount and exclusion are unchanged by overhead updates',()=>{
+            for(const excluded of [false,true]){
+              const p=draft();const old=row('法定福利費','',{amount_mode:true,quote_amount:'22222',auto_percent:'welfare_rate',excluded});
+              p.groups[4].quote_lines=[old];const before=JSON.stringify(old);
+              A.percentRows(p.groups,{kind:'wood',overhead_rate:'5',welfare_rate:'0'});
+              p.groups[1].quote_lines[0].quote_price='1000000';
+              A.percentRows(p.groups,{kind:'wood',overhead_rate:'5',welfare_rate:'99'});
+              assert.equal(JSON.stringify(p.groups[4].quote_lines[0]),before);
+              assert.equal(A.quoteSummary(p.groups).overhead,50000);
+            }
+          });
+          test('new auto-generated groups have no statutory-welfare heading or line',()=>{
+            const n=A.build({kind:'wood',area_m2:'100',overhead_rate:'5',welfare_rate:'18'});
+            A.percentRows(n.groups,n.input);
+            assert.ok(n.groups.every(g=>!g.name.includes('法定福利費')));
+            assert.ok(n.groups.flatMap(g=>g.quote_lines).every(r=>A.chargeKind(r)!=='welfare'));
+          });
+          test('overhead-only customer quote totals before tax have no synthetic welfare',()=>{
+            const p=draft();p.groups[1].quote_lines[0].quote_price='1000000';
+            charge(p,'transport','30000');charge(p,'overhead','5');charge(p,'discount','-80000');
+            const result=calculate(p);assert.equal(result.price,1000000);assert.equal(result.total,1100000);
+            const html=D.printHTML(document(p));assert.ok(!html.includes('法定福利費'));
+          });
+          ''')
+          change('tests/quote_browser_test.py',None,[
+              ("page.locator('#epOverheadRate4_0').fill('10')", "page.locator('#epOverheadRate4_0').fill('5')"),
+              ("=='13470'", "=='6735'"),
+              ("'165,000円'", "'157,591円'"),
+              ("'198,880円'", "'189,931円'"),
+              ("=='16270'", "=='8135'"),
+              ("==180800", "==172665"),
+              ("page.locator('#epOverheadRate4_0').input_value()=='10'", "page.locator('#epOverheadRate4_0').input_value()=='5'"),
+              ("'198,880' in text", "'189,931' in text"),
+              ("assert not errors,errors", "assert page.locator('#epAutoWelfare').count()==0\n assert '法定福利費' not in text\n assert not errors,errors")
+          ])
+          PY
+          for f in estimate-plan-engine estimate-auto-builder estimate-plan-admin project-documents-engine; do node --check "docs/$f.js"; done
+          TOYA_QUOTE_BASELINE="$RUNNER_TEMP/invoice-baseline.cjs" node --test tests/quote-options-v1.cjs
+      - name: Verify both browsers with all account network blocked
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+          QUOTE_TEST_BROWSER=chromium python3 tests/quote_browser_test.py
+          QUOTE_TEST_BROWSER=webkit python3 tests/quote_browser_test.py
+      - name: Commit verified files only to the existing work branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/work/quote-options-20260923'
+          python3 - <<'PY'
+          import subprocess
+          allowed={'docs/estimate-auto-builder.js','docs/estimate-plan-admin.js','tests/quote-options-v1.cjs','tests/quote_browser_test.py'}
+          changed=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert changed==allowed,changed
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/estimate-auto-builder.js docs/estimate-plan-admin.js tests/quote-options-v1.cjs tests/quote_browser_test.py
+          git diff --cached --check
+          git commit -m 'Use overhead-only quotation flow; defer statutory welfare automation and preserve saved amounts'
+          git push origin HEAD:refs/heads/work/quote-options-20260923
+          echo 'Quotation work branch verified. Live main, database, login, and employee reports unchanged.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: overhead-only-quote-verified
+          path: test-output/
+          retention-days: 3
