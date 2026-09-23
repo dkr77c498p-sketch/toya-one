@@ -1,0 +1,58 @@
+name: Verify separate quotation transport section
+on:
+  push:
+    branches: [fix/quote-transport-section-20260924]
+    paths: ['.github/workflows/quote-transport-section.yml']
+permissions:
+  contents: write
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/fix/quote-transport-section-20260924'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Guard original hashes and apply editor-only patch
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          for n,sha in {'estimate-plan-admin.quote5-r2.js':'c38bc1659ebb51b3de6e5ff9446b67781180ba25','index.html':'f66bff1691e029dbcaf49f4c43cc95a7cb7d72da'}.items():
+            b=(Path('docs')/n).read_bytes();assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==sha,n
+          PY
+          python3 scripts/transport-section-patch.py
+          node --check docs/estimate-plan-admin.quote5-r3.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,subprocess
+          for n,sha in {'estimate-plan-admin.quote5-r3.js':'ac2bed1d4abccabe894363052d62be424f4e741d','index.html':'782077e975c544a07d63ff338413c6c7aedeb751'}.items():
+            b=(Path('docs')/n).read_bytes();assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==sha,n
+          assert subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()==['docs/index.html']
+          PY
+      - name: Load the known offline fixture and install test browsers
+        run: |
+          git fetch --depth=1 origin 412f935e0937ee737540eb3a1e0273ba348627e6
+          git show 412f935e0937ee737540eb3a1e0273ba348627e6:tests/quote-browser.html > quote-browser.html
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+      - name: Verify both browsers with no account network
+        run: |
+          QUOTE_TEST_BROWSER=chromium python3 tests/transport-section-browser.py
+          QUOTE_TEST_BROWSER=webkit python3 tests/transport-section-browser.py
+      - name: Commit only the new editor and loader on this work branch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/quote-transport-section-20260924'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/estimate-plan-admin.quote5-r3.js docs/index.html
+          git diff --cached --check
+          git commit -m 'Allow independent waste transport section with explicit nonduplicating moves'
+          git push origin HEAD:refs/heads/fix/quote-transport-section-20260924
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: transport-section-checked
+          path: test-output/
+          retention-days: 3
