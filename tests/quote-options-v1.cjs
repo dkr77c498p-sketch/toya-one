@@ -8,7 +8,7 @@ function calculate(p){A.updateQuoteCharges(p.groups);return Q.calculate(p);}
 function document(p){const t=calculate(p);return {kind:'estimate',company_id:'sample',status:'draft',tax_rate:10,document_date:'2026-09-23',site_name:p.site_name,customer_name:p.customer_name,subject:p.title,items:t.quote_items,subtotal:t.price,total:t.total,issuer:{issuer_name:'サンプル株式会社'},estimate_snapshot:{...p,calculation:t}};}
 test('new group and detail numbers preserve leading zeroes',()=>{const p=draft();p.groups[1].item_no='02';assert.equal(Q.calculate(p).price,134700);const html=D.printHTML(document(p));assert.match(html,/<td>02<\/td>/);assert.match(html,/<td>001<\/td>/);assert.match(Q.printHTML(p),/001/);});
 test('rate overhead and fixed discount match all totals and stay idempotent',()=>{const p=draft();charge(p,'transport','10000');charge(p,'overhead','10');charge(p,'discount','-1170');const t=calculate(p);assert.equal(t.price,157000);assert.equal(t.tax,15700);assert.equal(t.total,172700);assert.equal(A.quoteSummary(p.groups).overhead,13470);assert.deepEqual(calculate(p),t);});
-test('new overhead requires a rate instead of inventing one',()=>{const p=draft();charge(p,'overhead','');const t=calculate(p);assert.equal(t.complete,false);assert.equal(t.total,null);assert.equal(A.defaults().overhead_rate,'');});
+test('explicitly clearing the approved default leaves overhead incomplete',()=>{const p=draft();charge(p,'overhead','');const t=calculate(p);assert.equal(t.complete,false);assert.equal(t.total,null);assert.equal(A.defaults().overhead_rate,'5');});
 test('zero overhead is valid, not missing',()=>{const p=draft();charge(p,'overhead','0');assert.equal(calculate(p).total,148170);});
 test('manual exact amount is used instead of quantity*unit price',()=>{const p=draft();p.groups[1].quote_lines[0].quote_amount='50001';p.groups[1].quote_lines[0].amount_mode=true;charge(p,'overhead','2.5');const t=calculate(p);assert.equal(A.quoteSummary(p.groups).overhead,1250);assert.equal(t.price,51251);});
 test('invalid rates clear stale calculated amounts and block save calculation',()=>{const p=draft(),r=charge(p,'overhead','10');calculate(p);assert.equal(r.quote_amount,'13470');r.overhead_rate='-2';assert.throws(()=>calculate(p),/諸経費率/);assert.equal(r.quote_amount,'');assert.equal(Q.calculate(p).complete,false);});
@@ -31,3 +31,54 @@ test('opening an existing positive discount does not silently reverse the sign',
 test('legacy welfare row stays at its DOM index when overhead becomes automatic',()=>{const p=draft();p.groups[0].auto_input={kind:'wood',welfare_rate:'3',overhead_rate:'10'};const raw=p.groups[0].auto_input;A.percentRows(p.groups,raw);const before=p.groups[4].quote_lines.map(r=>r.label);const overhead=p.groups[4].quote_lines.find(r=>r.charge_kind==='overhead');assert.ok(overhead);for(let n=0;n<3;n++)A.percentRows(p.groups,raw);assert.deepEqual(p.groups[4].quote_lines.map(r=>r.label),before);assert.equal(p.groups[4].quote_lines.filter(r=>A.chargeKind(r)==='overhead').length,1);assert.equal(overhead.quote_amount,'13470');});
 test('new template auto overhead respects fixed amounts and excludes transport',()=>{const p=draft();p.groups[1].quote_lines[0].amount_mode=true;p.groups[1].quote_lines[0].quote_amount='50001';charge(p,'transport','10000');A.percentRows(p.groups,{kind:'wood',overhead_rate:'2.5',welfare_rate:'0'});assert.equal(A.quoteSummary(p.groups).overhead,1250);assert.equal(Q.calculate(p).price,61251);});
 test('customer adjustments are ordered as original form regardless of input order',()=>{const p=draft();charge(p,'overhead','10');charge(p,'discount','-1000');charge(p,'transport','2000');const html=D.printHTML(document(p));assert.ok(html.indexOf('重機回送費')<html.indexOf('諸経費'));assert.ok(html.indexOf('諸経費')<html.indexOf('値引き'));});
+
+test('approved default is five percent for new overhead inputs',()=>{
+  assert.equal(A.defaults().overhead_rate,'5');
+  const p=draft(),before=JSON.stringify(p.groups),n=A.ensureQuoteCharge(p.groups,'overhead');
+  assert.equal(JSON.stringify(p.groups),before);
+  p.groups=n.groups;
+  assert.equal(p.groups[n.groupIndex].quote_lines[n.rowIndex].overhead_rate,'5');
+  calculate(p);assert.equal(A.quoteSummary(p.groups).overhead,6735);
+  assert.equal(Q.calculate(p).price,141435);
+});
+test('a million yen direct work calculates fifty thousand overhead',()=>{
+  const p=draft();p.groups[1].quote_lines[0].quote_price='1000000';
+  p.groups=A.ensureQuoteCharge(p.groups,'overhead').groups;
+  calculate(p);assert.equal(A.quoteSummary(p.groups).overhead,50000);
+});
+test('existing per-quote zero, blank, and custom rates are retained',()=>{
+  for(const rate of ['0','','3.5','10']){
+    const p=draft();p.groups[0].auto_input={kind:'wood',overhead_rate:rate};
+    const before=JSON.stringify(p.groups),n=A.ensureQuoteCharge(p.groups,'overhead');
+    assert.equal(JSON.stringify(p.groups),before);
+    assert.equal(n.groups[n.groupIndex].quote_lines[n.rowIndex].overhead_rate,rate);
+    assert.equal(A.normalize({overhead_rate:rate}).overhead_rate,rate);
+  }
+});
+test('opening an existing manual or rate-based overhead does not reset it to five',()=>{
+  for(const rate of ['0','','7']){
+    const p=draft();charge(p,'overhead',rate);calculate(p);
+    const before=JSON.stringify(p.groups),n=A.ensureQuoteCharge(p.groups,'overhead');
+    assert.equal(JSON.stringify(n.groups),before);
+  }
+  const p=draft();p.groups[4].quote_lines=[row('諸経費',9000)];
+  const before=JSON.stringify(p.groups),n=A.ensureQuoteCharge(p.groups,'overhead');
+  assert.equal(JSON.stringify(n.groups),before);
+  assert.equal(Q.calculate({...p,groups:n.groups}).price,143700);
+});
+test('default rate can still be changed or switched to a manual amount',()=>{
+  const p=draft(),n=A.ensureQuoteCharge(p.groups,'overhead');p.groups=n.groups;
+  p.groups[n.groupIndex].quote_lines[n.rowIndex].overhead_rate='3';
+  calculate(p);assert.equal(A.quoteSummary(p.groups).overhead,4041);
+  p.groups=A.setQuoteOverheadMode(p.groups,n.groupIndex,n.rowIndex,'amount');
+  p.groups[n.groupIndex].quote_lines[n.rowIndex].quote_amount='5000';
+  calculate(p);assert.equal(A.quoteSummary(p.groups).overhead,5000);
+});
+test('loading, printing or duplicating a saved quote does not add overhead',()=>{
+  const p=draft(),before=JSON.stringify(p);
+  calculate(p);D.printHTML(document(p));
+  const copied=Q.duplicate(p,null);
+  assert.equal(JSON.stringify(p),before);
+  assert.equal(A.quoteSummary(p.groups).overhead,0);
+  assert.equal(A.quoteSummary(copied.groups).overhead,0);
+});
