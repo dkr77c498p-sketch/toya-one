@@ -115,8 +115,8 @@
   // Only quoted items are used for older cost-based estimates, never internal cost lines.
   const totals=total(d.items||[],d.tax_rate),source=d.estimate_snapshot;
   const p=source?.entry_mode==='quote'?source:{groups:totals.lines.map(r=>({name:r.name,quote_lines:[{label:r.name,quantity:r.quantity,unit:r.unit,quote_price:r.unitPrice,spec:r.spec}]})),calculation:{groups:totals.lines.map(r=>({active:true,price:r.amount})),price:totals.subtotal,tax:totals.tax,total:totals.total}};
-  const t=p.calculation||{},groups=p.groups||[],calc=t.groups||[],amount=r=>r.amount_mode?Number(r.quote_amount||0):lineAmount(r.quantity,r.quote_price);
-  const active=groups.map((g,index)=>({g,index,total:Number(calc[index]?.price??(g.quote_lines||[]).filter(r=>!r.excluded).reduce((n,r)=>n+amount(r),0)),letter:(String(g.name).match(/^[A-ZＡ-Ｚ]/)||[''])[0]})).filter(x=>calc[x.index]?.active!==false&&(x.g.quote_lines||[]).some(r=>!r.excluded));
+  const t=p.calculation||{},groups=p.groups||[],calc=t.groups||[],amount=r=>r.quote_amount!==null&&r.quote_amount!==undefined&&String(r.quote_amount).trim()!==''?Number(r.quote_amount):lineAmount(r.quantity,r.quote_price);
+  const active=groups.map((g,index)=>({g,index,total:Number(calc[index]?.price??(g.quote_lines||[]).filter(r=>!r.excluded).reduce((n,r)=>n+amount(r),0)),letter:g.item_no??(String(g.name).match(/^[A-ZＡ-Ｚ]/)||[''])[0]})).filter(x=>calc[x.index]?.active!==false&&(x.g.quote_lines||[]).some(r=>!r.excluded));
   const plain=x=>String(x.g.name).replace(/^[A-ZＡ-Ｚ]\s*/,'')||x.g.name;
   const money=(x,rate=false)=>Number(x||0)<0?'<span class="te2-negative">'+(rate?'('+num(Math.abs(Number(x)))+')':'-'+num(Math.abs(Number(x))))+'</span>':num(x);
   const qty=x=>x===''||x===null||x===undefined?'':Number(x).toLocaleString('ja-JP',{minimumFractionDigits:2,maximumFractionDigits:3});
@@ -140,7 +140,7 @@
   const row=(cells,cls='',units=1)=>({html:'<tr class="'+cls+'" style="height:'+(7.75*units).toFixed(2)+'mm">'+cells.map(x=>'<td>'+x+'</td>').join('')+'</tr>',units});
   const empty=()=>row(['','','','','','',''],'te2-blank'),blank=n=>Array.from({length:Math.max(0,n)},empty).map(x=>x.html).join('');
   const totalRow=(label,value,cls='te2-total')=>row(['',e(label),'','','',money(value),''],cls);
-  const dataRow=r=>{const label=shownLabel(r),spec=shownSpec(r),lines=Math.max(wrapped(label,10.5),wrapped(spec,10.5));return row(['',e(label),qty(r.quantity),printUnit(r.unit),r.amount_mode?'':money(r.quote_price,true),money(amount(r)),nl(spec)],'',Math.max(1,Math.ceil((lines*4.2+.8)/7.75)));};
+  const dataRow=r=>{const label=shownLabel(r),spec=shownSpec(r),lines=Math.max(wrapped(label,10.5),wrapped(spec,10.5),wrapped(r.item_no||'',4));return row([e(r.item_no||''),e(label),qty(r.quantity),printUnit(r.unit),r.amount_mode?'':money(r.quote_price,true),money(amount(r)),nl(spec)],'',Math.max(1,Math.ceil((lines*4.2+.8)/7.75)));};
   // Preserve the ruled sheet height. Wrapped descriptions consume extra rows;
   // extra items continue on another complete sheet instead of being clipped.
   const sheets=(entries,prefix,tail,capacity,cls='')=>{
@@ -155,9 +155,18 @@
    }while(pos<entries.length);
    return pages;
   };
-  const directGroups=active.filter(x=>!/(諸経費|福利|値引)/.test(x.g.name)),adjust=active.filter(x=>/(諸経費|福利|値引)/.test(x.g.name)),direct=directGroups.reduce((s,x)=>s+x.total,0);
+  const layoutV1=groups.some(g=>g.quote_layout_version===1);
+  const isAdjustment=(g,r)=>!!r.charge_kind||/^(?:重機回送費|回送費|諸経費|値引き?|法定福利費)$/.test(String(r.label||'').normalize('NFKC').replace(/[\s　]/g,''))||/(諸経費|福利|値引)/.test(g.name);
+  const directGroups=layoutV1?active.map(x=>{const rs=(x.g.quote_lines||[]).filter(r=>!r.excluded&&!isAdjustment(x.g,r));return {...x,g:{...x.g,quote_lines:rs},total:rs.reduce((n,r)=>n+amount(r),0)};}).filter(x=>x.g.quote_lines.length):active.filter(x=>!/(諸経費|福利|値引)/.test(x.g.name));
+  const adjust=layoutV1?active.map(x=>({...x,g:{...x.g,quote_lines:(x.g.quote_lines||[]).filter(r=>!r.excluded&&isAdjustment(x.g,r))}})).filter(x=>x.g.quote_lines.length):active.filter(x=>/(諸経費|福利|値引)/.test(x.g.name));
+  const direct=directGroups.reduce((s,x)=>s+x.total,0);
   const summaryTop=directGroups.map(x=>row([e(x.letter),e(plain(x)),'1.00','式','',money(x.total),''],'te2-group'));
-  const adjustments=adjust.flatMap(x=>(x.g.quote_lines||[]).filter(r=>!r.excluded).map(dataRow));
+  const adjustmentLines=adjust.flatMap(x=>(x.g.quote_lines||[]).filter(r=>!r.excluded));
+  if(layoutV1){
+   const order=r=>({transport:0,welfare:1,overhead:2,discount:3})[r.charge_kind]??(/回送/.test(r.label)?0:/法定福利/.test(r.label)?1:/諸経費/.test(r.label)?2:/値引/.test(r.label)?3:1);
+   adjustmentLines.sort((a,b)=>order(a)-order(b));
+  }
+  const adjustments=adjustmentLines.map(dataRow);
   const summaryBottom=[totalRow('直接工事費',direct),...adjustments,totalRow('小計',t.price??d.subtotal??totals.subtotal),row(['','消費税（'+e(d.tax_rate)+'%）','1.00','式','',money(t.tax??totals.tax),'']),totalRow('総合計',t.total??d.total??totals.total,'te2-grand-total')];
   const aggregate=sheets(summaryTop,[empty()],summaryBottom,29,'te2-summary');
   const details=directGroups.map(x=>sheets((x.g.quote_lines||[]).filter(r=>!r.excluded).map(dataRow),[row([e(x.letter),e(plain(x)),'','','','',''],'te2-group')],[totalRow(plain(x),x.total,'te2-grand-total')],32,'te2-detail')).join('');
