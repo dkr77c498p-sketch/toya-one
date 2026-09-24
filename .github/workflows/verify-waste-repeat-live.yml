@@ -1,0 +1,33 @@
+name: Verify public waste-repeat button fix
+on:
+  push:
+    branches: [fix/quote-waste-repeat-20260924]
+    paths: ['.github/workflows/verify-waste-repeat-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Check public HTML and exact tested editor bytes
+        run: |
+          python3 - <<'PY'
+          import hashlib,time,urllib.request
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={'index.html':'956dc8a33341e8627c6007e4ea293c0ec2912ec4','estimate-plan-admin.quote5-r4.js':'6d145e720475ae75b9df02c4b62f0dd45089270c','estimate-plan-admin.quote5-r3.js':'ac2bed1d4abccabe894363052d62be424f4e741d'}
+          for attempt in range(12):
+            try:
+              for name,sha in expected.items():
+                req=urllib.request.Request(base+name+'?verify=waste-repeat-'+str(int(time.time())),headers={'Cache-Control':'no-cache','User-Agent':'TOYA-quote-release-check'})
+                with urllib.request.urlopen(req,timeout=15) as response:
+                  assert response.status==200,name
+                  b=response.read()
+                actual=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+                assert actual==sha,(name,actual)
+              print('PASS: public loader and tested R4 editor match exactly; original R3 editor is preserved.')
+              break
+            except Exception:
+              if attempt==11: raise
+              time.sleep(5)
+          PY
