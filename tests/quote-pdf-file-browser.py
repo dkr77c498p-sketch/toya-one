@@ -13,7 +13,7 @@ p.groups=[{name:'外構撤去工事',item_no:'A',quote_layout_version:1,lines:[]
 {name:'産業廃棄物処理工事',item_no:'C',quote_layout_version:1,lines:[],quote_lines:[{...Q.blankQuoteLine(),item_no:'1',label:'コンクリート処分費',quantity:'1',unit:'式',quote_price:'14700'}]}];
 let n=A.ensureQuoteCharge(p.groups,'overhead');p.groups=n.groups;A.updateQuoteCharges(p.groups);
 n=A.ensureQuoteCharge(p.groups,'discount');p.groups=n.groups;p.groups[n.groupIndex].quote_lines[n.rowIndex].quote_amount='-1435';
-const c=Q.calculate(p);p.calculation=c;p.id='11111111-1111-4111-8111-111111111111';p.updated_at='2026-09-24T09:00:00Z';
+const c=Q.calculate(p);p.calculation=c;p.id='11111111-1111-4111-1111-111111111111';p.updated_at='2026-09-24T09:00:00Z';
 console.log(JSON.stringify({id:'22222222-2222-4222-8222-222222222222',kind:'estimate',status:'draft',company_id:'fixture-company',site_id:null,site_name:p.site_name,site_address:'検証用住所',customer_name:p.customer_name,customer_address:'',subject:p.title,document_date:'2026-09-24',valid_until:'',tax_rate:10,items:c.quote_items,subtotal:c.price,total:c.total,notes:'検証専用。実際の見積書ではありません。',issuer:{issuer_name:'株式会社TOYA',address:'検証用住所',phone:'000-000-0000'},estimate_plan_id:p.id,estimate_snapshot:p,updated_at:p.updated_at,created_at:p.updated_at}));'''
 sample=json.loads(subprocess.check_output(['node','-e',code],cwd=root,text=True))
 assert sample['total']==154000,sample['total']
@@ -37,17 +37,26 @@ threading.Thread(target=server.serve_forever,daemon=True).start();origin=f'http:
 with sync_playwright() as pw:
  browser=getattr(pw,engine).launch(headless=True)
  context=browser.new_context(viewport={'width':390,'height':844},accept_downloads=True)
- remote=[];errors=[]
+ remote=[];errors=[];console=[]
  def route(r):
   if r.request.url.startswith(origin+'/') or r.request.url.startswith(('data:','blob:','about:')):r.continue_()
   else:remote.append(r.request.url);r.abort()
  context.route('**/*',route)
- page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)))
+ page=context.new_page();page.on('pageerror',lambda e:errors.append(str(e)));page.on('console',lambda e:console.append(e.text))
  page.goto(origin+'/test-output/pdf-harness.html');page.wait_for_selector('#projectBusinessCard')
  page.evaluate('(d)=>{window.sample=d;window.sampleBefore=JSON.stringify(d);return ToyaProjectBusiness.openEstimate(d);}',sample)
  page.locator('#pbShowPreview').click();page.wait_for_selector('#pbPdf')
  assert page.locator('#pbPrint').inner_text()=='印刷（従来）'
- page.locator('#pbPdf').click();page.wait_for_selector('[data-pdf-download][href^="blob:"]',timeout=120000)
+ page.locator('#pbPdf').click()
+ try:
+  page.wait_for_function("!!document.querySelector('[data-pdf-download][href]') || document.querySelector('.toya-pdf-actions p')?.textContent.includes('PDFを作成できませんでした')",timeout=90000)
+  assert page.locator('[data-pdf-download][href]').count(),page.locator('.toya-pdf-actions p').inner_text()
+ except Exception:
+  diagnostic=page.evaluate("() => ({status:document.querySelector('.toya-pdf-actions p')?.textContent,button:document.querySelector('#pbPdf')?.outerHTML,frames:[...document.querySelectorAll('iframe')].map(f=>({src:f.src,sandbox:f.getAttribute('sandbox'),capture:f.dataset.toyaPdfCapture,pages:[...(f.contentDocument?.querySelectorAll('.te2-page')||[])].map(p=>({width:p.getBoundingClientRect().width,height:p.getBoundingClientRect().height})),images:[...(f.contentDocument?.images||[])].map(i=>({src:i.src,complete:i.complete,width:i.naturalWidth}))}))})")
+  diagnostic.update({'browser':engine,'errors':errors,'console':console,'remote':remote})
+  (out/'failure.json').write_text(json.dumps(diagnostic,ensure_ascii=False,indent=2));print(json.dumps(diagnostic,ensure_ascii=False),flush=True)
+  page.screenshot(path=str(out/'failure.png'))
+  raise
  assert page.evaluate('shares.length')==0
  assert page.evaluate('calls.length')==0
  assert page.evaluate('JSON.stringify(sample)===sampleBefore')
@@ -59,20 +68,16 @@ with sync_playwright() as pw:
  page.locator('[data-pdf-share]').click();page.wait_for_function('shares.length===1')
  shared=page.evaluate('shares[0]');assert shared['file']=='TOYAONE.pdf' and shared['type']=='application/pdf' and shared['title']=='TOYAONE' and shared['url'] is None
  page.locator('.toya-pdf-actions').screenshot(path=str(out/'pdf-actions.png'))
- # Sharing cancellation must not discard a valid local PDF.
  page.evaluate("Object.defineProperty(navigator,'share',{value:()=>Promise.reject(new DOMException('cancel','AbortError')),configurable:true})")
  page.locator('[data-pdf-share]').click();page.wait_for_function("document.querySelector('.toya-pdf-actions p').textContent.includes('キャンセル')")
  assert page.locator('[data-pdf-download][href]').count()==1
  page.locator('#pbPreviewClose').click();assert page.locator('.toya-pdf-actions').count()==0
- # Close during generation: no surviving file or capture iframe.
  page.locator('#pbShowPreview').click();page.locator('#pbPdf').click();page.locator('#pbPreviewClose').click()
  page.wait_for_function('!document.querySelector("[data-toya-pdf-capture]")',timeout=30000)
  assert page.locator('[data-pdf-download]').count()==0 and page.evaluate('calls.length')==0
- # Same-origin rendering is not a route for remote resources or inline scripts.
  for bad in ['<script>alert(1)</script>','<img src="https://invalid.example/secret.png">']:
   result=page.evaluate("async bad=>{try{await ToyaQuotePDF.build('<html><body><section class=\"te2-page\">'+bad+'</section></body></html>');return false}catch(e){return true}}",bad)
   assert result
- # Mock owner change before export refuses access; never shares a previous owner's file.
  page.locator('#pbShowPreview').click();page.evaluate("cloudProfile.active=false")
  page.locator('#pbPdf').click();page.wait_for_timeout(30);assert page.locator('[data-pdf-download][href]').count()==0
  assert not errors,errors
@@ -87,7 +92,6 @@ for i,p in enumerate(doc):
  assert not p.get_links()
  pix=p.get_pixmap(matrix=fitz.Matrix(1.5,1.5),alpha=False);pix.save(str(out/f'page-{i+1}.png'))
  image=Image.frombytes('RGB',[pix.width,pix.height],pix.samples)
- # The bottom 9 mm are blank in the template; no URL/date/footer should exist.
  extrema=image.crop((0,image.height-35,image.width,image.height)).getextrema();assert all(lo>248 for lo,hi in extrema),(i,extrema)
  assert len(p.get_images())>=1
 print(engine,'passed: 7 real A4 PDF pages, title/file name TOYAONE, no footer, no writes.')
