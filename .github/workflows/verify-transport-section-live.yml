@@ -1,0 +1,35 @@
+name: Verify public transport section
+on:
+  push:
+    branches: [fix/quote-transport-section-20260924]
+    paths: ['.github/workflows/verify-transport-section-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    if: github.ref == 'refs/heads/fix/quote-transport-section-20260924'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - name: Verify public bytes of the tested loader and quotation editor
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib,time,json
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={'index.html':'782077e975c544a07d63ff338413c6c7aedeb751','estimate-plan-admin.quote5-r3.js':'ac2bed1d4abccabe894363052d62be424f4e741d'}
+          for attempt in range(18):
+            try:
+              result={}
+              for name,sha in expected.items():
+                req=urllib.request.Request(base+name+'?verified=transport-section-20260924-'+str(attempt),headers={'Cache-Control':'no-cache'})
+                with urllib.request.urlopen(req,timeout=15) as r:
+                  assert r.status==200
+                  b=r.read()
+                got=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+                assert got==sha,(name,got)
+                result[name]={'result':'passed','sha':got}
+              print(json.dumps(result,ensure_ascii=False));break
+            except Exception as e:
+              if attempt==17:raise
+              print('Waiting for public deployment:',str(e));time.sleep(5)
+          PY
