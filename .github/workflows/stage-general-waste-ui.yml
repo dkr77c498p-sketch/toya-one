@@ -1,0 +1,68 @@
+name: Verify staged general waste input and monthly UI
+on:
+  push:
+    branches: [work/waste-monthly-own-20260924]
+    paths:
+      - '.github/workflows/stage-general-waste-ui.yml'
+permissions:
+  contents: write
+concurrency:
+  group: staged-general-waste-ui
+  cancel-in-progress: false
+jobs:
+  verify-only:
+    if: github.ref == 'refs/heads/work/waste-monthly-own-20260924'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: work/waste-monthly-own-20260924
+      - name: Guard reviewed sources and apply staged bridge correction
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          expected={'general-waste-ui.js':'938f95deb0651354bbab4ed90b9e432f994d5b6f46295e09a5488b1a8e61718f','general-waste-ui.test.cjs':'202986e6e10cf5c235eb23d93bd0edac29fb1d2c1dd0de36e59ea44e960920a3','general-waste-ui-browser.py':'780d05b494c749e8d5e1b08febcfbf89437ddad458655c7134626057fd5c1ab0'}
+          for name,digest in expected.items():
+            assert hashlib.sha256((Path('staging/waste-reports')/name).read_bytes()).hexdigest()==digest,name
+          PY
+          python3 staging/waste-reports/upgrade-ui-bridge.py
+          node --check staging/waste-reports/general-waste-ui.js
+          mkdir -p stage-results
+          node --test staging/waste-reports/*.test.cjs | tee stage-results/node-tests.txt
+      - name: Install pinned offline test browsers
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+      - name: Exercise the existing full app with synthetic accounts only
+        run: |
+          set -euo pipefail
+          GW_BROWSER=chromium python3 staging/waste-reports/general-waste-ui-browser.py
+          GW_BROWSER=webkit python3 staging/waste-reports/general-waste-ui-browser.py
+      - name: Keep the verified bridge on the work branch only
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          changed=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert changed=={'staging/waste-reports/general-waste-daily-bridge.js'},changed
+          PY
+          test "$GITHUB_REF" = 'refs/heads/work/waste-monthly-own-20260924'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add staging/waste-reports/general-waste-daily-bridge.js
+          git diff --cached --check
+          git commit -m 'Verify staged general-waste UI lifecycle and monthly coverage; no production changes'
+          git push origin HEAD:refs/heads/work/waste-monthly-own-20260924
+          echo 'Staging only. No main branch, database, real account or daily report was changed.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: staged-general-waste-ui-checks
+          path: |
+            staging/waste-reports/
+            stage-results/
+          retention-days: 3
