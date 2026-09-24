@@ -1,0 +1,65 @@
+name: Verify repeated waste-pair quotation buttons
+on:
+  push:
+    branches: [fix/quote-waste-repeat-20260924]
+    paths: ['.github/workflows/quote-waste-repeat.yml']
+permissions:
+  contents: write
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/fix/quote-waste-repeat-20260924'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fix/quote-waste-repeat-20260924
+          fetch-depth: 1
+      - name: Apply only the exact tested quotation editor change
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git hash-object docs/estimate-plan-admin.quote5-r3.js)" = ac2bed1d4abccabe894363052d62be424f4e741d
+          test "$(git hash-object docs/index.html)" = 782077e975c544a07d63ff338413c6c7aedeb751
+          python3 scripts/waste-repeat-patch.py
+          test "$(git hash-object docs/estimate-plan-admin.quote5-r4.js)" = 6d145e720475ae75b9df02c4b62f0dd45089270c
+          test "$(git hash-object docs/index.html)" = 956dc8a33341e8627c6007e4ea293c0ec2912ec4
+          node --check docs/estimate-plan-admin.quote5-r4.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          old=Path('docs/estimate-plan-admin.quote5-r3.js').read_text()
+          new=Path('docs/estimate-plan-admin.quote5-r4.js').read_text()
+          for name in ['save','saveAndReview','persistPlan','gatherSimpleGroups','gather','updateTotals','updateDiscountTotals']:
+            p=re.compile(r'^ (?:async )?function '+name+r'\(.*?^ \}',re.M|re.S)
+            assert p.search(old)[0]==p.search(new)[0],name
+          PY
+      - name: Load pinned offline fixture and install test browsers
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin 90b3d95bc59732f490e2f6cd76ce8b6fe5c7450b
+          git show 90b3d95bc59732f490e2f6cd76ce8b6fe5c7450b:tests/quote-browser.html > tests/quote-browser.html
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+      - name: Test renamed linked rows, cancel, reopen and explicit add with all browser network blocked
+        run: |
+          set -euo pipefail
+          QUOTE_TEST_BROWSER=chromium python3 tests/waste-repeat-browser.py
+          QUOTE_TEST_BROWSER=webkit python3 tests/waste-repeat-browser.py
+      - name: Commit to the work branch only; no deployment
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/quote-waste-repeat-20260924'
+          test "$(git diff --name-only)" = 'docs/index.html'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/estimate-plan-admin.quote5-r4.js docs/index.html
+          git diff --cached --check
+          git commit -m 'Show existing linked waste rows and permit explicitly confirmed additional pairs without overwriting values'
+          git push origin HEAD:refs/heads/fix/quote-waste-repeat-20260924
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: waste-repeat-verified
+          path: test-output/waste-repeat-*/
+          retention-days: 3
