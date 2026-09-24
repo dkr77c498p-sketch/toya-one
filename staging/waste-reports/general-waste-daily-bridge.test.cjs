@@ -9,7 +9,7 @@ function session(){return new B.Session(profile);}
 function report(s,id='daily1'){return {id,company_id:profile.companyId,report_data:s.capture(ordinary,profile)};}
 function fixture(){
  const source=fs.readFileSync(path.resolve(__dirname,'../../docs/index.html'),'utf8');
- const extract=(name,next)=>{const start=source.indexOf('function '+name+'('),end=source.indexOf('\nfunction '+next+'(',start);assert.ok(start>=0&&end>start);return source.slice(start,end);};
+ const extract=(name,next)=>{const start=source.indexOf('function '+name+'('),end=source.indexOf('\n'+(next==='cloudFetchReports'?'async ':'')+'function '+next+'(',start);assert.ok(start>=0&&end>start);return source.slice(start,end);};
  const nodes={};const $=selector=>nodes[selector]??(nodes[selector]={value:'',innerHTML:'',textContent:'',classList:{add(){},remove(){}},click(){}});
  ['date','site','writer','weather','start','end','details','memo','otherWorker','overtime','meikenCount','asahiCount','photoCategory'].forEach(k=>$('#'+k));
  $('#date').value='2026-09-24';$('#site').value='検証現場';$('#writer').value='検証担当';

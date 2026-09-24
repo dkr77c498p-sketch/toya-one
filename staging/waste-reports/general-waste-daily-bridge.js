@@ -35,7 +35,7 @@
  }
  class Session{
   constructor(profile){this.owner=identity(profile);this.profile=clone(profile);this.value=null;}
-  check(profile){if(identity(profile)!==this.owner){this.value=null;throw Error('ログインが切り替わりました。前の会社の記録は引き継いでいません。');}}
+  check(profile){let id;try{id=identity(profile);}catch(e){this.value=null;throw e;}if(id!==this.owner){this.value=null;throw Error('ログインが切り替わりました。前の会社の記録は引き継いでいません。');}}
   load(report,profile,mode='edit'){
    this.check(profile);if(!object(report))throw Error('日報の形式を確認してください。');
    if(report.company_id&&report.company_id!==profile.companyId)throw Error('別会社の日報は開けません。');
