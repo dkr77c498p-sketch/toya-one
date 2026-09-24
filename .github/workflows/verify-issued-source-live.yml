@@ -1,0 +1,33 @@
+name: Verify public issued-source list fix
+on:
+  push:
+    branches: [fix/quote-issued-source-list-20260924]
+    paths: ['.github/workflows/verify-issued-source-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verify exact static index and new editor while retaining old editor
+        run: |
+          python3 - <<'PY'
+          import hashlib,time,urllib.request
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={'index.html':'d052ab1af6c5ad961cb074b392442b10c5f83848','estimate-plan-admin.quote5-r5.js':'6bf87c377738f9e60f7ebbc9050aa052f62603ac','estimate-plan-admin.quote5-r4.js':'6d145e720475ae75b9df02c4b62f0dd45089270c'}
+          for attempt in range(12):
+            try:
+              for name,sha in expected.items():
+                req=urllib.request.Request(base+name+'?verify=issued-source-r1-'+str(attempt),headers={'Cache-Control':'no-cache'})
+                with urllib.request.urlopen(req,timeout=12) as r:
+                  assert r.status==200
+                  b=r.read()
+                actual=hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+                assert actual==sha,(name,actual)
+              print('Verified public loader and editor. Original editor retained. No account or business data read/written.')
+              break
+            except Exception as e:
+              if attempt==11:raise
+              print('Waiting for static deployment:',str(e));time.sleep(7)
+          PY
