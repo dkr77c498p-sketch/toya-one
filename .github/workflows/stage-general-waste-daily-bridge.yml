@@ -1,0 +1,63 @@
+name: Stage general waste daily-report preservation
+on:
+  push:
+    branches: [work/waste-monthly-own-20260924]
+    paths: ['.github/workflows/stage-general-waste-daily-bridge.yml']
+permissions:
+  contents: write
+jobs:
+  offline-tests:
+    if: github.ref == 'refs/heads/work/waste-monthly-own-20260924'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: work/waste-monthly-own-20260924
+      - name: Apply guarded staging-only review corrections
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('staging/waste-reports/general-waste-daily-bridge.js')
+          s=p.read_text()
+          old="check(profile){if(identity(profile)!==this.owner){this.value=null;throw Error('ログインが切り替わりました。前の会社の記録は引き継いでいません。');}}"
+          new="check(profile){let id;try{id=identity(profile);}catch(e){this.value=null;throw e;}if(id!==this.owner){this.value=null;throw Error('ログインが切り替わりました。前の会社の記録は引き継いでいません。');}}"
+          assert s.count(old)==1
+          p.write_text(s.replace(old,new,1))
+          p=Path('staging/waste-reports/general-waste-daily-bridge.test.cjs')
+          s=p.read_text()
+          old="end=source.indexOf('\\nfunction '+next+'(',start)"
+          new="end=source.indexOf('\\n'+(next==='cloudFetchReports'?'async ':'')+'function '+next+'(',start)"
+          assert s.count(old)==1
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Run local-only report and aggregation tests
+        run: |
+          set -euo pipefail
+          mkdir -p stage-results
+          node --check staging/waste-reports/general-waste-daily-bridge.js
+          node --test staging/waste-reports/general-waste-daily-bridge.test.cjs | tee stage-results/node-tests.txt
+      - name: Record only reviewed staging source; never update main
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import subprocess
+          paths=set(subprocess.check_output(['git','diff','--name-only'],text=True).splitlines())
+          assert paths=={'staging/waste-reports/general-waste-daily-bridge.js','staging/waste-reports/general-waste-daily-bridge.test.cjs'},paths
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898271+github-actions[bot]@users.noreply.github.com'
+          git add staging/waste-reports/general-waste-daily-bridge.js staging/waste-reports/general-waste-daily-bridge.test.cjs
+          git diff --cached --check
+          git commit -m 'Verify staged general-waste edit/restore preservation and clear state on sign-out'
+          git push origin HEAD:refs/heads/work/waste-monthly-own-20260924
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: general-waste-daily-staging-check
+          path: |
+            staging/waste-reports/
+            stage-results/
+          retention-days: 3
