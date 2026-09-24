@@ -1,0 +1,84 @@
+name: Verify TOYAONE PDF file export
+on:
+  push:
+    branches: [fix/quote-pdf-file-20260924]
+    paths:
+      - '.github/workflows/quote-pdf-file.yml'
+      - 'docs/quote-pdf-export.r1.js'
+      - 'scripts/quote-pdf-file-patch.py'
+      - 'tests/quote-pdf-file-browser.py'
+permissions:
+  contents: write
+concurrency:
+  group: quotation-pdf-file
+  cancel-in-progress: true
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/fix/quote-pdf-file-20260924'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply guarded preview-only change
+        run: |
+          set -euo pipefail
+          python3 scripts/quote-pdf-file-patch.py
+          node --check docs/project-business.pdf-r1.js
+          node --check docs/quote-pdf-export.r1.js
+      - name: Vendor pinned rendering libraries with licenses and integrity metadata
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          npm pack html2canvas@1.4.1 --ignore-scripts --json --pack-destination "$tmp" > "$tmp/html2canvas.json"
+          npm pack pdf-lib@1.17.1 --ignore-scripts --json --pack-destination "$tmp" > "$tmp/pdf-lib.json"
+          python3 - "$tmp" <<'PY'
+          import sys,json,tarfile,hashlib
+          from pathlib import Path
+          tmp=Path(sys.argv[1]);out=Path('docs/vendor');out.mkdir(exist_ok=True)
+          refs=[]
+          for name,version,source,target,licensepath in [('html2canvas','1.4.1','package/dist/html2canvas.min.js','html2canvas-1.4.1.min.js','package/LICENSE'),('pdf-lib','1.17.1','package/dist/pdf-lib.min.js','pdf-lib-1.17.1.min.js','package/LICENSE.md')]:
+            meta=json.loads((tmp/(name+'.json')).read_text())[0]
+            assert meta['name']==name and meta['version']==version
+            archive=tmp/meta['filename'];assert hashlib.sha1(archive.read_bytes()).hexdigest()==meta['shasum']
+            t=tarfile.open(archive);code=t.extractfile(source).read();lic=t.extractfile(licensepath).read()
+            (out/target).write_bytes(code);(out/(name+'-LICENSE.txt')).write_bytes(lic)
+            refs.append({'name':name,'version':version,'npmIntegrity':meta['integrity'],'sha256':hashlib.sha256(code).hexdigest(),'file':target,'license':'MIT'})
+          (out/'quote-pdf-dependencies.json').write_text(json.dumps(refs,indent=2)+'\n')
+          PY
+      - name: Install test browsers and PDF verifier
+        run: |
+          python3 -m pip install playwright==1.57.0 PyMuPDF==1.26.7 Pillow==11.3.0
+          python3 -m playwright install --with-deps chromium webkit
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Generate real PDF files and verify both browsers without customer accounts
+        run: |
+          set -euo pipefail
+          PDF_TEST_BROWSER=chromium python3 tests/quote-pdf-file-browser.py
+          PDF_TEST_BROWSER=webkit python3 tests/quote-pdf-file-browser.py
+      - name: Commit only verified preview and static assets to this work branch
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/quote-pdf-file-20260924'
+          python3 - <<'PY'
+          import subprocess
+          assert subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()==['docs/index.html']
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/project-business.pdf-r1.js docs/vendor/
+          git diff --cached --check
+          git commit -m 'Stage tested local PDF generation; do not deploy'
+          git push origin HEAD:refs/heads/fix/quote-pdf-file-20260924
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: toya-pdf-file-verification
+          path: |
+            test-output/pdf-chromium/
+            test-output/pdf-webkit/
+            docs/quote-pdf-export.r1.js
+            docs/project-business.pdf-r1.js
+            docs/vendor/
+          retention-days: 3
