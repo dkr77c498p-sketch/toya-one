@@ -1,14 +1,36 @@
 {
-  "version": "general-waste-own-20260924-stage1",
+  "version": "general-waste-own-20260924-stage2-permit",
   "deployment": "staging_only_not_loaded_by_live_app",
   "companyId": "40a7a065-1086-4e62-aa09-f44d6207602c",
   "companyName": "株式会社TOYA",
   "reportingMode": "own_carrier",
   "permitConfirmed": true,
-  "permitConfirmationSource": "user confirmation in chat 2026-09-24",
-  "permitNumber": null,
-  "address": "鹿児島県鹿児島市犬迫町8485-4",
+  "permitConfirmationSource": "User confirmation and supplied directory screenshot; independently matched to Kagoshima City's official carrier roster, page 5, on 2026-09-24",
+  "permitNumber": "636",
+  "permitType": "一般廃棄物収集運搬業",
+  "permitExpiresOn": "2028-07-14",
+  "permitExpiresOnJapanese": "令和10年7月14日",
+  "permitWasteScope": "ごみ（生ごみを除く）",
+  "permitScopeNotes": "生ごみを含む一般ごみ、汚水、し尿、浄化槽汚泥、ディスポーザー汚泥の許可は当該名簿上なし。可燃物を含む全記録を受入可と推定しない。許可証固有の条件は未確認。",
+  "permitScopeImplementation": "verified_profile_metadata_only_daily_input_validation_not_implemented",
+  "permitVerification": {
+    "status": "official_roster_verified_original_certificate_not_seen",
+    "checkedOn": "2026-09-24",
+    "rosterAsOf": "2026-08-01",
+    "officialPageUpdatedOn": "2026-08-06",
+    "officialPage": "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/mebo.html",
+    "officialPdf": "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/documents/ippai080801.pdf",
+    "pdfPage": 5,
+    "originalCertificateReviewed": false,
+    "laterChangesRequireConfirmationBeforeSubmission": true
+  },
+  "postalCode": "891-1205",
+  "address": "鹿児島県鹿児島市犬迫町8485番地4",
+  "officialRosterAddress": "犬迫町8485番地4",
   "addressMustMatchPermitBeforeSubmission": true,
+  "officialRosterPhone": "837-8744",
+  "reportContactPhone": null,
+  "reportContactPhoneStatus": "not_confirmed_do_not_overwrite_existing_company_contact",
   "authority": "鹿児島市",
   "generalReportName": "一般廃棄物処理業（収集運搬）実績報告書",
   "generalReportPeriod": "calendar_month",
@@ -24,6 +46,8 @@
   "sources": [
     "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/hokoku.html",
     "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/documents/syuunhoukoku.pdf",
-    "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/documents/keiyakujigyosyo.pdf"
+    "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/documents/keiyakujigyosyo.pdf",
+    "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/mebo.html",
+    "https://www.city.kagoshima.lg.jp/kankyo/seiso/haikibutsu/kurashi/gomi/jigyosha/ippan/documents/ippai080801.pdf"
   ]
 }
