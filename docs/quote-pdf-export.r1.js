@@ -22,10 +22,13 @@
  function preparedHTML(html){
   const doc=new DOMParser().parseFromString(html,'text/html');
   if(!doc.querySelector('.te2-page'))throw Error('見積書のページを確認できません。');
-  if(doc.querySelector('script,iframe,object,embed,link[rel="stylesheet"]'))throw Error('PDF用の書式を確認してください。');
+  // The input is the app's escaped quotation renderer, never arbitrary HTML.
+  // Explicitly reject active elements/attributes before allowing the library's
+  // nested clone to run its load callbacks in WebKit. No document scripts run.
+  if(doc.querySelector('script,iframe,object,embed,link,form,input,button,video,audio,source,svg,math,meta[http-equiv]'))throw Error('PDF用の書式を確認してください。');
+  for(const el of doc.querySelectorAll('*'))for(const attr of el.attributes){if(/^on/i.test(attr.name)||['srcdoc','action','formaction'].includes(attr.name))throw Error('PDF用の書式を確認してください。');}
   doc.querySelectorAll('base').forEach(x=>x.remove());
-  // Only the existing same-origin company logo is used; no arbitrary remote images.
-  for(const img of doc.images){const url=new URL(img.getAttribute('src')||'',assets);if(url.origin!==assets.origin||url.pathname!==new URL('toya-document-logo.svg',assets).pathname)throw Error('PDFの画像の読込先を確認してください。');img.src=url.href;img.removeAttribute('srcset');}
+  for(const img of doc.images){const url=new URL(img.getAttribute('src')||'',assets);if(url.origin!==assets.origin||url.pathname!==new URL('toya-document-logo.svg',assets).pathname||url.search||url.hash)throw Error('PDFの画像の読込先を確認してください。');img.src=url.href;img.removeAttribute('srcset');}
   const base=doc.createElement('base');base.href=assets.href;doc.head.prepend(base);
   const style=doc.createElement('style');style.textContent=captureCSS;doc.head.append(style);doc.title=TITLE;
   return '<!doctype html>'+doc.documentElement.outerHTML;
@@ -34,7 +37,7 @@
   const valid=options.isCurrent||(()=>true),progress=options.onProgress||(()=>{});
   const check=()=>{if(!valid())throw new DOMException('画面が閉じられたか、ログインが切り替わりました。','AbortError');};
   check();const prepared=preparedHTML(html);await libraries();check();
-  const frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-same-origin');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.dataset.toyaPdfCapture='1';
+  const frame=document.createElement('iframe');frame.setAttribute('sandbox','allow-same-origin allow-scripts');frame.setAttribute('aria-hidden','true');frame.tabIndex=-1;frame.dataset.toyaPdfCapture='1';
   frame.style.cssText='position:fixed;left:-12000px;top:0;width:794px;height:1123px;border:0;pointer-events:none;';
   const loaded=new Promise((resolve,reject)=>{frame.onload=resolve;frame.onerror=()=>reject(Error('見積書の描画に失敗しました。'));});
   frame.srcdoc=prepared;(options.container||document.body).append(frame);
@@ -52,12 +55,10 @@
     check();progress(index+1,pages.length);
     const paper=pages[index],box=paper.getBoundingClientRect();
     if(box.width<790||box.width>800||box.height<1100||box.height>1130)throw Error((index+1)+'ページ目がA4枠からはみ出しています。PDFは作成していません。');
-    // Overflow must not be silently clipped. Typical fixed-width quote fields
-    // and tables are checked against their page before rasterization.
     for(const el of paper.querySelectorAll('table,.te2-frame,.te2-cover-brand')){const b=el.getBoundingClientRect();if(b.bottom>box.bottom+2||b.right>box.right+2||b.left<box.left-2)throw Error((index+1)+'ページ目の文字や表の位置を確認してください。');}
-    canvas=await root.html2canvas(paper,{scale:2,backgroundColor:'#ffffff',logging:false,allowTaint:false,useCORS:false,imageTimeout:15000,scrollX:0,scrollY:0,windowWidth:794,windowHeight:1123,width:Math.ceil(box.width),height:Math.ceil(box.height)});check();
+    canvas=await wait(root.html2canvas(paper,{scale:2,backgroundColor:'#ffffff',logging:false,allowTaint:false,useCORS:false,imageTimeout:15000,scrollX:0,scrollY:0,windowWidth:794,windowHeight:1123,width:Math.ceil(box.width),height:Math.ceil(box.height)}),35000,(index+1)+'ページ目の描画が時間切れになりました。画面を開き直してお試しください。');check();
     if(!canvas.width||!canvas.height||canvas.width*canvas.height>4000000)throw Error('PDFの画像サイズを確認できません。');
-    const blob=await new Promise((resolve,reject)=>canvas.toBlob(x=>x?resolve(x):reject(Error('PDFのページ画像を作成できません。')),'image/png'));check();
+    const blob=await wait(new Promise((resolve,reject)=>canvas.toBlob(x=>x?resolve(x):reject(Error('PDFのページ画像を作成できません。')),'image/png')),15000,'PDF画像の作成が時間切れになりました。');check();
     canvas.width=canvas.height=1;canvas=null;
     const image=await pdf.embedPng(await blob.arrayBuffer());check();
     pdf.addPage([595.275590551,841.88976378]).drawImage(image,{x:0,y:0,width:595.275590551,height:841.88976378});
@@ -76,8 +77,6 @@
   const release=()=>{if(url)URL.revokeObjectURL(url);url=null;file=null;download.removeAttribute('href');actions.hidden=true;};
   function sharePDF(){
    if(!valid()||!file){release();status.textContent='同じ見積を開き直してください。';return;}
-   // A separate explicit tap retains iOS transient user activation. Do not
-   // invoke native sharing automatically after slow asynchronous PDF rendering.
    if(root.navigator.share&&root.navigator.canShare?.({files:[file]})){
     share.disabled=true;
     root.navigator.share({files:[file],title:TITLE}).then(()=>{if(valid())status.textContent='共有先への引き渡しを終了しました。送信結果は共有先で確認してください。';}).catch(e=>{if(valid())status.textContent=e.name==='AbortError'?'共有をキャンセルしました。PDFはもう一度共有できます。':'共有できませんでした。「PDFを保存」から端末に保存してください。';}).finally(()=>{if(!disposed)share.disabled=false;});
