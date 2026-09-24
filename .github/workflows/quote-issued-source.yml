@@ -1,0 +1,60 @@
+name: Verify issued quotation source grouping
+on:
+  push:
+    branches: [fix/quote-issued-source-list-20260924]
+    paths:
+      - '.github/workflows/quote-issued-source.yml'
+      - 'scripts/quote-issued-source-patch.py'
+      - 'tests/quote-issued-source-browser.py'
+permissions:
+  contents: write
+concurrency:
+  group: quote-issued-source-list
+  cancel-in-progress: false
+jobs:
+  verify-and-stage:
+    if: github.ref == 'refs/heads/fix/quote-issued-source-list-20260924'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply only the guarded list display change
+        run: |
+          set -euo pipefail
+          python3 scripts/quote-issued-source-patch.py
+          node --check docs/estimate-plan-admin.quote5-r5.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,subprocess
+          expected={'docs/index.html':'d052ab1af6c5ad961cb074b392442b10c5f83848','docs/estimate-plan-admin.quote5-r5.js':'6bf87c377738f9e60f7ebbc9050aa052f62603ac'}
+          for n,sha in expected.items():
+            b=Path(n).read_bytes()
+            assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()==sha,n
+          assert subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()==['docs/index.html']
+          PY
+      - name: Install pinned browser tests
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+      - name: Test synthetic lists with all browser network blocked
+        run: |
+          QUOTE_BROWSER=chromium python3 tests/quote-issued-source-browser.py
+          QUOTE_BROWSER=webkit python3 tests/quote-issued-source-browser.py
+      - name: Stage the display change on this work branch only
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/quote-issued-source-list-20260924'
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/estimate-plan-admin.quote5-r5.js
+          git diff --cached --check
+          git commit -m 'Group exact issued quotation source under a collapsed section; do not delete any data'
+          git push origin HEAD:refs/heads/fix/quote-issued-source-list-20260924
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: quotation-issued-source-check
+          path: test-output/issued-source-*/
+          retention-days: 3
