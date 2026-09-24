@@ -1,5 +1,5 @@
 {
-  "version": "general-waste-own-20260924-stage2-permit",
+  "version": "general-waste-own-20260924-stage3-contact",
   "deployment": "staging_only_not_loaded_by_live_app",
   "companyId": "40a7a065-1086-4e62-aa09-f44d6207602c",
   "companyName": "株式会社TOYA",
@@ -29,8 +29,9 @@
   "officialRosterAddress": "犬迫町8485番地4",
   "addressMustMatchPermitBeforeSubmission": true,
   "officialRosterPhone": "837-8744",
-  "reportContactPhone": null,
-  "reportContactPhoneStatus": "not_confirmed_do_not_overwrite_existing_company_contact",
+  "reportContactPhone": "099-801-3027",
+  "reportContactPhoneStatus": "confirmed_by_user_20260924",
+  "reportContactPhoneSource": "Explicit user message: 099-801-3027, received in chat on 2026-09-24. Applies to TOYA's waste performance report contact only; no external directory or production company-contact update performed.",
   "authority": "鹿児島市",
   "generalReportName": "一般廃棄物処理業（収集運搬）実績報告書",
   "generalReportPeriod": "calendar_month",
