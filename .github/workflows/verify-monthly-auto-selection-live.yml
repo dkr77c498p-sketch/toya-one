@@ -1,0 +1,38 @@
+name: Verify public monthly automatic selection
+on:
+  push:
+    branches: [fix/monthly-auto-selection-20260925]
+    paths: [.github/workflows/verify-monthly-auto-selection-live.yml]
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify public loader and exact tested selection module
+        run: |
+          python3 - <<'PY'
+          import hashlib,time,urllib.request
+          root='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={
+            'index.html':'a4dbdda00484b0ac225426829e076ad8aaa7a54a44934946b7433805c08bde2c',
+            'company-monthly-summary.autoselect-r1.js':'845e40de6f2080a1bc40d498ae585b081e1ae90882ae7380aabfef881fe6254d'
+          }
+          last=''
+          for attempt in range(18):
+            try:
+              for name,sha in expected.items():
+                req=urllib.request.Request(root+name+'?verify=monthly-select-'+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                with urllib.request.urlopen(req,timeout=15) as r:body=r.read()
+                assert hashlib.sha256(body).hexdigest()==sha, name+' not yet the reviewed version'
+              with urllib.request.urlopen(root+'company-monthly-summary.period-r1.js',timeout=15) as r:old=r.read()
+              assert old.startswith(b'/* Read-only company totals.'),'Old version unexpectedly missing'
+              print('PASS: exact reviewed index and automatic monthly-selection module are public; prior version retained. No business accounts accessed.')
+              break
+            except Exception as e:
+              last=str(e)
+              print('Waiting for Pages:',last,flush=True)
+              time.sleep(8)
+          else:raise SystemExit('Public verification incomplete: '+last)
+          PY
