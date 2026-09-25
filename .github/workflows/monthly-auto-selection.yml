@@ -1,0 +1,60 @@
+name: Verify monthly automatic site selection
+on:
+  push:
+    branches: [fix/monthly-auto-selection-20260925]
+    paths:
+      - scripts/monthly-selection-patch.py
+      - tests/monthly-selection.cjs
+      - tests/monthly-selection-browser.py
+      - .github/workflows/monthly-auto-selection.yml
+permissions:
+  contents: write
+concurrency:
+  group: monthly-auto-selection-validation
+  cancel-in-progress: false
+jobs:
+  verify-and-stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: fix/monthly-auto-selection-20260925
+      - name: Apply guarded selection-only patch and verify exact output
+        run: |
+          set -euo pipefail
+          echo 'fb58f8f2771a203bccc22d4428ca7d864e56ddd87b505e5d2c8baf5f13416e13  scripts/monthly-selection-patch.py' | sha256sum -c -
+          echo '4832c1fc6fe6a471c8224eec8e3071937fefca774bd196a3860ba28d0eaafbd7  tests/monthly-selection.cjs' | sha256sum -c -
+          echo 'bdfd569e44f5bd6051925a36fb4bb96749e4f44589a6cf1f9b5282873c1d1035  tests/monthly-selection-browser.py' | sha256sum -c -
+          python3 scripts/monthly-selection-patch.py
+          echo '845e40de6f2080a1bc40d498ae585b081e1ae90882ae7380aabfef881fe6254d  docs/company-monthly-summary.autoselect-r1.js' | sha256sum -c -
+          echo 'a4dbdda00484b0ac225426829e076ad8aaa7a54a44934946b7433805c08bde2c  docs/index.html' | sha256sum -c -
+          node --check docs/company-monthly-summary.autoselect-r1.js
+      - name: Install pinned offline test browsers
+        run: |
+          python3 -m pip install --disable-pip-version-check playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+      - name: Test synthetic selection and unchanged financial totals
+        run: |
+          set -euo pipefail
+          mkdir -p test-output/monthly-selection
+          node tests/monthly-selection.cjs | tee test-output/monthly-selection/engine-tests.txt
+          TOYA_TEST_BROWSER=chromium python3 tests/monthly-selection-browser.py
+          TOYA_TEST_BROWSER=webkit python3 tests/monthly-selection-browser.py
+      - name: Stage only tested module and one loader change
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/company-monthly-summary.autoselect-r1.js docs/index.html
+          git diff --cached --stat
+          git commit -m 'Enable tested monthly auto selection with per-month manual overrides'
+          git push origin HEAD:fix/monthly-auto-selection-20260925
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: monthly-auto-selection-verification
+          retention-days: 3
+          path: |
+            test-output/monthly-selection
+            docs/company-monthly-summary.autoselect-r1.js
