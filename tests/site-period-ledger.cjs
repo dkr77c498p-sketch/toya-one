@@ -1,0 +1,53 @@
+'use strict';
+const assert=require('node:assert/strict'),path=require('node:path'),fs=require('node:fs');
+const root=path.resolve(__dirname,'../docs');
+require.cache[require.resolve(root+'/usage-hours.js')]={id:root+'/usage-hours.js',filename:root+'/usage-hours.js',loaded:true,exports:require(root+'/usage-hours.highway-r1.js')};
+const E=require(root+'/site-period-ledger.r1.js');
+const cp=x=>JSON.parse(JSON.stringify(x));let count=0;
+const check=(name,f)=>{f();count++;console.log('ok '+count+' '+name);};
+const company='fixture-company',sid='fixture-site';
+function fixture(){
+ const x=Object.fromEntries(E.sources().map(([key])=>[key,[]]));
+ x.sites=[{id:sid,company_id:company,name:'検証現場（架空）',status:'inactive',completed_on:'2026-10-31'}];
+ x.revenues=[{id:'contract-1',company_id:company,site_id:sid,revenue_type:'contract',amount:3300000,updated_at:'2026-09-25T00:00:00Z',revenue_date:'2026-08-01'}];
+ const progress=[['2026-08',1000000,700000,'base'],['2026-09',1500000,1100000,'base'],['2026-10',800000,600000,'addition']];
+ x.profiles=[{site_id:sid,company_id:company,updated_at:'2026-09-25T00:00:00Z',structure_type:'rc',scope_notes:'既存の施工条件を保持',floor_area_sqm:111.5,contract_breakdown:progress.map(([m,amount,,kind],i)=>({label:i===2?'追加工事／外構':'本工事／解体',target_month:m,amount,status:'complete',notes:'架空データ',work_kind:kind,extraLegacy:'preserve'}))}];
+ for(const [m,,cost] of progress){x.reports.push({id:'report-'+m,company_id:company,site_id:sid,report_date:m+'-01',updated_at:m+'-01T10:00:00Z',report_data:{date:m+'-01',site:x.sites[0].name,workers:[],vehicles:[],machines:[],items:[{name:'工事費用（検証）',price:cost}],fuels:[],start:'08:00',end:'17:00'}});x.laborSheets.push({id:'sheet-'+m,company_id:company,site_id:sid,work_date:m+'-01',cost_total:0,revenue_total:0,entries:[],source_reports:[{id:'report-'+m,updated_at:m+'-01T10:00:00Z'}],updated_at:m+'-02T00:00:00Z'});}
+ return x;
+}
+const options={companyId:company,complete:true,asOfMonth:'2026-10'};
+const a=x=>E.analyze(x,sid,options);
+check('three-month revenue, cost and profit sum exactly',()=>{const r=a(fixture());assert.equal(r.totals.revenue,3300000);assert.equal(r.totals.cost,2400000);assert.equal(r.totals.profit,900000);assert.deepEqual(r.rows.map(r=>r.cumulativeRevenue),[1000000,2500000,3300000]);});
+check('base/additions split revenue without duplicating total',()=>{const r=a(fixture());assert.equal(r.totals.base,2500000);assert.equal(r.totals.additions,800000);});
+check('same-month separate work rows are added once',()=>{const x=fixture();x.profiles[0].contract_breakdown[1].amount=1400000;x.profiles[0].contract_breakdown.push({label:'追加',work_kind:'addition',target_month:'2026-09',status:'complete',amount:100000});const r=a(x);assert.equal(r.rows[1].revenue,1500000);assert.equal(r.totals.revenue,3300000);});
+check('invoices are reference only; draft void and estimates excluded',()=>{const x=fixture();for(const [i,kind,status] of [[1,'invoice','issued'],[2,'progress','issued'],[3,'estimate','issued'],[4,'invoice','draft'],[5,'invoice','void']])x.documents.push({id:'d'+i,site_id:sid,company_id:company,kind,status,document_date:'2026-09-05',subtotal:100000});const r=a(x);assert.equal(r.totals.invoice,200000);assert.equal(r.totals.revenue,3300000);assert.equal(r.totals.profit,900000);});
+check('missing original sale stays unknown instead of red loss from extra only',()=>{const x=fixture();x.profiles[0].contract_breakdown=x.profiles[0].contract_breakdown.slice(2);x.revenues[0].amount=800000;const r=a(x);assert.equal(r.totals.revenue,null);assert.equal(r.totals.profit,null);assert.equal(r.totals.knownRevenue,800000);assert.equal(r.totals.missingRevenue,2);});
+check('completion alone never invents monthly revenue',()=>{const x=fixture();x.profiles=[];const r=a(x);assert.equal(r.totals.revenue,null);assert.equal(r.totals.profit,null);});
+check('manual zero revenue remains an explicit zero',()=>{const x=fixture();x.profiles[0].contract_breakdown[1].amount=0;assert.equal(a(x).rows[1].revenue,0);});
+check('no cost records are not fabricated as zero',()=>{const x=fixture();x.reports=x.reports.filter(r=>r.report_date<'2026-10');x.laborSheets=x.laborSheets.filter(r=>r.work_date<'2026-10');const r=a(x);assert.equal(r.rows[2].cost,null);assert.equal(r.rows[2].profit,null);assert.equal(r.totals.profit,null);});
+check('future progress and future costs excluded from current cumulative',()=>{const r=E.analyze(fixture(),sid,{...options,asOfMonth:'2026-09'});assert.equal(r.totals.revenue,2500000);assert.equal(r.totals.cost,1800000);assert.equal(r.totals.futureRevenue,800000);assert.equal(r.rows[2].cumulativeRevenue,null);});
+check('across years and missing gap months retained',()=>{assert.deepEqual(E.monthsBetween('2026-11','2027-02'),['2026-11','2026-12','2027-01','2027-02']);});
+check('repeated identical fetch counted once',()=>{const x=fixture();x.reports.push(cp(x.reports[0]));x.profiles.push(cp(x.profiles[0]));assert.equal(a(x).totals.cost,2400000);});
+check('conflicting duplicates refused',()=>{const x=fixture();x.reports.push({...cp(x.reports[0]),updated_at:'2026-08-02T00:00:00Z'});assert.throws(()=>a(x),/読込中/);});
+check('cross-company data refused',()=>{const x=fixture();x.reports[0].company_id='foreign';assert.throws(()=>a(x),/会社/);});
+check('partial retrieval cannot produce totals',()=>assert.throws(()=>E.analyze(fixture(),sid,{...options,complete:false}),/全件/));
+check('unknown input array refused',()=>{const x=fixture();delete x.vehicleSheets;assert.throws(()=>a(x),/全件/);});
+check('invalid dates not ignored',()=>{const x=fixture();x.reports[0].report_date='2026-02-30';assert.throws(()=>a(x),/日付/);});
+check('malformed phase array refused',()=>{const x=fixture();x.profiles[0].contract_breakdown={amount:1};assert.throws(()=>a(x),/内訳/);});
+check('blank amounts never become zero',()=>{const x=fixture();x.profiles[0].contract_breakdown[0].amount='';assert.throws(()=>a(x),/売上/);});
+check('duplicate contracts refused',()=>{const x=fixture();x.revenues.push({...x.revenues[0],id:'contract-2'});assert.throws(()=>a(x),/重複/);});
+check('unclassified existing rows not guessed as base or extra',()=>{const x=fixture();delete x.profiles[0].contract_breakdown[0].work_kind;assert.equal(a(x).totals.unclassified,1000000);});
+check('saved manual adjustments remain unchanged',()=>{const x=fixture();x.laborSheets[0].cost_total=45000;assert.equal(a(x).rows[0].cost,745000);assert.equal(x.laborSheets[0].cost_total,45000);});
+check('analysis does not mutate any data',()=>{const x=fixture(),before=JSON.stringify(x);a(x);assert.equal(JSON.stringify(x),before);});
+check('draft preserves building fields and phase metadata',()=>{const x=fixture(),p=x.profiles[0],c=x.revenues[0],d=E.draftProfile(p,c,p.contract_breakdown,'3300000');assert.equal(d.p_profile.floor_area_sqm,111.5);assert.equal(d.p_profile.contract_breakdown[0].extraLegacy,'preserve');assert.equal(d.p_expected_updated_at,p.updated_at);assert.equal(d.p_expected_contract_updated_at,c.updated_at);});
+check('draft permits partial progress without replacing contract with the sum',()=>{const x=fixture(),d=E.draftProfile(x.profiles[0],x.revenues[0],x.profiles[0].contract_breakdown.slice(0,1),'3300000');assert.equal(d.p_contract_amount,3300000);});
+check('additional progress exceeding contract requires deliberate correction',()=>{const x=fixture();assert.throws(()=>E.draftProfile(x.profiles[0],x.revenues[0],x.profiles[0].contract_breakdown,'2500000'),/超え/);});
+check('unknown base contract cannot be saved as zero',()=>assert.throws(()=>E.draftProfile(null,null,[],''),/請負/));
+check('new profile may be created explicitly',()=>assert.equal(E.draftProfile(null,null,[],'100').p_contract_amount,100));
+check('49 phase rows refused',()=>{const x=fixture();assert.throws(()=>E.draftProfile(null,null,Array.from({length:49},()=>x.profiles[0].contract_breakdown[0]),'99000000'),/内訳/);});
+check('future existing contract does not become monthly revenue',()=>{const x=fixture();x.revenues[0].revenue_date='2027-01-01';assert.equal(a(x).totals.revenue,3300000);});
+check('valid zero-cost manual sheet is included',()=>{const x=fixture();x.reports[0].report_data.items=[];assert.equal(a(x).rows[0].cost,0);});
+check('another site is not included in selected site revenue',()=>{const x=fixture();x.sites.push({id:'other',company_id:company,name:'別の検証現場',status:'active'});x.profiles.push({site_id:'other',company_id:company,contract_breakdown:[{label:'別工事',amount:999999,target_month:'2026-09',status:'complete'}]});assert.equal(a(x).totals.revenue,3300000);});
+check('engine rejects unowned site ID',()=>assert.throws(()=>E.analyze(fixture(),'other',options),/現場/));
+if(process.env.WRITE_FIXTURE){fs.writeFileSync(process.env.WRITE_FIXTURE,JSON.stringify(fixture(),null,2));}
+console.log(JSON.stringify({tests:count,allPassed:true}));
