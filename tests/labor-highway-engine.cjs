@@ -1,0 +1,34 @@
+'use strict';
+const assert=require('node:assert/strict'),test=require('node:test'),path=require('node:path');
+const dir=process.env.TOYA_TEST_DOCS||path.resolve(__dirname,'../docs');
+const old=require(path.join(dir,'usage-hours.js')),U=require(path.join(dir,'usage-hours.highway-r1.js')),D=require(path.join(dir,'dispatch-travel.js'));
+const site={id:'site-a',name:'検証A'},b={id:'site-b',name:'検証B'},date='2026-09-25';
+const rate={code:'employee-a',label:'検証社員A',kind:'own',day_rate:8000,half_rate:4000,city_per_vehicle:0,active:true};
+function entry(toll){return {kind:'labor',label:rate.label,quantity:1,fromReportTime:false,travelSite:site.name,allocations:[{site:site.name,minutes:420,...(toll===undefined?{}:{highway:toll})}]};}
+function report(id='r1',e=entry()){return {id,site_id:site.id,report_date:date,updated_at:'2026-09-25T00:00:00.000Z',report_data:{id,date,site:site.name,workers:[rate.label],start:'08:00',end:'17:00',items:[],siteMoves:[],usageHours:{version:1,entries:[e]}}};}
+function data(reports=[report()]){return {reports,sites:[site,b],laborRates:[rate],laborSheets:[],vehicleSheets:[],equipmentSheets:[],dispatchCrews:[],vehicleRates:[],equipmentRates:[],transportRates:[],toolRates:[],attachmentRates:[],revenues:[]};}
+const legacy={sheet:{entries:[],cost_total:0},issues:[]};
+const adjust=(d,s=site,u=U)=>u.adjust('labor',date,d,s,legacy,()=>0,D);
+test('no toll: byte-equivalent derived result, no report mutation',()=>{let d=data();const before=JSON.stringify(d);assert.deepEqual(adjust(d),adjust(d,site,old));assert.equal(JSON.stringify(d),before);});
+test('7 hours + actual toll, not toll times hours',()=>{const r=adjust(data([report('r',entry('1230'))]));assert.equal(r.sheet.cost_total,8230);assert.equal(r.sheet.entries[0].highway,1230);assert.equal(r.sheet.entries[0].laborCost,7000);});
+test('multiple tolls aggregate per person',()=>{let r=report('r',entry('1000'));r.report_data.workers.push('検証社員B');r.report_data.usageHours.entries.push({...entry('500'),label:'検証社員B'});let d=data([r]);d.laborRates.push({...rate,label:'検証社員B',code:'employee-b'});assert.equal(adjust(d).sheet.cost_total,15500);});
+test('same report fetched twice is counted once',()=>{const r=report('r',entry('1230'));assert.equal(adjust(data([r,r])).sheet.cost_total,8230);});
+test('same employee on two matching reports has one toll',()=>assert.equal(adjust(data([report('r1',entry('1230')),report('r2',entry(1230))])).sheet.cost_total,8230));
+test('older missing toll does not override a recorded toll',()=>assert.equal(adjust(data([report('r1'),report('r2',entry('1230'))])).sheet.cost_total,8230));
+test('conflicting tolls hold toll only; salary intact',()=>{const r=adjust(data([report('r1',entry('1230')),report('r2',entry('900'))]));assert.equal(r.sheet.cost_total,7000);assert.equal(r.sheet.entries[0].highway,null);assert.ok(r.pendingResources.some(x=>x.includes('高速代')));});
+test('explicit zero conflicts with nonzero, not assumed missing',()=>{const r=adjust(data([report('r1',entry(0)),report('r2',entry(1230))]));assert.equal(r.sheet.cost_total,7000);assert.equal(r.sheet.entries[0].highway,null);});
+test('two sites have independent actual toll amounts',()=>{let e=entry(1000);e.allocations[0].minutes=240;e.allocations.push({site:b.name,minutes:180,highway:'600'});let r=report('r',e);r.report_data.siteMoves=[{site:b.name}];const d=data([r]);assert.equal(adjust(d).sheet.cost_total,5000);assert.equal(adjust(d,b).sheet.cost_total,3600);});
+test('zero recorded work time does not drop a real toll',()=>{let e=entry(600);e.allocations[0].minutes=0;assert.equal(adjust(data([report('r',e)])).sheet.cost_total,600);});
+test('bad toll values withheld, not converted to zero certainty',()=>{for(const x of [-1,NaN,Infinity,true,'abc','1e3','1000000001','2.123']){const r=adjust(data([report('r',entry(x))]));assert.equal(r.sheet.cost_total,7000);assert.equal(r.sheet.entries[0].highway,null);assert.ok(r.issues.some(x=>x.includes('高速代')));}});
+test('optional empty zero and fullwidth normalization',()=>{assert.equal(U.highwayAmount({}).present,false);assert.equal(U.highwayAmount({highway:''}).present,false);assert.equal(U.highwayAmount({highway:0}).value,0);assert.equal(U.highwayAmount({highway:'１２３０'}).value,1230);});
+test('toll-bearing zero-time destination is not silently discarded',()=>{const e=entry(1000);e.allocations.push({site:b.name,minutes:0,highway:'600'});assert.equal(U.syncEntrySites(e,[site.name]).allocations.length,2);});
+test('resetting single time preserves toll field',()=>{const e=entry('1230');assert.deepEqual(U.keepHighway(e,{site:site.name,minutes:480}),{site:site.name,minutes:480,highway:'1230'});});
+test('ordinary older engine still preserves toll on site-sync',()=>{const e=entry('1230');assert.equal(old.syncEntrySites(e,[site.name]).allocations[0].highway,'1230');});
+test('dispatch toll behavior stays exactly unchanged',()=>{let e={...entry(),kind:'dispatch',label:'明建',quantity:2};let r=report('r',e);r.report_data.workers=[];r.report_data.meikenCount=2;r.report_data.dispatchTravel={meiken:{area:'city',vehicles:1,highway:1800,manualTravel:null,memo:''}};let d=data([r]);d.laborRates=[{...rate,kind:'dispatch',label:'明建',code:'meiken',city_per_vehicle:500}];assert.deepEqual(adjust(d),adjust(d,site,old));assert.equal(adjust(d).sheet.cost_total,16300);});
+test('vehicle and equipment unaffected',()=>{for(const kind of ['vehicle','equipment']){let e={...entry(),kind,label:'検証機材'};let r=report('r',e);r.report_data.workers=[];r.report_data[kind==='vehicle'?'vehicles':'machines']=['検証機材'];let d=data([r]);d[kind==='vehicle'?'vehicleRates':'equipmentRates']=[{code:'asset',label:'検証機材',daily_rate:8000}];assert.deepEqual(U.adjust(kind,date,d,site,legacy,()=>0,D),old.adjust(kind,date,d,site,legacy,()=>0,D));}});
+// Use current summary code unchanged, substituting only its explicitly loaded hours engine.
+require.cache[require.resolve(path.join(dir,'usage-hours.js'))].exports=U;
+const F=require(path.join(dir,'site-financial-summary.js'));
+test('full financial summary includes toll in labor, no expense copy',()=>{const r=F.analyze(data([report('r',entry(1230))]),site);assert.equal(r.categories.labor.value,8230);assert.equal(r.expenses.other.value,0);assert.equal(r.subtotal,8230);});
+test('saved administrator amount wins without adding toll again',()=>{const d=data([report('r',entry(1230))]);d.laborSheets=[{id:'sheet',site_id:site.id,work_date:date,cost_total:9000,revenue_total:0,entries:[],source_reports:d.reports.map(r=>({id:r.id,updated_at:r.updated_at}))}];assert.equal(F.analyze(d,site).subtotal,9000);});
+test('next day toll does not get merged into same day',()=>{let r=report('r2',entry(400));r.report_date='2026-09-26';r.report_data.date=r.report_date;const d=data([report('r1',entry(1230)),r]);assert.equal(F.analyze(d,site).subtotal,15630);});
