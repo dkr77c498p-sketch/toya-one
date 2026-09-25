@@ -1,0 +1,66 @@
+name: Verify employee highway input
+on:
+  push:
+    branches: [fix/labor-highway-input-20260925]
+    paths:
+      - '.github/workflows/labor-highway-input.yml'
+      - 'scripts/labor-highway-patch.py'
+      - 'tests/labor-highway-engine.cjs'
+      - 'tests/labor-highway-browser.py'
+permissions:
+  contents: write
+concurrency:
+  group: labor-highway-input-20260925
+  cancel-in-progress: true
+jobs:
+  stage:
+    if: github.ref == 'refs/heads/fix/labor-highway-input-20260925'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply guarded optional toll input and calculation change
+        run: |
+          set -euo pipefail
+          python3 scripts/labor-highway-patch.py
+          node --check docs/usage-hours.highway-r1.js
+      - name: Install pinned test browsers
+        run: |
+          set -euo pipefail
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+      - name: Test engine and whole app with synthetic reports only
+        run: |
+          set -euo pipefail
+          mkdir -p test-output/labor-highway
+          TOYA_TEST_DOCS="$PWD/docs" node --test tests/labor-highway-engine.cjs | tee test-output/labor-highway/node-tests.txt
+          TOYA_TEST_DOCS="$PWD/docs" TOYA_TEST_OUT="$PWD/test-output/labor-highway" TOYA_TEST_BROWSER=chromium python3 tests/labor-highway-browser.py
+          TOYA_TEST_DOCS="$PWD/docs" TOYA_TEST_OUT="$PWD/test-output/labor-highway" TOYA_TEST_BROWSER=webkit python3 tests/labor-highway-browser.py
+      - name: Stage only the new immutable module and single loader reference
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/fix/labor-highway-input-20260925'
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,subprocess
+          assert subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()==['docs/index.html']
+          checks={'docs/usage-hours.js':'b0920a7e4888548fd38f744f6ee03d8743156531bcc31f34bc7dfb157e8ea17b','docs/usage-hours.highway-r1.js':'6954cbfc8a47638dc28bb3e8cf4b4412f015a0f2f50cfa51c7ac337828c4b1b3','docs/index.html':'a520bc764e91bdecb5187e13aa819007a832c6c5821c93635b7cf8971dbbc51c'}
+          for p,h in checks.items():
+            assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h,p
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/usage-hours.highway-r1.js
+          git diff --cached --check
+          git commit -m 'Stage verified employee highway input and per-site costing'
+          git push origin HEAD:refs/heads/fix/labor-highway-input-20260925
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: labor-highway-verification
+          path: |
+            test-output/labor-highway/
+            docs/usage-hours.highway-r1.js
+          retention-days: 3
