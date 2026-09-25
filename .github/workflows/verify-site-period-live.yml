@@ -1,0 +1,47 @@
+name: Verify public site monthly and lifetime view
+on:
+  push:
+    branches: [feature/site-period-ledger-20260925]
+    paths: ['.github/workflows/verify-site-period-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    if: github.ref == 'refs/heads/feature/site-period-ledger-20260925'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact public loader and three reviewed modules
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib,time
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={
+            'index.html':'d0aeb6eb47bed4253c6fd4de3c401f4e9cea4f127d7bc8ef86306ec63b44c704',
+            'site-period-ledger.r1.js':'f424f6427acfadacc62a9e7b167ed25890606bc5a5169d4a73b2ea238b7650ec',
+            'site-period-ledger-ui.r1.js':'1415f95c2b021fbbaf74fa87f686b7765ccc01aa106deab74ddd872f09609bb1',
+            'company-monthly-summary.period-r1.js':'cd6863ca95d005c677d8f674e3090ccc5ce0f8d0272a7c591d3eed0e529fe6f0',
+            'company-monthly-summary.js':'d3d779e72cf0d288b755d244744895ed24f83e2a593a3c2360dd13be89f10fad'
+          }
+          def fetch(name):
+            request=urllib.request.Request(base+name+'?verify=site-period-r1-'+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+            return urllib.request.urlopen(request,timeout=20).read()
+          for attempt in range(18):
+            try:
+              for name,sha in expected.items():
+                body=fetch(name)
+                assert hashlib.sha256(body).hexdigest()==sha,name+' is not the reviewed version yet'
+              text=fetch('index.html').decode()
+              assert text.count('src="site-period-ledger.r1.js?')==1
+              assert text.count('src="site-period-ledger-ui.r1.js?')==1
+              assert 'usage-hours.highway-r1.js' in text
+              assert 'project-business.pdf-r1.js' in text
+              assert 'estimate-plan-admin.quote5-r5.js' in text
+              assert 'general-waste-ui.js' not in text
+              print('PUBLIC VERIFIED: monthly/lifetime view and split-safe entry loader, original monthly module retained, no customer-account access')
+              break
+            except Exception as e:
+              print('Waiting for Pages:',str(e))
+              if attempt==17:raise
+              time.sleep(8)
+          PY
