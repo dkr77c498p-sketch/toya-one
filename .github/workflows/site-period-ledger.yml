@@ -1,0 +1,71 @@
+name: Verify site monthly and lifetime ledger
+on:
+  push:
+    branches: [feature/site-period-ledger-20260925]
+    paths:
+      - '.github/workflows/site-period-ledger.yml'
+      - 'scripts/site-period-ledger-patch.py'
+      - 'docs/site-period-ledger.r1.js'
+      - 'docs/site-period-ledger-ui.r1.js'
+      - 'tests/site-period-ledger.cjs'
+      - 'tests/site-period-browser.py'
+permissions:
+  contents: write
+concurrency:
+  group: site-period-ledger-verify
+  cancel-in-progress: true
+jobs:
+  verify-and-stage:
+    if: github.ref == 'refs/heads/feature/site-period-ledger-20260925'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+      - name: Guard reviewed sources and integrate only the new view
+        run: |
+          set -euo pipefail
+          python3 scripts/site-period-ledger-patch.py
+          node --check docs/site-period-ledger.r1.js
+          node --check docs/site-period-ledger-ui.r1.js
+          node --check docs/company-monthly-summary.period-r1.js
+      - name: Install pinned offline browser test tools
+        run: |
+          python3 -m pip install playwright==1.57.0
+          python3 -m playwright install --with-deps chromium webkit
+          sudo apt-get install -y fonts-noto-cjk
+      - name: Verify calculations, editor, company isolation and old tabs with no real accounts
+        run: |
+          set -euo pipefail
+          mkdir -p test-output/site-period
+          node tests/site-period-ledger.cjs | tee test-output/site-period/engine-tests.txt
+          TOYA_TEST_BROWSER=chromium python3 tests/site-period-browser.py
+          TOYA_TEST_BROWSER=webkit python3 tests/site-period-browser.py
+      - name: Stage only the tested loader and versioned monthly module
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = 'refs/heads/feature/site-period-ledger-20260925'
+          python3 - <<'PY'
+          import subprocess
+          changed=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          assert changed in ([],['docs/index.html']),changed
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/company-monthly-summary.period-r1.js
+          git diff --cached --check
+          if ! git diff --cached --quiet; then
+            git commit -m 'Stage verified site month/lifetime view; production not deployed'
+            git push origin HEAD:refs/heads/feature/site-period-ledger-20260925
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: site-period-ledger-verification
+          path: |
+            test-output/site-period/
+            docs/site-period-ledger.r1.js
+            docs/site-period-ledger-ui.r1.js
+            docs/company-monthly-summary.period-r1.js
+          retention-days: 3
