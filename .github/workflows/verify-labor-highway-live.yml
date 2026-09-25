@@ -1,0 +1,40 @@
+name: Verify public employee highway input
+on:
+  push:
+    branches: [fix/labor-highway-input-20260925]
+    paths: ['.github/workflows/verify-labor-highway-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Check exact public index and new hours module while retaining old module
+        run: |
+          python3 - <<'PY'
+          import urllib.request,hashlib,time
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          checks={'index.html':'a520bc764e91bdecb5187e13aa819007a832c6c5821c93635b7cf8971dbbc51c','usage-hours.highway-r1.js':'6954cbfc8a47638dc28bb3e8cf4b4412f015a0f2f50cfa51c7ac337828c4b1b3','usage-hours.js':'b0920a7e4888548fd38f744f6ee03d8743156531bcc31f34bc7dfb157e8ea17b'}
+          deadline=time.monotonic()+210
+          last='No request yet'
+          while time.monotonic()<deadline:
+            try:
+              for path,wanted in checks.items():
+                req=urllib.request.Request(base+path+'?verify=20260925-highway-'+str(time.time_ns()),headers={'Cache-Control':'no-cache','User-Agent':'TOYA-static-release-check'})
+                with urllib.request.urlopen(req,timeout=15) as response:
+                  assert response.status==200,path
+                  body=response.read()
+                got=hashlib.sha256(body).hexdigest()
+                assert got==wanted,path+' not yet the verified release: '+got
+                if path=='index.html':
+                  text=body.decode()
+                  assert text.count('usage-hours.highway-r1.js?v=20260925-highway-r1')==1
+                  assert 'src="usage-hours.js?' not in text
+              print('PASS: public index and new highway module match tested bytes; original module retained. No account reads/writes.')
+              break
+            except Exception as e:
+              last=str(e);print('Waiting for static deployment:',last,flush=True);time.sleep(5)
+          else:
+            raise SystemExit('Public release not verified: '+last)
+          PY
