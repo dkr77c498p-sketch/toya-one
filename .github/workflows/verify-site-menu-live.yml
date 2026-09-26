@@ -1,0 +1,36 @@
+name: Verify public daily site menu
+on:
+  push:
+    branches: [fix/site-menu-names-only-20260926]
+    paths: [.github/workflows/verify-site-menu-live.yml]
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact deployed index and site menu module
+        run: |
+          python - <<'PY'
+          import hashlib, time, urllib.request
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={
+            'index.html':'767eea208b0de52bdc718fed2d5dd5ea293879623b0b8f693c93e1a70f2085b1',
+            'shared-site-master.names-only-r1.js':'9176da0ee88b44d180573b1eb55ba3a01217d809e9cf871d9cd920f753eabb78'
+          }
+          for attempt in range(18):
+              try:
+                  for path,digest in expected.items():
+                      req=urllib.request.Request(base+path+'?verify=names-only-20260926-'+str(time.time_ns()),headers={'Cache-Control':'no-cache','User-Agent':'TOYA-release-verification'})
+                      with urllib.request.urlopen(req,timeout=15) as r:
+                          assert r.status==200
+                          data=r.read()
+                      assert hashlib.sha256(data).hexdigest()==digest,path+' does not match tested bytes'
+                  print('VERIFIED: exact public index and names-only site module. No accounts accessed.')
+                  break
+              except Exception as e:
+                  print('Pending publication:',str(e),flush=True)
+                  if attempt==17:raise
+                  time.sleep(8)
+          PY
