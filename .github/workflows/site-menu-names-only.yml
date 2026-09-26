@@ -1,0 +1,54 @@
+name: Verify daily site names only
+on:
+  push:
+    branches: [fix/site-menu-names-only-20260926]
+    paths:
+      - scripts/site-menu-names-only-patch.py
+      - tests/site-menu-names-only-browser.py
+      - .github/workflows/site-menu-names-only.yml
+permissions:
+  contents: write
+jobs:
+  verify-and-stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+      - name: Apply guarded presentation-only change
+        run: |
+          python scripts/site-menu-names-only-patch.py
+          echo '9176da0ee88b44d180573b1eb55ba3a01217d809e9cf871d9cd920f753eabb78  docs/shared-site-master.names-only-r1.js' | sha256sum -c
+          echo '767eea208b0de52bdc718fed2d5dd5ea293879623b0b8f693c93e1a70f2085b1  docs/index.html' | sha256sum -c
+          node --check docs/shared-site-master.names-only-r1.js
+      - name: Install pinned test browsers
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install --with-deps chromium webkit
+      - name: Check full app using synthetic records only
+        run: |
+          TOYA_TEST_BROWSER=chromium python tests/site-menu-names-only-browser.py
+          TOYA_TEST_BROWSER=webkit python tests/site-menu-names-only-browser.py
+      - name: Stage tested module and one loader reference
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          echo '9176da0ee88b44d180573b1eb55ba3a01217d809e9cf871d9cd920f753eabb78  docs/shared-site-master.names-only-r1.js' | sha256sum -c
+          echo '767eea208b0de52bdc718fed2d5dd5ea293879623b0b8f693c93e1a70f2085b1  docs/index.html' | sha256sum -c
+          test "$(git ls-remote origin refs/heads/fix/site-menu-names-only-20260926 | cut -f1)" = "$EXPECTED_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/shared-site-master.names-only-r1.js
+          git diff --cached --stat
+          git commit -m 'Stage verified real-name-only daily site menu without changing report data'
+          git push origin HEAD:refs/heads/fix/site-menu-names-only-20260926
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: site-menu-names-only-verification
+          path: |
+            test-output/site-menu
+            docs/shared-site-master.names-only-r1.js
+          retention-days: 3
