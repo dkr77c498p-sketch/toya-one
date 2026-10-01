@@ -1,0 +1,41 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const B=require('../docs/billing-bundle.r1.js'),E=require('../docs/project-documents-engine.quote5-r3.js');
+const company='fixture-company',issuer={issuer_name:'株式会社テスト建設（架空）',address:'鹿児島県 検証用住所',phone:'099-000-0000',registration_number:'T1234567890123',bank_details:'検証銀行 見本支店\n普通 0000000 カ）テスト',logo_key:'toya'};
+function make(id,site,amount,kind='invoice',extra={}){const items=[{name:'架空の工事代金',quantity:'1',unit:'式',unitPrice:String(amount),costPrice:null}],t=E.total(items,10);return {id,company_id:company,site_id:site,site_name:'検証現場'+site+'（架空）',customer_name:'架空元請株式会社',customer_address:'鹿児島県 テスト宛先',issuer:structuredClone(issuer),kind,status:'issued',document_date:'2026-09-30',transaction_start:'2026-09-01',transaction_end:'2026-09-30',due_date:'2026-10-31',document_number:(kind==='progress'?'PRG':'INV')+'-TEST-'+id,issued_at:'2026-09-30T00:00:00Z',updated_at:'2026-09-30T00:00:00Z',created_at:'2026-09-30T00:00:00Z',items,subtotal:t.subtotal,tax_rate:10,tax_amount:t.tax,total:t.total,previous_billed:kind==='progress'?80000:0,cumulative_amount:kind==='progress'?80000+amount:null,contract_amount:1000000,subject:'検証用・架空工事',notes:'この書類は架空データの検証用です。',...extra};}
+const normal=make('a','A',200000),progress=make('b','B',150000,'progress'),old=make('old','B',80000,'invoice',{document_date:'2026-08-31',transaction_start:'2026-08-01',transaction_end:'2026-08-31'}),draft=make('draft','C',10000,'invoice',{status:'draft',document_number:null,issued_at:null}),other=make('other','D',999,'invoice',{customer_name:'別の元請株式会社'}),voided=make('void','A',999,'invoice',{status:'void'});
+const docs=[normal,progress,old,draft,other,voided],before=JSON.stringify(docs);let count=0;
+function test(name,fn){fn();count++;console.log('ok',name);}
+const selected=()=>B.bundle(docs,['a','b'],company);
+test('mixed regular and progress current amounts',()=>assert.equal(selected().subtotal,350000));
+test('exact tax and total sums',()=>{assert.equal(selected().tax,35000);assert.equal(selected().total,385000);});
+test('prior progress not added',()=>assert.notEqual(selected().subtotal,430000));
+test('two sites and kinds',()=>{assert.equal(selected().siteCount,2);assert.equal(selected().progressCount,1);});
+test('input and business records unchanged',()=>assert.equal(JSON.stringify(docs),before));
+test('same retrieved ID counted once',()=>assert.equal(B.bundle(docs.concat(normal),['a'],company).subtotal,200000));
+test('duplicate selection rejected',()=>assert.throws(()=>B.bundle(docs,['a','a'],company)));
+test('conflicting ID rejected',()=>assert.throws(()=>B.bundle(docs.concat({...normal,total:1}),['a'],company)));
+test('different customer rejected',()=>assert.throws(()=>B.bundle(docs,['a','other'],company)));
+test('different address rejected',()=>assert.throws(()=>B.bundle([normal,{...progress,customer_address:'別住所'}],['a','b'],company)));
+test('different bank rejected',()=>assert.throws(()=>B.bundle([normal,{...progress,issuer:{...issuer,bank_details:'別銀行'}}],['a','b'],company)));
+test('different tax registration rejected',()=>assert.throws(()=>B.bundle([normal,{...progress,issuer:{...issuer,registration_number:'T9999999999999'}}],['a','b'],company)));
+test('foreign company rejected',()=>assert.throws(()=>B.bundle([{...normal,company_id:'other'}],['a'],company)));
+test('draft not official',()=>assert.throws(()=>B.bundle(docs,['draft'],company)));
+test('void not included',()=>assert.throws(()=>B.bundle(docs,['void'],company)));
+test('missing source rejected',()=>assert.throws(()=>B.bundle(docs,['gone'],company)));
+test('stored sums cannot be forged',()=>assert.throws(()=>B.bundle([{...normal,subtotal:201000}],['a'],company)));
+test('stored tax must match original invoice',()=>assert.throws(()=>B.bundle([{...normal,tax_amount:19999}],['a'],company)));
+test('progress mismatch rejected',()=>assert.throws(()=>B.bundle([{...progress,cumulative_amount:999999}],['b'],company)));
+test('progress exceeds contract rejected',()=>assert.throws(()=>B.bundle([{...progress,contract_amount:200000}],['b'],company)));
+test('bad dates rejected',()=>assert.throws(()=>B.bundle([{...normal,transaction_end:'2026-02-30'}],['a'],company)));
+test('blank amount not zero',()=>assert.throws(()=>B.bundle([{...normal,subtotal:null}],['a'],company)));
+test('invoice count limited',()=>assert.throws(()=>B.bundle(docs,Array.from({length:31},(_,i)=>String(i)),company)));
+test('same invoice number in different rows rejected',()=>assert.throws(()=>B.bundle([normal,{...progress,document_number:normal.document_number}],['a','b'],company)));
+test('individual rounding preserved, no extra tax rounding',()=>{const a=make('one','A',19),b=make('two','B',19);const x=B.bundle([a,b],['one','two'],company);assert.equal(x.tax,2);assert.equal(x.total,40);});
+test('all-time billed excludes draft void and other site',()=>{const x=B.balance(docs,[{company_id:company,site_id:'B',amount:700000,revenue_type:'contract'}],'B',company);assert.equal(x.billed,230000);assert.equal(x.remaining,470000);});
+test('unknown contract not inferred',()=>assert.equal(B.balance(docs,[],'B',company).remaining,null));
+test('recipient identities are not fuzzy merged',()=>assert.notEqual(B.recipient({name:'株式会社Ａ',address:'X'}),B.recipient({name:'株式会社A',address:'X'})));
+test('summary escapes user-supplied markup',()=>assert.equal(B.esc('<script>'),'&lt;script&gt;'));
+if(process.env.WRITE_FIXTURE){const sites=['A','B','C','D'].map(id=>({id,company_id:company,name:'検証現場'+id+'（架空）',status:'active'}));fs.writeFileSync(process.env.WRITE_FIXTURE,JSON.stringify({project_documents:docs,business_customers:[{id:'customer',company_id:company,name:normal.customer_name,address:normal.customer_address,active:true}],sites,revenues:sites.map(s=>({id:'r'+s.id,company_id:company,site_id:s.id,revenue_type:'contract',amount:1000000,updated_at:'2026-09-30T00:00:00Z'}))},null,2));}
+console.log(JSON.stringify({passed:count,real_account_writes:0}));
+module.exports={make,docs,issuer};
