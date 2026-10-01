@@ -1,0 +1,16 @@
+{
+  "package_sha256": "f1d6ce53bbd8c808cb3f14b84e77ea7d196237ebea81bd3776d795371959d092",
+  "files": {
+    "docs/billing-bundle.r1.js": "66469bf47200d4968b18dfc61de3200ada1d728e9003dd8fe6fd8b2728d3c919",
+    "docs/billing-bundle-ui.r1.js": "5c8dbabc8b689d452c0ae4d376d45bc654b9b288ada03ee42da2a9bdcbcdf634",
+    "tests/billing-bundle.cjs": "2b6839e74a6d05cf87225d02ca4b8889c6bf6d583b3feff78a81c3c3ef699b1f",
+    "tests/billing-bundle-browser.py": "907c467cfb07bbf93e3fe3d382afe66dfc44205091fee3d885549fc14cd4c8c0",
+    "scripts/billing-bundle-patch.py": "256c5098690963366ea54759f47ae76ea7805eca9dee02f262a7d8143f6040a1"
+  },
+  "outputs": {
+    "index.html": "786a172a3813eec7a2f71cde7e4081e8c588516e3dd739234566cb7f95ee0e57",
+    "project-business.bundle-r1.js": "62ab37bbb57e5513a3a7360f7271d8292dde8f68e6417f7e78a0f86acd6aada4",
+    "billing-bundle.r1.js": "66469bf47200d4968b18dfc61de3200ada1d728e9003dd8fe6fd8b2728d3c919",
+    "billing-bundle-ui.r1.js": "5c8dbabc8b689d452c0ae4d376d45bc654b9b288ada03ee42da2a9bdcbcdf634"
+  }
+}
