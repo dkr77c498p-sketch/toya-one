@@ -34,6 +34,16 @@ jobs:
               assert hashlib.sha256(content.encode()).hexdigest()==m['files'][name],name
               dest=Path(name);assert not dest.exists(), 'Refuse to overwrite existing source'
               dest.parent.mkdir(parents=True,exist_ok=True);dest.write_text(content)
+          # Test harness only: WebKit routes blob URLs through the interceptor.
+          # Permit the local PDF bytes; all external network requests stay blocked.
+          test=Path('tests/billing-bundle-browser.py');old=test.read_text()
+          assert hashlib.sha256(old.encode()).hexdigest()=='907c467cfb07bbf93e3fe3d382afe66dfc44205091fee3d885549fc14cd4c8c0'
+          find="  url=r.request.url\n"
+          replacement=find+"  # WebKit routes blob URLs; these are browser-local bytes, not network requests.\n  if url.startswith('blob:http://localhost/'):return r.continue_()\n"
+          assert old.count(find)==1
+          fixed=old.replace(find,replacement)
+          assert hashlib.sha256(fixed.encode()).hexdigest()=='1df5c18c2278a63b14424e9b7b7ca5bba758dbabfc0b63003781b36fcf30ba1c'
+          test.write_text(fixed)
           PY
           python scripts/billing-bundle-patch.py
           node --check docs/billing-bundle.r1.js
