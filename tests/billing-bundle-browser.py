@@ -40,6 +40,7 @@ with sync_playwright() as pw:
    f=base/'vendor'/url.split('/')[-1].split('?')[0]
    if f.is_file():return r.fulfill(path=str(f),content_type='application/javascript')
   if url=='http://localhost/toya-document-logo.svg':return r.fulfill(path=str(base/'toya-document-logo.svg'),content_type='image/svg+xml')
+  if url=='http://localhost/billing-bundle-logo.r1.png':return r.fulfill(path=str(base/'billing-bundle-logo.r1.png'),content_type='image/png')
   blocked.append(url);r.abort()
  ctx.route('**/*',route)
  baseline=ctx.new_page();old_errors=[];baseline.on('pageerror',lambda err:old_errors.append(str(err)));(baseline.set_content(fixture(True)) if os.environ.get('TOYA_TEST_EXECUTABLE') else baseline.goto('http://localhost/before.html'));baseline.wait_for_timeout(1800);baseline.evaluate(setup);baseline.wait_for_timeout(1600);baseline.close()

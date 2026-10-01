@@ -124,7 +124,7 @@
      }else appendBlock(doc.importNode(source,true));
     }
    }
-   await wait(Promise.all([...doc.images].map(async img=>{const src=new URL(img.getAttribute('src')||'',assets);if(src.href!==new URL('toya-document-logo.svg',assets).href)throw Error('会社ロゴの参照先を確認してください。');img.src=src.href;await img.decode();if(!img.naturalWidth)throw Error('会社ロゴを確認できません。');})));await wait(doc.fonts?.ready||Promise.resolve());check();
+   await wait(Promise.all([...doc.images].map(async img=>{const src=new URL(img.getAttribute('src')||'',assets);if(src.href!==new URL('toya-document-logo.svg',assets).href)throw Error('会社ロゴの参照先を確認してください。');img.src=new URL('billing-bundle-logo.r1.png',assets).href;await img.decode();if(!img.naturalWidth)throw Error('会社ロゴを確認できません。');})));await wait(doc.fonts?.ready||Promise.resolve());check();
    for(let j=0;j<pages.length;j++){const p=pages[j],box=p.page.getBoundingClientRect(),body=q('.te2-frame',p.page);if(body.getBoundingClientRect().bottom>box.bottom-12*96/25.4+1)throw Error('文字の準備後にページからはみ出しました。個別の書類を確認してください。');const foot=element('<footer class="bb-paper-footer"><span>'+e(p.label)+'</span><span>'+(j+1)+' / '+pages.length+'</span></footer>');p.page.append(foot);}
    return '<!doctype html>'+doc.documentElement.outerHTML;
   }finally{frame.remove();}
@@ -141,8 +141,8 @@
    iframe.onload=()=>{fit();iframe.contentDocument?.fonts?.ready.then(fit);};iframe.srcdoc=html;
    q('#bbClosePreview',dialog).onclick=close;dialog.addEventListener('cancel',ev=>{ev.preventDefault();close();});dialog.addEventListener('close',close,{once:true});root.addEventListener('resize',fit);
    dialog.showModal();fit();
-   if(!root.ToyaQuotePDF)throw Error('PDF作成機能を読み込めません。画面を更新してください。');
-   pdf=root.ToyaQuotePDF.mount({dialog,button:q('#bbPDF',dialog),html,isCurrent:()=>!disposed&&identity()===mine&&ticket===t&&Date.now()-verifiedAt<10*60*1000});
+   if(!root.ToyaBillingBundlePDF)throw Error('PDF作成機能を読み込めません。画面を更新してください。');
+   pdf=root.ToyaBillingBundlePDF.mount({dialog,button:q('#bbPDF',dialog),html,isCurrent:()=>!disposed&&identity()===mine&&ticket===t&&Date.now()-verifiedAt<10*60*1000});
    status('選択した'+b.rows.length+'件を確認しました。PDFの宛先と金額を確認して送ってください。');
   }catch(err){if(identity()===mine&&ticket===t){closePreview?.();status(err.message,true);}}
   finally{if(identity()===mine&&ticket===t){loading=false;render();controls();}}
