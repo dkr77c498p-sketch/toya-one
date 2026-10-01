@@ -1,0 +1,44 @@
+name: Verify public contractor billing bundle
+on:
+  push:
+    branches: [feature/contractor-billing-bundle-20261001]
+    paths: ['.github/workflows/verify-billing-bundle-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - name: Verify exact public index, bundle scripts and retained company logo
+        run: |
+          python - <<'PY'
+          import urllib.request,hashlib,time
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          release='5d2fdf888f9502d5cfa7018e4ee3fb1fdc65b9d8'
+          expected={
+           'index.html':'fcfa87e762e9f5e06e2acc460e15703e37861810fb92061d1358a2b11c5768cb',
+           'billing-bundle.r1.js':'66469bf47200d4968b18dfc61de3200ada1d728e9003dd8fe6fd8b2728d3c919',
+           'billing-bundle-ui.r1.js':'a7fffa824515fbf1fb40d2b929706139c8ad2b6551b022ba25b773da0759c5bf',
+           'billing-bundle-pdf.r1.js':'771bcba41c328137e7622ea06ab56d19357305f185ceb5992829e6c2094184dc',
+           'billing-bundle-logo.r1.png':'9d7fbc493c4a923d6dfdb865c8848bb9aca5818b2aee5d0ec0cf8d5e99da9bbb',
+           'project-business.bundle-r1.js':'62ab37bbb57e5513a3a7360f7271d8292dde8f68e6417f7e78a0f86acd6aada4',
+           'quote-pdf-export.r1.js':'16e661a30c2b3e49f213e3ed1162eb0f93bf1d7e1a8a6d20f0b552b71f411351',
+           'toya-document-logo.svg':'203bc025d00a288f6979f09f5fc34c56e062a390041142997680019964beab16'}
+          remaining=dict(expected)
+          for attempt in range(40):
+              for name,wanted in list(remaining.items()):
+                  try:
+                      request=urllib.request.Request(base+name+'?verify='+release,headers={'Cache-Control':'no-cache','User-Agent':'TOYA-release-verifier'})
+                      with urllib.request.urlopen(request,timeout=15) as response:
+                          assert response.status==200
+                          raw=response.read()
+                      if hashlib.sha256(raw).hexdigest()==wanted:
+                          print('verified',name,wanted,flush=True);del remaining[name]
+                      else:print('awaiting deployment',name,flush=True)
+                  except Exception as err:print('awaiting',name,str(err),flush=True)
+              if not remaining:break
+              time.sleep(5)
+          assert not remaining,'Public assets not yet verified: '+','.join(remaining)
+          print('Public invoice/progress delivery bundle matches reviewed release. No account or business data was accessed.')
+          PY
