@@ -42,6 +42,10 @@ with sync_playwright() as pw:
  page.goto('http://localhost/current.html');page.wait_for_timeout(1800);page.evaluate(setup);page.wait_for_timeout(1800)
  checks=[]
  def check(ok,name):
+  if not ok:
+   state=page.evaluate('''()=>{const f=document.querySelector('#pbPreview iframe'),s=f?.parentElement,v=s?.parentElement,d=f?.contentDocument,p=d?.querySelector('.te2-page');const r=e=>e?{width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height,top:e.getBoundingClientRect().top,bottom:e.getBoundingClientRect().bottom,style:e.getAttribute('style'),clientWidth:e.clientWidth,scrollHeight:e.scrollHeight}:null;return {viewport:r(v),stage:r(s),iframe:r(f),paper:r(p),body:r(d?.body),scrollY:f?.contentWindow?.scrollY,outer:innerWidth};}''')
+   print('FAILED GEOMETRY',name,json.dumps(state),flush=True)
+   (out/'failure.json').write_text(json.dumps(state,indent=2));page.screenshot(path=str(out/'failure.png'),full_page=False)
   assert ok,(name,errors);checks.append(name);print('ok',name,flush=True)
  def click(s):page.locator(s).evaluate('(e)=>{e.scrollIntoView({block:"center"});e.click()}')
  def read_pdf(name):
