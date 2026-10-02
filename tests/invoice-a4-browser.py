@@ -47,6 +47,13 @@ with sync_playwright() as pw:
    print('FAILED GEOMETRY',name,json.dumps(state),flush=True)
    (out/'failure.json').write_text(json.dumps(state,indent=2));page.screenshot(path=str(out/'failure.png'),full_page=False)
   assert ok,(name,errors);checks.append(name);print('ok',name,flush=True)
+ def resize(width):
+  page.set_viewport_size({'width':width,'height':844})
+  # set_viewport_size does not wait for ResizeObserver/frame rendering. Require
+  # the same strict geometry after it settles; never force a resize from test.
+  try:
+   page.wait_for_function('''()=>{const s=document.querySelector('#pbPreview .pb-preview-stage');if(!s)return false;const b=s.getBoundingClientRect(),f=s.querySelector('iframe').getBoundingClientRect(),v=s.parentElement.clientWidth;return b.width>0&&Math.abs(b.height/b.width-297/210)<.01&&Math.abs(b.width-v)<=1&&f.width<=v+1}''',timeout=5000)
+  except Exception:check(False,'preview must settle within viewport '+str(width))
  def click(s):page.locator(s).evaluate('(e)=>{e.scrollIntoView({block:"center"});e.click()}')
  def read_pdf(name):
   page.wait_for_function('document.querySelector("#pbPreview [data-pdf-download]")?.getAttribute("href")',timeout=120000)
@@ -71,12 +78,12 @@ with sync_playwright() as pw:
   elif ident=='b':check('230,000' in frame.locator('.invoice-progress').inner_text() and '80,000' in frame.locator('.invoice-progress').inner_text(),'issued cumulative and previous preserved')
   elif ident=='void':check(frame.locator('.invoice-state').inner_text()=='取消済み','void watermark preserved')
   for width in [320,390,430]:
-   page.set_viewport_size({'width':width,'height':844});page.wait_for_timeout(100)
+   resize(width)
    rect=frame.locator('.te2-page').evaluate('(e)=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height})')
    check(abs(rect['w']-210*96/25.4)<1 and abs(rect['h']-297*96/25.4)<1,ident+' A4 dimensions '+str(width))
    fit=page.locator('#pbPreview .pb-preview-stage').evaluate('(e)=>({w:e.getBoundingClientRect().width,h:e.getBoundingClientRect().height,fw:e.querySelector("iframe").getBoundingClientRect().width,fh:e.querySelector("iframe").getBoundingClientRect().height,v:e.parentElement.clientWidth})')
    check(abs(fit['h']/fit['w']-297/210)<.01 and fit['fw']<=fit['v']+1,ident+' preview aspect and no gray tail '+str(width))
-  page.set_viewport_size({'width':390,'height':844});page.wait_for_timeout(100)
+  resize(390)
   first=page.locator('#pbPreview iframe').get_attribute('style');page.wait_for_timeout(500);check(page.locator('#pbPreview iframe').get_attribute('style')==first,ident+' preview height stable')
   (out/(ident+'.html')).write_text(page.locator('#pbPreview iframe').evaluate('(e)=>e.srcdoc'))
   page.locator('#pbPreview').screenshot(path=str(out/(ident+'-mobile.png')))
