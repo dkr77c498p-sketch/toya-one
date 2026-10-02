@@ -1,0 +1,39 @@
+name: Verify public A4 invoice release
+on:
+  push:
+    branches: [fix/invoice-a4-preview-20261002]
+    paths: ['.github/workflows/verify-invoice-a4-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify exact deployed index and A4 invoice preview modules
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request,hashlib,time
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={
+            'index.html':'ecb10a7dc6ac2501a1f51cd223320878d1b026bd8ae62b14a8466fd690e93943',
+            'project-business.a4-r1.js':'876f70d5ec07b74e58a913a98e920635eb83e35804dff2d18ac9f18a0b0837e2',
+            'billing-bundle-ui.a4-r1.js':'0d96b2c6f1bd483745c6f8fc9b514e3e9a8a07075fb5f024540cd5840a457ead'
+          }
+          deadline=time.monotonic()+180
+          while True:
+            try:
+              for name,digest in expected.items():
+                request=urllib.request.Request(base+name+'?a4_verify='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                with urllib.request.urlopen(request,timeout=12) as response: data=response.read()
+                actual=hashlib.sha256(data).hexdigest()
+                assert actual==digest,name+' not yet the reviewed release'
+                print('verified',name,actual,flush=True)
+              print('Public A4 invoice release verified. No accounts, financial records or application writes accessed.',flush=True)
+              break
+            except Exception as error:
+              if time.monotonic()>=deadline:raise
+              print('Waiting for Pages deployment:',str(error),flush=True)
+              time.sleep(8)
+          PY
