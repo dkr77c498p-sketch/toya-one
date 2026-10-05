@@ -35,7 +35,7 @@ with sync_playwright() as pw:
  for ident in ['a','b']:
   source=next(d for d in db['project_documents'] if d['id']==ident)
   page.evaluate('(d)=>ToyaProjectBusiness.openForBundle({siteId:d.site_id,documentId:d.id,kind:d.kind})',source)
-  page.wait_for_selector('#pbShowPreview');check(page.locator('#pbFields').is_disabled(),'issued '+ident+' stays locked')
+  page.wait_for_selector('#pbShowPreview');check(page.locator('#pbFields').evaluate('(e)=>e.disabled') and page.locator('#pbDocumentDate').is_disabled(),'issued '+ident+' stays locked')
   click('#pbShowPreview');page.wait_for_function('document.querySelector("#pbPaperStatus")?.textContent.includes("用紙全体")')
   frame=page.frame_locator('#pbPreview .pb-preview-viewport iframe')
   check(frame.locator('.te2-page').count()==1,ident+' one A4 sheet')
