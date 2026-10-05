@@ -1,0 +1,35 @@
+name: Verify public combined invoice sheet
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/billing-combined-sheet.r1.js
+      - docs/billing-bundle-ui.combined-r1.js
+      - .github/workflows/verify-invoice-combined-live.yml
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Verify exact public entry point and combined invoice scripts
+        run: |
+          python - <<'PY'
+          import hashlib,time,urllib.request
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          expected={'':'0d7a97b954e1168cf1681f3e250e7d35fb62f3dd65822f1f426f0e1b2628984d','billing-combined-sheet.r1.js':'10d52a826dc2133500ddc7f526ed5313b82357c1c165e0e272945591d572d340','billing-bundle-ui.combined-r1.js':'151e0496e7409e004f85c7076c327ffca88902d9f86ce6eeb3536cd2c8a29f4b'}
+          last=''
+          for attempt in range(20):
+              try:
+                  for path,digest in expected.items():
+                      request=urllib.request.Request(base+path+'?verify_combined='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(request,timeout=15) as r:data=r.read()
+                      actual=hashlib.sha256(data).hexdigest()
+                      assert actual==digest,(path,actual)
+                  print('PASS: exact reviewed combined invoice entry point and both modules are publicly deployed; no account data accessed.')
+                  break
+              except Exception as e:
+                  last=str(e);print('Waiting for Pages deployment:',last);time.sleep(10)
+          else:raise SystemExit('Published files not verified: '+last)
+          PY
