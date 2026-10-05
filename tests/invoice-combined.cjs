@@ -29,4 +29,5 @@ test('source notes preserved exactly',()=>assert.equal(m.lines[0].notes,normal.n
 test('source numbers and dates retained',()=>{assert.equal(m.lines[0].number,normal.document_number);assert.equal(m.lines[0].end,normal.transaction_end);});
 test('thirty source limit retained',()=>assert.equal(C.model(pack(Array.from({length:30},(_,j)=>make('m'+j,'S'+j,100)))).lines.length,30));
 test('empty selection refused',()=>assert.throws(()=>C.model({rows:[]})));
+test('original job codes and literal notes are preserved',()=>{const d=structuredClone(normal);d.items[0].code='工事番号 42-307';d.notes='条件：A & B < C';const x=C.model(pack([d]));assert.deepEqual(x.lines[0].codes,['工事番号 42-307']);assert.equal(x.lines[0].notes,d.notes);});
 console.log(JSON.stringify({combined_checks:n,real_account_writes:0}));
