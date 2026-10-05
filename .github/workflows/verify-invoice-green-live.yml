@@ -1,0 +1,32 @@
+name: Verify public green invoice release
+on:
+  push:
+    branches: [main]
+    paths: ['docs/invoice-green-format.r1.js', 'docs/billing-bundle-ui.green-r1.js', '.github/workflows/verify-invoice-green-live.yml']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Verify exact deployed invoice format and entry point
+        run: |
+          python - <<'PY'
+          import hashlib,time,urllib.request
+          expected={'index.html':'f8699edaaf2a3b4c48593ec56d8f8d6aa920028f71d26c8559b8d085700be1d2','invoice-green-format.r1.js':'f3bf5c4e9b69baf376d48690170a15e87b3f4d478f062e373cb69fe13791e2af','billing-bundle-ui.green-r1.js':'774ecc84924cac9e512f3ee456d0f8de5fc6e298a4116f83e25476aa0c638638'}
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          for attempt in range(16):
+              try:
+                  for name,digest in expected.items():
+                      r=urllib.request.Request(base+name+'?green_verify='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(r,timeout=15) as response:data=response.read(2000000)
+                      assert hashlib.sha256(data).hexdigest()==digest,name+' is not the approved version yet'
+                      print('Verified public asset:',name)
+                  print('GREEN_INVOICE_PUBLIC_VERIFIED: exact entry point and both invoice modules match reviewed output. No login or business-record requests.')
+                  break
+              except Exception as error:
+                  print('Waiting for Pages publication:',error)
+                  if attempt==15:raise
+                  time.sleep(15)
+          PY
