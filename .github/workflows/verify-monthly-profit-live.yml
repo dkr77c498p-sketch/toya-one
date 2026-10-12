@@ -1,0 +1,32 @@
+name: Verify public monthly profit release
+on:
+  push:
+    branches: [main]
+    paths: ['docs/work-month-revenue.r1.js','docs/company-monthly-summary.profit-r2.js','docs/site-period-ledger.profit-r2.js','docs/site-period-ledger-ui.profit-r2.js']
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify exact public index and profit modules without logging in
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import urllib.request,hashlib,time
+          names=['index.html','work-month-revenue.r1.js','company-monthly-summary.profit-r2.js','site-period-ledger.profit-r2.js','site-period-ledger-ui.profit-r2.js']
+          expected={n:hashlib.sha256((Path('docs')/n).read_bytes()).hexdigest() for n in names}
+          for attempt in range(25):
+              try:
+                  for name,want in expected.items():
+                      req=urllib.request.Request('https://dkr77c498p-sketch.github.io/toya-one/'+name+'?verify-profit='+str(time.time_ns()),headers={'Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(req,timeout=20) as response: got=hashlib.sha256(response.read()).hexdigest()
+                      assert got==want,name
+                  print('Verified all five exact public assets. No login or business-data access.');break
+              except Exception as error:
+                  if attempt==24:raise
+                  print('Waiting for deployment:',str(error));time.sleep(10)
+          PY
