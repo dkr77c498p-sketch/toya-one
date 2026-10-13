@@ -21,7 +21,7 @@
   ['sites','sites','id,name,status,completed_on',null,'id'],
   ...S.sources.filter(([key])=>key!=='revenues').map(x=>[...x,'id']),
   ['contracts','revenues','id,site_id,revenue_type,revenue_date,amount,updated_at',null,'id'],
-  ['documents','project_documents','id,site_id,kind,status,document_date,subtotal,updated_at','document_date','id'],
+  ['documents','project_documents','id,site_id,kind,status,document_date,transaction_start,transaction_end,subtotal,updated_at',null,'id'],
   ['profiles','site_project_profiles','site_id,contract_breakdown,work_start,work_end,updated_at',null,'site_id']
  ];
  function calculate(input,month,excludedIds=[]){
@@ -43,6 +43,10 @@
   for(const doc of data.documents){
    if(excluded.has(doc.site_id))continue;
    if(!['invoice','progress'].includes(doc.kind)||!['issued','draft'].includes(doc.status))continue;
+   // Attribute a claim to the work/progress month, not the day the PDF was issued.
+   // Example: a September progress claim issued in October remains September sales.
+   const effectiveDate=/^20\d\d-\d{2}-\d{2}$/.test(String(doc.transaction_end||''))?doc.transaction_end:doc.document_date;
+   if(!within(effectiveDate))continue;
    const amount=S.amount(doc.subtotal);if(amount===null||amount<0)throw Error('請求書の税別金額を確認できません。');
    const row=rowFor(doc.site_id);
    if(doc.status==='issued'){row.sales=add(row.sales,amount);row.invoiceCount++;sales=add(sales,amount);invoiceCount++;}
@@ -77,6 +81,11 @@
     let monthlyContractAmount=null,monthlyContractSource='missing';
     if(!siteIds.has(r.site.id)||r.invalidPhases||malformedPhases)monthlyContractSource='invalid';
     else if(r.phaseCount){monthlyContractAmount=add(r.planned,r.completed);monthlyContractSource='breakdown';}
+    else if(r.invoiceCount){
+      // If no monthly progress was entered manually, an issued invoice/progress
+      // document is a confirmed lower-bound for that work month. Never add both.
+      monthlyContractAmount=r.sales;monthlyContractSource='issued';
+    }
     else if(!phases.length&&contractState==='registered'){
       // Monthly progress is not guessed from the contract amount. Until a
       // monthly breakdown/progress amount is entered, revenue and profit stay
@@ -102,7 +111,10 @@
   const startedRows=shown.filter(r=>r.hasCosts);
   const missingMonthlyContracts=startedRows.filter(r=>r.monthlyContractAmount===null).length;
   const missingMonthlyCosts=shown.filter(r=>r.monthlyContractAmount!==null&&!r.hasCosts).length;
-  const monthlyContractTotal=startedRows.length&&!missingMonthlyContracts?startedRows.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
+  const knownMonthlyRows=shown.filter(r=>r.monthlyContractAmount!==null);
+  const monthlyContractTotal=knownMonthlyRows.length?knownMonthlyRows.reduce((sum,r)=>add(sum,r.monthlyContractAmount),0):null;
+  // Keep a useful provisional margin visible even when another selected site still
+  // needs its monthly sales entered. The warning below makes that incompleteness explicit.
   const monthlyProfit=monthlyContractTotal!==null&&knownCost!==null?add(monthlyContractTotal,-knownCost):null;
   return {month,rows:shown,sales,invoiceCount,cost:knownCost,profit:knownCost===null?null:add(sales,-knownCost),
    contractTotal,contractCount,missingContracts,invalidContracts,allocatedContract,
@@ -199,10 +211,10 @@
   card.innerHTML='<div class="cm-heading"><h2 id="cmTitle">今月の請負金・売上・原価・利益</h2><span id="cmScope">選択現場・税別</span></div>'+
    '<div class="cm-controls"><div><label for="cmMonth">対象月</label><input id="cmMonth" type="month" min="2000-01" value="'+month+'"></div><button id="cmThisMonth" class="btn light" type="button">今月</button><button id="cmRefresh" class="btn dark" type="button">更新</button></div>'+
    '<details id="cmSiteFilter"><summary>集計する現場を選ぶ</summary><p class="note">対象月の施工・売上・原価の記録がある現場と、その月の完工現場を自動で選びます。チェックは自由に変更でき、手動変更はこの端末・会社・対象月ごとに保存します。日報や保存金額は変更しません。</p><button id="cmAutoSelect" class="btn light" type="button" style="width:100%;margin:8px 0" disabled>自動選択に戻す</button><div id="cmSiteChoices"></div></details><p id="cmSelectionNote" class="note"></p>'+
-   '<div class="cm-metrics"><div><span>選択現場の請負総額（参考）</span><strong id="cmActiveContract">—</strong></div><div><span>対象月の出来高（未請求含む）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>請求済み（参考）</span><strong id="cmSales">—</strong></div><div><span>対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（請負分基準・暫定）</span><strong id="cmProfit">—</strong></div></div>'+
+   '<div class="cm-metrics"><div><span>選択現場の請負総額（参考）</span><strong id="cmActiveContract">—</strong></div><div><span>対象月の出来高（登録済み・未請求含む）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span>請求済み（参考）</span><strong id="cmSales">—</strong></div><div><span>対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span>利益（登録済み出来高－原価・暫定）</span><strong id="cmProfit">—</strong></div></div>'+
    '<div id="cmProgressAction"><button id="cmProgressOpen" class="btn lime" type="button" style="width:100%;margin:14px 0;font-weight:900">今月の出来高を入力</button><div id="cmProgressEditor"></div></div><p id="cmContractInfo" class="cm-contract-note"></p><button id="cmPeriodOpen" class="btn light" type="button" style="width:100%;margin:10px 0">現場別の月別・工事全体を見る</button>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
-   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。月途中でも「現場内容・契約内訳」で現時点の出来高を入力すると、その金額を対象月の出来高として集計し、暫定利益を表示します。月末に最終出来高へ変更して確定してください。前月までの出来高は翌月へ二重計上しません。</p><p>請求済み：対象月に発行した確定済みの請求書・出来高請求書の税別合計です。請負分との重複を避けるため、利益には加算しません。見積書・下書き・取消済みは含みません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
+   '<details id="cmDetails"><summary>現場ごとの内訳・集計方法</summary><div id="cmBreakdown"></div><div class="cm-method"><p>対象月の請負分：登録された月別契約内訳（予定・出来高済み）を使います。月途中でも「現場内容・契約内訳」で現時点の出来高を入力すると、その金額を対象月の出来高として集計し、暫定利益を表示します。月末に最終出来高へ変更して確定してください。前月までの出来高は翌月へ二重計上しません。</p><p>請求確定額：請求書の発行日ではなく工事・出来高の対象月（取引終了日）で集計します。月別出来高が未入力の現場は確定請求額をその月の登録済み出来高として使い、手入力済みなら請求額を重ねて足しません。</p><p>原価：選択した現場の対象月の日報から計算し、保存済みの調整額がある日はその金額を優先します。完工済み・過去の現場も含みます。</p><p>暫定利益：対象月の請負分 − 対象月の入力済み原価です。未請求分を含みます。工事全体の最終利益や会計上の確定利益ではなく、追加費用で変わる途中の差額です。別の月の原価・今後の費用・会社全体の管理費は含みません。</p></div></details>';
   home.prepend(card);place();
   q('#cmMonth').onchange=()=>{month=q('#cmMonth').value;followCurrent=month===japanMonth();ticket++;pending='';loaded='';empty();refresh();};
   q('#cmThisMonth').onclick=()=>{month=japanMonth();followCurrent=true;q('#cmMonth').value=month;ticket++;pending='';loaded='';empty();refresh();};
@@ -281,11 +293,11 @@
   const displayedContract=parseFloat(contractText.replace(/,/g,'').replace('円','')),displayedCost=parseFloat(costText.replace(/,/g,'').replace('円',''));
   const displayProfit=contractText!=='—'&&costText!=='—'&&Number.isFinite(displayedContract)&&Number.isFinite(displayedCost)?Math.round((displayedContract-displayedCost)*100)/100:result.monthlyProfit;
   q('#cmProfit').textContent=yen(displayProfit);result.monthlyProfit=displayProfit;
-  q('#cmContractInfo').textContent=result.hasData?'出来高を入力すると「出来高 − 原価」で暫定利益を表示します。':'';
+  q('#cmContractInfo').textContent=result.hasData?'登録済み出来高 − 原価で暫定利益を表示します。月別出来高が未入力なら、その工事月の確定請求額を使います。':'';
   q('#cmProfit').classList.toggle('cm-negative',result.monthlyProfit!==null&&result.monthlyProfit<0);
   const notices=[];
   if(!result.hasData)notices.push('この月の記録はまだありません。');
-  if(result.missingMonthlyContracts){const pendingNames=result.rows.filter(r=>r.hasCosts&&r.monthlyContractAmount===null).map(r=>r.site.name);notices.push('着工済みで対象月の出来高が未確定：'+pendingNames.join('・')+'（'+result.missingMonthlyContracts+'件）。「現場内容・契約内訳」で現時点の出来高を入力すると、出来高と暫定利益を表示します。月末に最終出来高へ変更して確定してください。');}
+  if(result.missingMonthlyContracts){const pendingNames=result.rows.filter(r=>r.hasCosts&&r.monthlyContractAmount===null).map(r=>r.site.name);notices.push('対象月の出来高がまだ未入力：'+pendingNames.join('・')+'（'+result.missingMonthlyContracts+'件）。利益は登録済み出来高だけを使った暫定値です。未請求分があれば「現場別の月別・工事全体を見る」から入力してください。');}
   if(result.missingMonthlyCosts)notices.push('請負分は登録済みですが、原価の記録がない現場 '+result.missingMonthlyCosts+'件。入力済み原価だけで暫定利益を表示しています。');
   if(result.warningCount)notices.push('原価に未入力・確認待ちがあります。内訳で確認できます。');
   if(result.unlinked)notices.push('現場の紐付けを確認できない日報・費用 '+result.unlinked+'件。原価と利益の合計は表示していません。');
