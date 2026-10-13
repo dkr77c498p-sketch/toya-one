@@ -68,14 +68,14 @@
   const warning=[t.missingRevenue?'売上未入力の月 '+t.missingRevenue+'件':'',t.missingCost?'原価記録のない月 '+t.missingCost+'件':'',t.warnings.length?'原価の確認事項 '+t.warnings.length+'件':'',r.overContract?'出来高の合計が請負総額を超えています':''].filter(Boolean);
   let html='<h3>'+esc(r.site.name)+'</h3><p class="sl-note">'+(r.periodStart?esc(r.periodStart)+' 〜 '+esc(r.periodEnd):'期間の記録なし')+' ／ '+(r.completed?'完工済み '+esc(r.site.completed_on):'工事中')+'</p>';
   if(view==='all'){
-   html+='<div class="sl-grid">'+metric('工事全体の売上累計（出来高）',t.revenue)+metric('工事全体の原価（入力済み）',t.cost)+metric('工事全体の暫定利益',r.overContract?null:t.profit)+metric('登録された請負総額（参考）',r.contractAmount)+'</div>';
-   html+='<p class="sl-note">'+(t.missingRevenue?'売上が未入力の月があるため、累計売上・利益は未確定です。登録済み売上だけの小計：'+yen(t.knownRevenue)+'。':'')+(t.provisional?'途中出来高を含むため暫定です。':'')+'完工だけでは月別売上を推定しません。</p>';
+   html+='<div class="sl-grid">'+metric(r.completed?'工事全体の売上（請負総額）':'工事全体の売上累計（出来高）',t.lifetimeRevenue)+metric('工事全体の原価（入力済み）',t.cost)+metric(r.completed?'工事全体の利益':'工事全体の暫定利益',r.overContract?null:t.lifetimeProfit)+metric('登録された請負総額（参考）',r.contractAmount)+'</div>';
+   html+='<p class="sl-note">'+(r.completed&&t.lifetimeRevenueSource==='completed-contract'?'完工済みのため、登録された請負総額を工事全体の最終売上として使用しています。月別出来高や請求書を重ねて足しません。':'')+(!r.completed&&t.missingRevenue?'売上が未入力の月があるため、累計売上・利益は未確定です。登録済み売上だけの小計：'+yen(t.knownRevenue)+'。':'')+(t.provisional&&!r.completed?'途中出来高を含むため暫定です。':'')+'</p>';
    html+='<details><summary>本工事・追加工事の売上内訳</summary><dl class="sl-lines">'+line('本工事の登録済み出来高',t.base)+line('追加工事の登録済み出来高',t.additions)+line('区分未設定の出来高',t.unclassified)+'</dl>'+entryHTML(r.entries.filter(e=>e.target_month<=r.asOfMonth))+'<p class="sl-note">上記は登録済み売上の内訳です。原価は現場単位の合計で、本工事・追加工事へ自動配分しません。</p></details>';
   }else{
    html+='<p class="sl-note">各月の売上と、その月の原価を比較します。途中出来高を含む利益は暫定です。</p>';
    for(const row of r.rows){html+='<section class="sl-month"><h4>'+esc(row.month)+(row.future?'（今後の予定・累計対象外）':row.provisional?'（途中出来高）':'')+'</h4><dl class="sl-lines">'+line('売上（出来高）',row.revenue)+line('原価（入力済み）',row.cost)+line('暫定利益',row.profit,true)+'</dl>'+(row.activity&&!row.future?'<p class="sl-subtotal">ここまでの売上累計：'+yen(row.cumulativeRevenue)+'</p>':'')+(row.entries.length?'<details><summary>本工事・追加工事の内訳</summary>'+entryHTML(row.entries)+'</details>':'<p class="sl-note">月別売上は未入力です。</p>')+'</section>';}
    if(!r.rows.length)html+='<p class="sl-note">まだ月別の記録はありません。</p>';
-   html+='<div class="sl-grid">'+metric('現在までの売上累計',t.revenue)+metric('現在までの暫定利益',r.overContract?null:t.profit)+'</div>';
+   html+='<div class="sl-grid">'+metric('現在までの売上累計',t.revenue)+metric('現在までの暫定利益',r.overContract?null:t.profit)+'</div>'+(r.completed?'<p class="sl-note">完工後の工事全体利益は「工事全体」タブで、請負総額 − 全期間原価として確認できます。</p>':'');
   }
   if(warning.length)html+='<details><summary>未入力・確認の内容</summary><p class="sl-note">'+esc(warning.join('／'))+'</p><p class="sl-note">確認件数のすべてが未計上という意味ではありません。保存済み調整額を計上したままの確認も含みます。</p>'+t.warnings.map(s=>'<p class="sl-note">'+esc(s)+'</p>').join('')+'</details>';
   html+='<details><summary>請求済み・集計の考え方</summary><dl class="sl-lines">'+line('請求済み累計（参考・加算しません）',t.invoice)+line('今後の月に登録された売上',t.futureRevenue)+line('常用応援売上（別枠・上記売上には未加算）',t.outgoing)+'</dl><p class="sl-note">売上は月別出来高の合計です。請負総額・請求書をさらに足すと二重計上になるため足しません。原価は既存の日報集計と同じルールです。会社共通経費や未記録の費用を含む会計上の確定利益ではありません。</p></details><button type="button" class="btn lime" id="slEditOpen" style="width:100%;margin-top:14px">月別売上・追加工事を入力</button>';
