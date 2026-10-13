@@ -1,0 +1,40 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const M=require('../docs/company-monthly-summary.progress-r2.js');
+const company='synthetic-progress-company';
+function fixture(){
+ const d=Object.fromEntries(M.sources().map(([k])=>[k,[]]));
+ d.sites=[{id:'a',company_id:company,name:'検証用・施工中の現場',status:'active',completed_on:null},{id:'b',company_id:company,name:'別の検証現場',status:'active',completed_on:null}];
+ d.contracts=[{id:'contract-a',company_id:company,site_id:'a',revenue_type:'contract',revenue_date:'2026-09-01',amount:2000000}];
+ d.documents=[{id:'claim-a',company_id:company,site_id:'a',kind:'progress',status:'issued',document_date:'2026-10-08',transaction_start:'2026-09-01',transaction_end:'2026-09-30',subtotal:500000,previous_billed:0,cumulative_amount:500000}];
+ d.laborSheets=[{id:'cost-sep',company_id:company,site_id:'a',work_date:'2026-09-29',cost_total:20000,revenue_total:0,source_reports:[]},{id:'cost-oct',company_id:company,site_id:'a',work_date:'2026-10-01',cost_total:80000,revenue_total:0,source_reports:[]}];
+ return d;
+}
+const base=fixture(),before=JSON.stringify(base);let n=0;
+function check(name,f){f();n++;console.log('PASS',name);}
+const calc=(d,m='2026-10',off=['b'])=>M.calculate(d,m,off);
+check('October keeps September progress visibly separate',()=>{const r=calc(base);assert.equal(r.monthlyContractTotal,null);assert.equal(r.monthlyProfit,null);assert.equal(r.cost,80000);assert.equal(r.cumulative.total,500000);assert.equal(r.cumulative.rows[0].month,'2026-09');assert.equal(r.sales,0);});
+check('September claim issued in October belongs to September only',()=>{const r=calc(base,'2026-09');assert.equal(r.monthlyContractTotal,500000);assert.equal(r.monthlyProfit,480000);assert.equal(r.cumulative.total,500000);});
+check('No contract substituted for ongoing work',()=>{const r=calc(base);assert.equal(r.rows[0].contractAmount,2000000);assert.equal(r.cumulative.total,500000);assert.equal(base.sites[0].completed_on,null);});
+check('No future-month carry backward',()=>assert.equal(calc(base,'2026-08').cumulative.total,null));
+check('Manual monthly progress replaces claims not adds to them',()=>{const d=fixture();d.profiles=[{company_id:company,site_id:'a',contract_breakdown:[{target_month:'2026-09',amount:600000,status:'planned'}]}];const r=calc(d,'2026-09');assert.equal(r.monthlyContractTotal,600000);assert.equal(r.cumulative.total,600000);assert.equal(r.cumulative.rows[0].source,'breakdown');});
+check('Manual October adds only actual new progress',()=>{const d=fixture();d.profiles=[{company_id:company,site_id:'a',contract_breakdown:[{target_month:'2026-10',amount:100000,status:'planned'}]}];const r=calc(d);assert.equal(r.monthlyContractTotal,100000);assert.equal(r.monthlyProfit,20000);assert.equal(r.cumulative.total,600000);});
+check('Explicit zero is not missing',()=>{const d=fixture();d.profiles=[{site_id:'a',company_id:company,contract_breakdown:[{target_month:'2026-09',amount:0,status:'complete'}]}];const r=calc(d,'2026-09');assert.equal(r.cumulative.total,0);assert.equal(r.monthlyContractTotal,0);assert.equal(r.monthlyProfit,-20000);});
+check('Current portions of multiple progress claims only',()=>{const d=fixture();d.documents.push({...d.documents[0],id:'claim-2',subtotal:300000,cumulative_amount:800000,previous_billed:500000});assert.equal(calc(d).cumulative.total,800000);});
+check('Same retrieved ID counted once',()=>{const d=fixture();d.documents.push({...d.documents[0]});assert.equal(calc(d).cumulative.total,500000);});
+check('Conflicting snapshots refuse calculation',()=>{const d=fixture();d.documents.push({...d.documents[0],subtotal:1});assert.throws(()=>calc(d),/読込中/);});
+check('Quotes drafts and voids excluded',()=>{const d=fixture();d.documents.push(...['draft','void'].map(status=>({...d.documents[0],id:status,status,subtotal:9999999})),{...d.documents[0],id:'quote',kind:'estimate',subtotal:9999999});assert.equal(calc(d).cumulative.total,500000);});
+check('Separate sites and checkboxes remain separate',()=>{const d=fixture();d.documents.push({...d.documents[0],id:'b-claim',site_id:'b',subtotal:150000});assert.equal(calc(d).cumulative.total,500000);assert.equal(calc(d,'2026-10',[]).cumulative.total,650000);assert.equal(calc(d,'2026-10',['a','b']).cumulative.total,null);});
+check('Multiple base and addition rows counted once each',()=>{const d=fixture();d.profiles=[{site_id:'a',contract_breakdown:[{target_month:'2026-09',amount:600000,status:'complete',work_kind:'base'},{target_month:'2026-09',amount:50000,status:'complete',work_kind:'addition'}]}];assert.equal(calc(d).cumulative.total,650000);});
+check('Future registered progress excluded',()=>{const d=fixture();d.profiles=[{site_id:'a',contract_breakdown:[{target_month:'2026-11',amount:200000,status:'planned'}]}];assert.equal(calc(d).cumulative.total,500000);assert.equal(calc(d,'2026-11').cumulative.total,700000);});
+check('Malformed entries report unknown cumulative not zero',()=>{const d=fixture();d.profiles=[{site_id:'a',contract_breakdown:[{target_month:'2026-09',amount:null,status:'complete'}]}];const r=calc(d);assert.equal(r.cumulative.total,null);assert.match(r.cumulativeError,/金額/);});
+check('Invalid work end is not silently issue month',()=>{const d=fixture();d.documents[0].transaction_end='2026-09-31';assert.throws(()=>calc(d),/対象日/);});
+check('Old document without work date has explicit issue-date fallback',()=>{const d=fixture();delete d.documents[0].transaction_end;assert.equal(calc(d).monthlyContractTotal,500000);assert.equal(calc(d,'2026-09').cumulative.total,null);});
+check('Auto selection follows work month for invoice-only site',()=>{const d=fixture();d.laborSheets=[];assert(M.selection.automatic(d,'2026-09',company).defaults.has('a'));assert(!M.selection.automatic(d,'2026-10',company).defaults.has('a'));});
+check('Year boundary preserves previous work',()=>{const d=fixture();d.documents[0].transaction_end='2025-12-31';d.documents[0].document_date='2026-01-08';const r=calc(d,'2026-01');assert.equal(r.cumulative.total,500000);assert.equal(r.monthlyContractTotal,null);});
+check('Unlinked costs still block misleading monthly profit',()=>{const d=fixture();d.laborSheets.push({...d.laborSheets[1],id:'orphan',site_id:null});d.profiles=[{site_id:'a',contract_breakdown:[{target_month:'2026-10',amount:100000,status:'planned'}]}];const r=calc(d);assert.equal(r.cost,null);assert.equal(r.monthlyProfit,null);});
+check('Input data and active lifecycle unchanged',()=>assert.equal(JSON.stringify(base),before));
+check('No future cost or September cost subtracted from October',()=>assert.equal(calc(base).cost,80000));
+check('Deployment entry point uses reviewed version',()=>assert(fs.readFileSync(require('node:path').join(__dirname,'../docs/index.html'),'utf8').includes('company-monthly-summary.progress-r2.js?v=20261013-month-and-cumulative-r2')));
+if(process.env.WRITE_FIXTURE)fs.writeFileSync(process.env.WRITE_FIXTURE,JSON.stringify({data:base,company},null,2));
+console.log(JSON.stringify({checks:n,synthetic_only:true,financial_writes:0}));
