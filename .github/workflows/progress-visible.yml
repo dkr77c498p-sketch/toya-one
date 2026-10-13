@@ -1,0 +1,95 @@
+name: Verify monthly and cumulative progress display
+on:
+  push:
+    branches: [fix/progress-month-and-cumulative-20261013, main]
+    paths:
+      - 'scripts/progress-visible-patch.py'
+      - 'scripts/home-progress-card-scope.py'
+      - 'tests/progress-visible*'
+      - 'tests/home-progress-scoped-browser.py'
+      - 'docs/company-monthly-summary.progress-r2.js'
+      - '.github/workflows/progress-visible.yml'
+permissions:
+  contents: read
+jobs:
+  verify-and-stage:
+    if: github.ref == 'refs/heads/fix/progress-month-and-cumulative-20261013'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Apply reviewed display patch to versioned copy only
+        run: |
+          python scripts/progress-visible-patch.py
+          python scripts/home-progress-card-scope.py
+          node --check docs/company-monthly-summary.progress-r2.js
+          node tests/progress-visible.cjs
+          node tests/monthly-profit-issued-progress.cjs
+          node tests/completed-job-lifetime-profit.cjs
+      - name: Install isolated pinned browser verification tools
+        run: |
+          python -m pip install playwright==1.57.0 >/tmp/progress-install.log 2>&1 || { tail -40 /tmp/progress-install.log; exit 1; }
+          python -m playwright install --with-deps chromium webkit >>/tmp/progress-install.log 2>&1 || { tail -40 /tmp/progress-install.log; exit 1; }
+          sudo apt-get install -y fonts-noto-cjk >>/tmp/progress-install.log 2>&1 || { tail -40 /tmp/progress-install.log; exit 1; }
+      - name: Test whole app with synthetic records and no real account calls
+        run: |
+          TOYA_TEST_BROWSER=chromium python tests/home-progress-scoped-browser.py
+          TOYA_TEST_BROWSER=webkit python tests/home-progress-scoped-browser.py
+      - name: Preserve original business logic and record exact tested runtime hashes
+        run: |
+          git diff --exit-code -- docs/company-monthly-summary.autoselect-r1.js docs/site-period-ledger.r1.js docs/site-period-ledger-ui.r1.js docs/site-financial-summary.js
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,subprocess
+          changed=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          assert changed==['docs/index.html'],changed
+          paths=['docs/index.html','docs/company-monthly-summary.progress-r2.js']
+          h={p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths}
+          Path('test-output/progress-visible/hashes.json').write_text(json.dumps(h,indent=2))
+          print(json.dumps(h,indent=2))
+          PY
+      - name: Stage only verified runtime files on feature branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/company-monthly-summary.progress-r2.js
+          git commit -m 'Stage tested monthly and cumulative progress display'
+          git push origin HEAD:fix/progress-month-and-cumulative-20261013
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: progress-visible-verification
+          retention-days: 5
+          path: |
+            test-output/progress-visible
+            docs/index.html
+            docs/company-monthly-summary.progress-r2.js
+  verify-public:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Compare public assets to the exact reviewed release
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from urllib.request import urlopen,Request
+          import hashlib,time,os
+          names=['index.html','company-monthly-summary.progress-r2.js']
+          expected={n:hashlib.sha256(Path('docs',n).read_bytes()).hexdigest() for n in names}
+          for attempt in range(15):
+              try:
+                  for n in names:
+                      url='https://dkr77c498p-sketch.github.io/toya-one/'+n+'?verify='+os.environ['GITHUB_SHA']
+                      req=Request(url,headers={'Cache-Control':'no-cache','User-Agent':'TOYA-release-check'})
+                      with urlopen(req,timeout=15) as r:data=r.read()
+                      assert hashlib.sha256(data).hexdigest()==expected[n],n+' not yet published'
+                  print('Verified live monthly and cumulative progress entry point and runtime:',expected)
+                  break
+              except Exception as e:
+                  if attempt==14:raise
+                  print('Awaiting Pages:',str(e));time.sleep(8)
+          PY
