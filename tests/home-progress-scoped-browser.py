@@ -14,6 +14,13 @@ stronger=""" page.evaluate('(()=>{const p=document.createElement("p");p.id="cmCo
  check(page.locator('[data-test-duplicate]').inner_text()=='unrelated-form','home refresh does not overwrite duplicate field in another form')
  check(page.locator('#companyMonthlySummary #cmContract').inner_text()=='100,000円','home progress does not depend on document-wide first matching ID')
  page.locator('[data-test-duplicate]').evaluate('(e)=>e.remove()')
+ check(page.evaluate('__writes.length')==0,'home workflow makes no additional RPC or database mutation calls')
 """
 assert anchor in source;source=source.replace(anchor,stronger+anchor,1)
+# The shared fixture calls its catch-all RPC log '__writes'. The unrelated
+# Settings tab performs two list requests. Permit exactly those read payloads,
+# still fail on every table mutation, issuing/cancellation or other RPC action.
+old="check(page.evaluate('__writes.length')==0,'no save issue cancel or business-data mutation calls')"
+new="""check(page.evaluate("__writes.every(r=>['toya_onboarding','toya_employee_admin'].includes(r.name)&&r.args?.p_action==='list'&&JSON.stringify(r.args?.p_payload)==='{}')"),'no save issue cancel or business-data mutation calls; only existing settings list reads')"""
+assert old in source;source=source.replace(old,new,1)
 exec(compile(source,'progress-visible-browser-scoped','exec'),globals())
