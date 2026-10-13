@@ -1,0 +1,33 @@
+name: Verify public monthly revenue release
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/monthly-revenue.r1.js'
+      - 'docs/company-monthly-summary.revenue-r1.js'
+      - 'docs/site-period-ledger.revenue-r1.js'
+      - 'docs/site-period-ledger-ui.revenue-r1.js'
+permissions:
+  contents: read
+jobs:
+  verify-public:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Verify exact public monthly and period ledger assets
+        run: |
+          python - <<'PY'
+          import hashlib,time,urllib.request
+          expected={'monthly-revenue.r1.js':'2ef7f731be47a666d8b42c17a23ca66f0cc72a912e3024ec1391d700f309adcf','company-monthly-summary.revenue-r1.js':'bdc881499d63e980c95dc98769972fd46d993cd9e8a3d46601fa0d26856bf7fa','site-period-ledger.revenue-r1.js':'2fbc921f2ee9550759191b19fe59fbe582f1aab881391b200a2ff3c384de0694','site-period-ledger-ui.revenue-r1.js':'6b790ac06316dca67a44ef62740f58078250f9c4f719aaa3164d37909a61d41a','index.html':'d282b46adc0ee6ad90505226c5f597ae901b76f43e8374c90d9b9f11a14ccfa2'}
+          base='https://dkr77c498p-sketch.github.io/toya-one/'
+          for attempt in range(24):
+              try:
+                  for name,digest in expected.items():
+                      request=urllib.request.Request(base+name+'?verify-monthly-revenue=20261012-'+str(attempt),headers={'Cache-Control':'no-cache'})
+                      with urllib.request.urlopen(request,timeout=20) as r:data=r.read()
+                      assert hashlib.sha256(data).hexdigest()==digest,name
+                  print('All five published assets match verified release. No accounts or business data accessed.');break
+              except Exception as e:
+                  if attempt==23:raise
+                  print('Publication pending:',str(e));time.sleep(6)
+          PY
