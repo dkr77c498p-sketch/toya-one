@@ -78,14 +78,22 @@
   const orderedProgress=sum(entries.map(r=>r.amount)),overContract=contractAmount!==null&&orderedProgress>contractAmount;
   const remainder=contractAmount===null?null:add(contractAmount,-orderedProgress);
   const warnings=costs.warnings.filter(w=>!monthOK(String(w).slice(0,7))||String(w).slice(0,7)<=asOfMonth);
-  const totals={revenue,cost,profit:revenue!==null&&cost!==null&&!missingCost?add(revenue,-cost):null,knownRevenue,knownCost,
+  const completed=!!site.completed_on&&site.completed_on.slice(0,7)<=asOfMonth;
+  // Once a job is completed, the registered contract total is the final whole-job
+  // sales basis. This is separate from monthly progress revenue and is never added
+  // to it. It lets a completed job show its lifetime margin even if some monthly
+  // progress allocations were never entered.
+  const lifetimeRevenue=completed&&contractAmount!==null?contractAmount:revenue;
+  const lifetimeProfit=lifetimeRevenue!==null&&cost!==null&&!missingCost?add(lifetimeRevenue,-cost):null;
+  const lifetimeRevenueSource=completed&&contractAmount!==null?'completed-contract':revenue!==null?'monthly-progress':'missing';
+  const totals={revenue,cost,profit:revenue!==null&&cost!==null&&!missingCost?add(revenue,-cost):null,lifetimeRevenue,lifetimeProfit,lifetimeRevenueSource,knownRevenue,knownCost,
    missingRevenue,missingCost,invoice:sum(past.map(r=>r.invoice)),provisional:past.some(r=>r.provisional),warnings,
    outgoing:sum(past.map(r=>r.outgoing)),futureRevenue:sum(rows.filter(r=>r.future).map(r=>r.revenue||0)),
    base:sum(entries.filter(r=>r.target_month<=asOfMonth&&r.work_kind==='base').map(r=>r.amount)),
    additions:sum(entries.filter(r=>r.target_month<=asOfMonth&&r.work_kind==='addition').map(r=>r.amount)),
    unclassified:sum(entries.filter(r=>r.target_month<=asOfMonth&&r.work_kind==='unclassified').map(r=>r.amount))};
   return {site,profile,contract,contractAmount,rows,totals,entries,overContract,remainder,orderedProgress,asOfMonth,
-   periodStart:months[0]||'',periodEnd:months.at(-1)||'',completed:!!site.completed_on,
+   periodStart:months[0]||'',periodEnd:months.at(-1)||'',completed,
    costScopeNote:'日報・保存済み調整額の入力済み原価。未計上費用や会社共通経費は別確認。'};
  }
  function draftProfile(profile,contract,rows,contractValue){
