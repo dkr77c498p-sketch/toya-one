@@ -4,8 +4,13 @@
  if(window.__toyaMonthlySalesLayoutR1)return;
  window.__toyaMonthlySalesLayoutR1=true;
  const get=(selector,root=document)=>root.querySelector(selector);
- let timer=null,observer=null;
- const schedule=()=>{clearTimeout(timer);timer=setTimeout(apply,0);};
+ let timer=null,observer=null,stopped=false;
+ const stop=()=>{clearTimeout(timer);observer?.disconnect();observer=null;stopped=true;};
+ const schedule=()=>{
+  if(stopped)return;
+  if(window.__toyaPerSiteSalesR1){stop();return;}
+  clearTimeout(timer);timer=setTimeout(apply,0);
+ };
  const setText=(element,text)=>{if(element&&element.textContent!==text)element.textContent=text;};
  function monthParts(card){
   const value=get('#cmMonth',card)?.value||'';
@@ -15,6 +20,7 @@
  }
  function metric(card,id){return get(id,card)?.closest('.cm-metrics>div')||null;}
  function apply(){
+  if(window.__toyaPerSiteSalesR1){stop();return;}
   const card=get('#companyMonthlySummary');
   if(!card)return;
   const metrics=get('.cm-metrics',card);
@@ -26,9 +32,9 @@
   const cost=metric(card,'#cmCost');
   const profit=metric(card,'#cmProfit');
   const cumulative=metric(card,'#cmCumulative');
-  if(contract)contract.hidden=true;
-  if(invoice)invoice.hidden=true;
-  for(const element of [monthly,cumulative,cost,profit])if(element)element.hidden=false;
+  if(contract&&!contract.hidden)contract.hidden=true;
+  if(invoice&&!invoice.hidden)invoice.hidden=true;
+  for(const element of [monthly,cumulative,cost,profit])if(element&&element.hidden)element.hidden=false;
   const wanted=[monthly,cumulative,cost,profit].filter(Boolean);
   const visible=[...metrics.children].filter(element=>!element.hidden);
   if(visible.length!==wanted.length||visible.some((element,index)=>element!==wanted[index]))wanted.forEach(element=>metrics.append(element));
@@ -52,10 +58,12 @@
     else if(span.textContent==='今月利益')setText(span,label+'の利益');
    }
   }
-  card.dataset.monthlySalesLayout='r1';
+  if(card.dataset.monthlySalesLayout!=='r1')card.dataset.monthlySalesLayout='r1';
  }
  function start(){
+  if(window.__toyaPerSiteSalesR1)return;
   apply();
+  if(window.__toyaPerSiteSalesR1)return;
   if(!observer&&document.body){observer=new MutationObserver(schedule);observer.observe(document.body,{subtree:true,childList:true,characterData:true});}
   document.addEventListener('change',event=>{if(event.target?.id==='cmMonth')schedule();});
   for(const name of ['toya-project-document-changed','toya-site-project-profile-saved','toya-site-lifecycle-changed','toya-site-renamed'])document.addEventListener(name,schedule);

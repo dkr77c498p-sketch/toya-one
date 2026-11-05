@@ -6,8 +6,10 @@
  const norm=value=>String(value??'').normalize('NFKC').replace(/[\s　]/g,'');
  const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
  const yen=value=>Number(value).toLocaleString('ja-JP',{maximumFractionDigits:2})+'円';
+ const setText=(element,text)=>{if(element&&element.textContent!==text){element.textContent=text;return true;}return false;};
+ const setHidden=(element,value)=>{if(element&&element.hidden!==value){element.hidden=value;return true;}return false;};
  let timer=null,observer=null;
- const schedule=()=>{clearTimeout(timer);timer=setTimeout(apply,0);};
+ const schedule=()=>{clearTimeout(timer);timer=setTimeout(apply,16);};
  function month(card){
   const value=card.querySelector('#cmMonth')?.value||'';
   const match=/^(\d{4})-(\d{2})$/.exec(value);
@@ -86,17 +88,19 @@
   }).join('');
   const html='<h3>各現場の売上・原価・利益</h3>'+(siteHTML||'<p class="cm-ps-note">集計する現場を選んでください。</p>');
   if(host.dataset.signature!==html){host.innerHTML=html;host.dataset.signature=html;}
-  const aggregate=card.querySelector('.cm-metrics');if(aggregate)aggregate.hidden=true;
-  const cumulativeInfo=card.querySelector('#cmCumulativeInfo');if(cumulativeInfo)cumulativeInfo.hidden=true;
-  const oldCards=card.querySelector('#cmBreakdown .cm-site-cards');if(oldCards)oldCards.hidden=true;
-  const oldHeading=oldCards?.previousElementSibling;if(oldHeading?.tagName==='H3')oldHeading.hidden=true;
-  const title=card.querySelector('#cmTitle');if(title)title.textContent='各現場の月別売上・売上合計・原価・利益';
-  const explanation=card.querySelector('#cmContractInfo');if(explanation)explanation.textContent='現場ごとに、その月の売上・売上合計・原価・利益を表示します。売上合計は選択月までの累計で、その月の売上へ重ねて足しません。';
-  card.dataset.perSiteSales='r1';
+  setHidden(card.querySelector('.cm-metrics'),true);
+  setHidden(card.querySelector('#cmCumulativeInfo'),true);
+  const oldCards=card.querySelector('#cmBreakdown .cm-site-cards');
+  setHidden(oldCards,true);
+  const oldHeading=oldCards?.previousElementSibling;
+  if(oldHeading?.tagName==='H3')setHidden(oldHeading,true);
+  setText(card.querySelector('#cmTitle'),'各現場の月別売上・売上合計・原価・利益');
+  setText(card.querySelector('#cmContractInfo'),'現場ごとに、その月の売上・売上合計・原価・利益を表示します。売上合計は選択月までの累計で、その月の売上へ重ねて足しません。');
+  if(card.dataset.perSiteSales!=='r1')card.dataset.perSiteSales='r1';
  }
  function start(){
   apply();
-  if(!observer&&document.body){observer=new MutationObserver(schedule);observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['checked','hidden']});}
+  if(!observer&&document.body){observer=new MutationObserver(schedule);observer.observe(document.body,{subtree:true,childList:true,characterData:true});}
   document.addEventListener('change',event=>{if(event.target?.matches('#cmMonth,#cmSiteChoices input'))schedule();});
   document.addEventListener('click',event=>{if(event.target?.matches('#cmRefresh,#cmAutoSelect,#cmPastSitesToggle'))schedule();});
   window.addEventListener('pageshow',schedule);
