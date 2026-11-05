@@ -1,0 +1,54 @@
+name: Verify home flicker guard
+on:
+  push:
+    branches: [fix/home-flicker-loop-20261105]
+    paths:
+      - 'docs/company-monthly-sales-layout-r1.js'
+      - 'docs/company-per-site-sales-r1.js'
+      - '.github/workflows/home-flicker-guard.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  verify-and-stage:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Verify scripts do not fight over the same home content
+        run: |
+          node --check docs/company-monthly-sales-layout-r1.js
+          node --check docs/company-per-site-sales-r1.js
+          grep -F "if(window.__toyaPerSiteSalesR1){stop();return;}" docs/company-monthly-sales-layout-r1.js
+          grep -F "const setHidden=" docs/company-per-site-sales-r1.js
+          grep -F "observer.observe(document.body,{subtree:true,childList:true,characterData:true});" docs/company-per-site-sales-r1.js
+          if grep -F "attributeFilter:['checked','hidden']" docs/company-per-site-sales-r1.js; then
+            echo 'old self-triggering observer remains' >&2
+            exit 1
+          fi
+      - name: Refresh browser cache versions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('docs/index.html')
+          s=p.read_text()
+          replacements={
+            'company-monthly-sales-layout-r1.js?v=20261105-r1':'company-monthly-sales-layout-r1.js?v=20261105-stable-r2',
+            'company-per-site-sales-r1.js?v=20261105-r1':'company-per-site-sales-r1.js?v=20261105-stable-r2',
+          }
+          for old,new in replacements.items():
+            if old not in s:
+              raise SystemExit(f'missing loader: {old}')
+            s=s.replace(old,new,1)
+          p.write_text(s)
+          PY
+          grep -F 'company-monthly-sales-layout-r1.js?v=20261105-stable-r2' docs/index.html
+          grep -F 'company-per-site-sales-r1.js?v=20261105-stable-r2' docs/index.html
+          git diff --check
+      - name: Commit verified loader change
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/index.html
+          git commit -m "Refresh stable home summary scripts"
+          git push
