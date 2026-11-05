@@ -162,11 +162,31 @@
     const rows = [...document.querySelectorAll('#items .item')];
     const last = rows[rows.length - 1];
     if(last){
+      // Keep the master rate with this report row. The saved report still stores
+      // the final yen amount exactly as before; this only removes repeated typing.
+      last.dataset.wpmRateBasis = r.rate_basis;
+      last.dataset.wpmUnitPrice = String(r.unit_price);
+      last.dataset.wpmFacility = r.facility || '';
+      const qtyInput=last.querySelector('.i-qty'),unitInput=last.querySelector('.i-unit'),priceInput=last.querySelector('.i-price');
+      const recalc=()=>{
+        if(!qtyInput||!unitInput||!priceInput)return;
+        const q=Number(qtyInput.value||0),u=unitInput.value;
+        const auto=wpmCalcAmount(r,q,u==='m³'?'m3':u==='台'?'vehicle':u==='枚'?'piece':u);
+        priceInput.value=Number.isFinite(auto)?String(Math.round(auto)):'';
+      };
+      qtyInput?.addEventListener('input',recalc);
+      unitInput?.addEventListener('input',recalc);
+      if(priceInput){
+        priceInput.readOnly=true;
+        priceInput.setAttribute('aria-label','処分金額（単価マスターから自動計算）');
+        priceInput.style.background='#f3f3f3';
+      }
       const tag = document.createElement('div');
-      tag.className = 'note';
+      tag.className = 'note wpm-auto-note';
       tag.style.marginTop = '7px';
-      tag.textContent = `処分単価：${r.facility} ${unitYen(r.unit_price)}/${r.display_unit}（税別）`;
+      tag.textContent = `単価：${unitYen(r.unit_price)}/${r.display_unit}（税別）｜金額は数量から自動計算`;
       last.appendChild(tag);
+      recalc();
       last.scrollIntoView({behavior:'smooth', block:'center'});
     }
   }
