@@ -1,0 +1,69 @@
+name: Verify work-month revenue and profit
+on:
+  push:
+    branches: ['fix/monthly-revenue-profit-20261012']
+    paths:
+      - 'docs/monthly-revenue.r1.js'
+      - 'scripts/monthly-profit-patch.py'
+      - 'tests/monthly-revenue*'
+      - '.github/workflows/monthly-revenue.yml'
+permissions:
+  contents: write
+concurrency:
+  group: monthly-revenue-verification
+  cancel-in-progress: false
+jobs:
+  verify-and-stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Apply only hash-guarded display and revenue-read integration
+        run: |
+          python scripts/monthly-profit-patch.py
+          node --check docs/monthly-revenue.r1.js
+          node --check docs/company-monthly-summary.revenue-r1.js
+          node --check docs/site-period-ledger.revenue-r1.js
+          node --check docs/site-period-ledger-ui.revenue-r1.js
+          mkdir -p test-output/monthly-revenue
+          node tests/monthly-revenue.cjs | tee test-output/monthly-revenue/engine.txt
+      - name: Install isolated browser verification tools
+        run: |
+          python -m pip install playwright==1.57.0 >/tmp/monthly-install.log 2>&1 || { tail -60 /tmp/monthly-install.log; exit 1; }
+          python -m playwright install --with-deps chromium webkit >>/tmp/monthly-install.log 2>&1 || { tail -60 /tmp/monthly-install.log; exit 1; }
+          sudo apt-get install -y fonts-noto-cjk >>/tmp/monthly-install.log 2>&1 || { tail -60 /tmp/monthly-install.log; exit 1; }
+      - name: Test monthly totals, missing data, manual selections and tenant clearing
+        run: |
+          TOYA_TEST_BROWSER=chromium python tests/monthly-revenue-browser.py
+          TOYA_TEST_BROWSER=webkit python tests/monthly-revenue-browser.py
+      - name: Verify exact runtime output and preserved original financial modules
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib,json,subprocess
+          expected={'monthly-revenue.r1.js':'2ef7f731be47a666d8b42c17a23ca66f0cc72a912e3024ec1391d700f309adcf','company-monthly-summary.revenue-r1.js':'bdc881499d63e980c95dc98769972fd46d993cd9e8a3d46601fa0d26856bf7fa','site-period-ledger.revenue-r1.js':'2fbc921f2ee9550759191b19fe59fbe582f1aab881391b200a2ff3c384de0694','site-period-ledger-ui.revenue-r1.js':'6b790ac06316dca67a44ef62740f58078250f9c4f719aaa3164d37909a61d41a','index.html':'d282b46adc0ee6ad90505226c5f597ae901b76f43e8374c90d9b9f11a14ccfa2'}
+          for name,digest in expected.items():assert hashlib.sha256((Path('docs')/name).read_bytes()).hexdigest()==digest,name
+          changed=subprocess.check_output(['git','diff','--name-only'],text=True).splitlines()
+          assert changed==['docs/index.html'],changed
+          Path('test-output/monthly-revenue/runtime-hashes.json').write_text(json.dumps(expected,indent=2))
+          PY
+      - name: Stage only verified source copies on feature branch
+        if: github.ref == 'refs/heads/fix/monthly-revenue-profit-20261012'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add docs/index.html docs/company-monthly-summary.revenue-r1.js docs/site-period-ledger.revenue-r1.js docs/site-period-ledger-ui.revenue-r1.js
+          git commit -m 'Stage verified work-month profit and cumulative ledger integration'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: monthly-revenue-verification
+          retention-days: 5
+          path: |
+            test-output/monthly-revenue
+            docs/monthly-revenue.r1.js
+            docs/company-monthly-summary.revenue-r1.js
+            docs/site-period-ledger.revenue-r1.js
+            docs/site-period-ledger-ui.revenue-r1.js
+            docs/index.html
