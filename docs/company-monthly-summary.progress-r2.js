@@ -240,8 +240,8 @@
  const q=s=>/^#cm[A-Z]/.test(s)?(card?.querySelector(s)||null):document.querySelector(s);
  const identity=()=>typeof cloudProfile!=='undefined'&&cloudProfile?.active===true&&cloudProfile.role==='admin'&&cloudProfile.company_id&&typeof cloudClient!=='undefined'&&cloudClient?cloudProfile.id+':'+cloudProfile.company_id:'';
  const visible=()=>q('#homePage')?.classList.contains('active')&&!document.hidden;
- let owner='',ticket=0,pending='',loaded='',loadedAt=0,month=japanMonth(),followCurrent=true,card=null,timer=null,excluded=new Set(),selectionStateKey='',selectionOverrides=new Map(),selectionReadError=false,snapshot=null;
- function clear(){excluded=new Set();selectionStateKey='';selectionOverrides=new Map();selectionReadError=false;snapshot=null;ticket++;owner='';pending='';loaded='';loadedAt=0;clearTimeout(timer);card?.remove();card=null;month=japanMonth();followCurrent=true;}
+ let owner='',ticket=0,pending='',loaded='',loadedAt=0,month=japanMonth(),followCurrent=true,card=null,timer=null,excluded=new Set(),selectionStateKey='',selectionOverrides=new Map(),selectionReadError=false,snapshot=null,showPastSites=false;
+ function clear(){excluded=new Set();selectionStateKey='';selectionOverrides=new Map();selectionReadError=false;snapshot=null;showPastSites=false;ticket++;owner='';pending='';loaded='';loadedAt=0;clearTimeout(timer);card?.remove();card=null;month=japanMonth();followCurrent=true;}
  function place(){
   const home=q('#homePage'),entry=q('#uxDailyHome');
   if(!card?.isConnected||!home||!entry)return;
@@ -256,7 +256,7 @@
   card=document.createElement('section');card.id='companyMonthlySummary';card.className='card admin-home-only cm-card';card.setAttribute('aria-labelledby','cmTitle');
   card.innerHTML='<div class="cm-heading"><h2 id="cmTitle">今月の請負金・売上・原価・利益</h2><span id="cmScope">選択現場・税別</span></div>'+
    '<div class="cm-controls"><div><label for="cmMonth">対象月</label><input id="cmMonth" type="month" min="2000-01" value="'+month+'"></div><button id="cmThisMonth" class="btn light" type="button">今月</button><button id="cmRefresh" class="btn dark" type="button">更新</button></div>'+
-   '<details id="cmSiteFilter"><summary>集計する現場を選ぶ</summary><p class="note">対象月の施工・売上・原価の記録がある現場と、その月の完工現場を自動で選びます。チェックは自由に変更でき、手動変更はこの端末・会社・対象月ごとに保存します。日報や保存金額は変更しません。</p><button id="cmAutoSelect" class="btn light" type="button" style="width:100%;margin:8px 0" disabled>自動選択に戻す</button><div id="cmSiteChoices"></div></details><p id="cmSelectionNote" class="note"></p>'+
+   '<details id="cmSiteFilter"><summary>集計する現場を選ぶ</summary><p class="note">通常は施工中の現場だけ表示します。完工・過去現場は必要な時だけ表示できます。チェックは自由に変更でき、日報や保存金額は変更しません。</p><button id="cmPastSitesToggle" class="btn light" type="button" style="width:100%;margin:8px 0">過去・完工現場を表示</button><button id="cmAutoSelect" class="btn light" type="button" style="width:100%;margin:8px 0" disabled>自動選択に戻す</button><div id="cmSiteChoices"></div></details><p id="cmSelectionNote" class="note"></p>'+
    '<div class="cm-metrics"><div><span>選択現場の請負総額（参考）</span><strong id="cmActiveContract">—</strong></div><div><span id="cmCurrentProgressLabel">対象月の出来高（登録済み）</span><strong id="cmContract">—</strong></div><div class="cm-sales"><span id="cmCurrentClaimLabel">対象月分の確定請求（参考）</span><strong id="cmSales">—</strong></div><div><span id="cmCurrentCostLabel">対象月の原価（入力済み）</span><strong id="cmCost">—</strong></div><div><span id="cmCurrentProfitLabel">対象月の暫定利益</span><strong id="cmProfit">—</strong></div><div><span>これまでの出来高（登録済み）</span><strong id="cmCumulative">—</strong></div></div><p id="cmCumulativeInfo" class="note" role="status" aria-live="polite"></p>'+
    '<div id="cmProgressAction"><button id="cmProgressOpen" class="btn lime" type="button" style="width:100%;margin:14px 0;font-weight:900">今月の出来高を入力</button><div id="cmProgressEditor"></div></div><p id="cmContractInfo" class="cm-contract-note"></p><button id="cmPeriodOpen" class="btn light" type="button" style="width:100%;margin:10px 0">現場別の月別・工事全体を見る</button>'+
    '<p id="cmNotice" class="cm-notice"></p><p id="cmStatus" class="note" role="status" aria-live="polite">読み込み中…</p>'+
@@ -264,7 +264,7 @@
   home.prepend(card);place();
   q('#cmMonth').onchange=()=>{month=q('#cmMonth').value;followCurrent=month===japanMonth();ticket++;pending='';loaded='';empty();refresh();};
   q('#cmThisMonth').onclick=()=>{month=japanMonth();followCurrent=true;q('#cmMonth').value=month;ticket++;pending='';loaded='';empty();refresh();};
-  q('#cmAutoSelect').onclick=resetSelection;q('#cmRefresh').onclick=()=>refresh(true);q('#cmProgressOpen').onclick=()=>renderProgressEditor();q('#cmPeriodOpen').onclick=()=>{if(!window.ToyaSitePeriodUI)return setStatus('現場別集計を読み込めません。画面を更新してください。',true);const selected=list(snapshot?.sites).filter(s=>!excluded.has(s.id));window.ToyaSitePeriodUI.open({siteId:selected.length===1?selected[0].id:'',month});};return true;
+  q('#cmPastSitesToggle').onclick=()=>{showPastSites=!showPastSites;q('#cmPastSitesToggle').textContent=showPastSites?'過去・完工現場を隠す':'過去・完工現場を表示';if(snapshot)selectSites(snapshot);};q('#cmAutoSelect').onclick=resetSelection;q('#cmRefresh').onclick=()=>refresh(true);q('#cmProgressOpen').onclick=()=>renderProgressEditor();q('#cmPeriodOpen').onclick=()=>{if(!window.ToyaSitePeriodUI)return setStatus('現場別集計を読み込めません。画面を更新してください。',true);const selected=list(snapshot?.sites).filter(s=>!excluded.has(s.id));window.ToyaSitePeriodUI.open({siteId:selected.length===1?selected[0].id:'',month});};return true;
  }
  function loadSelection(){
   const key=selectionStorageKey(cloudProfile.company_id,month);
@@ -290,7 +290,8 @@
   snapshot=data;loadSelection();
   excluded=resolveSelection(data,month,cloudProfile.company_id,selectionOverrides).excluded;
   const box=q('#cmSiteChoices');box.replaceChildren();
-  for(const site of [...data.sites].filter(s=>normalizedName(s.name)!=='現場名をあとで変更').sort((a,b)=>a.name.localeCompare(b.name,'ja'))){
+  const visibleSites=[...data.sites].filter(s=>normalizedName(s.name)!=='現場名をあとで変更'&&(s.status==='active'||showPastSites)).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+  for(const site of visibleSites){
    const label=document.createElement('label'),check=document.createElement('input');
    check.type='checkbox';check.checked=!excluded.has(site.id);check.dataset.siteId=site.id;
    label.append(check,document.createTextNode(site.name));box.append(label);
