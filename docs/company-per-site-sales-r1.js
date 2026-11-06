@@ -7,7 +7,15 @@
  const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
  const yen=value=>Number(value).toLocaleString('ja-JP',{maximumFractionDigits:2})+'円';
  const setText=(element,text)=>{if(element&&element.textContent!==text){element.textContent=text;return true;}return false;};
- const setHidden=(element,value)=>{if(element&&element.hidden!==value){element.hidden=value;return true;}return false;};
+ const forceHidden=element=>{
+  if(!element)return false;
+  let changed=false;
+  if(!element.hidden){element.hidden=true;changed=true;}
+  if(element.style.getPropertyValue('display')!=='none'||element.style.getPropertyPriority('display')!=='important'){
+   element.style.setProperty('display','none','important');changed=true;
+  }
+  return changed;
+ };
  let timer=null,observer=null;
  const schedule=()=>{clearTimeout(timer);timer=setTimeout(apply,16);};
  function month(card){
@@ -57,6 +65,9 @@
  function ensureStyle(){
   if(document.getElementById('cmPerSiteSalesStyle'))return;
   const style=document.createElement('style');style.id='cmPerSiteSalesStyle';style.textContent=`
+#companyMonthlySummary[data-per-site-sales="r1"]>.cm-metrics,
+#companyMonthlySummary[data-per-site-sales="r1"]>#cmCumulativeInfo,
+#companyMonthlySummary[data-per-site-sales="r1"] #cmBreakdown .cm-site-cards{display:none!important}
 #cmPerSiteSales{margin:14px 0}
 #cmPerSiteSales>h3{font-size:17px;margin:0 0 10px}
 .cm-ps-card{border:2px solid #d8dfcf;border-radius:15px;padding:14px;margin:12px 0;background:#fff}
@@ -73,6 +84,7 @@
  function apply(){
   const card=document.querySelector('#companyMonthlySummary');
   if(!card)return;
+  if(card.dataset.perSiteSales!=='r1')card.dataset.perSiteSales='r1';
   const siteNames=selected(card),siteRows=rows(card),totals=cumulative(card),m=month(card);
   let host=card.querySelector('#cmPerSiteSales');
   if(!host){host=document.createElement('section');host.id='cmPerSiteSales';const note=card.querySelector('#cmSelectionNote');(note||card.querySelector('#cmSiteFilter'))?.after(host);}
@@ -88,15 +100,14 @@
   }).join('');
   const html='<h3>各現場の売上・原価・利益</h3>'+(siteHTML||'<p class="cm-ps-note">集計する現場を選んでください。</p>');
   if(host.dataset.signature!==html){host.innerHTML=html;host.dataset.signature=html;}
-  setHidden(card.querySelector('.cm-metrics'),true);
-  setHidden(card.querySelector('#cmCumulativeInfo'),true);
+  forceHidden(card.querySelector('.cm-metrics'));
+  forceHidden(card.querySelector('#cmCumulativeInfo'));
   const oldCards=card.querySelector('#cmBreakdown .cm-site-cards');
-  setHidden(oldCards,true);
+  forceHidden(oldCards);
   const oldHeading=oldCards?.previousElementSibling;
-  if(oldHeading?.tagName==='H3')setHidden(oldHeading,true);
+  if(oldHeading?.tagName==='H3')forceHidden(oldHeading);
   setText(card.querySelector('#cmTitle'),'各現場の月別売上・売上合計・原価・利益');
   setText(card.querySelector('#cmContractInfo'),'現場ごとに、その月の売上・売上合計・原価・利益を表示します。売上合計は選択月までの累計で、その月の売上へ重ねて足しません。');
-  if(card.dataset.perSiteSales!=='r1')card.dataset.perSiteSales='r1';
  }
  function start(){
   apply();
