@@ -4,7 +4,7 @@
  if(window.__toyaPerSiteSalesR1)return;
  window.__toyaPerSiteSalesR1=true;
  const norm=value=>String(value??'').normalize('NFKC').replace(/[\s　]/g,'');
- const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[char]));
+ const esc=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
  const yen=value=>Number(value).toLocaleString('ja-JP',{maximumFractionDigits:2})+'円';
  const setText=(element,text)=>{if(element&&element.textContent!==text){element.textContent=text;return true;}return false;};
  const forceHidden=element=>{
