@@ -1,15 +1,34 @@
-/* TOYA One 廃材処分単価マスター（税別） v1.2 kg小数単価・枚対応 */
+/* TOYA One 廃材処分単価マスター（税別） v1.3 前回選択・自動反映対応 */
 (() => {
   'use strict';
 
   let wpmRows = [];
   let wpmLoaded = false;
   let wpmLoading = false;
+  let wpmRestoring = false;
 
   const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const yen = (n) => '¥' + Math.round(Number(n || 0)).toLocaleString();
-  // Unit prices retain decimals; final yen amounts keep the existing rounding.
   const unitYen = (n) => '¥' + Number(n || 0).toLocaleString('ja-JP', {maximumFractionDigits: 6});
+  const norm = (s) => String(s ?? '').normalize('NFKC').replace(/[\s　]/g,'');
+
+  function wpmStorageKey(){
+    return typeof cloudProfile !== 'undefined' && cloudProfile?.company_id ? `toya-waste-last:v1:${cloudProfile.company_id}` : '';
+  }
+  function wpmReadSaved(){
+    try{const key=wpmStorageKey(),raw=key&&localStorage.getItem(key);const value=raw?JSON.parse(raw):null;return value&&typeof value==='object'?value:{};}catch{return {};}
+  }
+  function wpmRemember(){
+    if(wpmRestoring) return;
+    const key=wpmStorageKey(),fac=document.getElementById('wpmFacility'),rate=document.getElementById('wpmRate'),unit=document.getElementById('wpmQtyUnit');
+    if(!key||!fac||!rate) return;
+    try{localStorage.setItem(key,JSON.stringify({facility:fac.value,rateId:rate.value,unit:unit?.value||''}));}catch{}
+  }
+  function wpmLastWasteFromForm(){
+    const rows=[...document.querySelectorAll('#items .item[data-is-waste="1"],#items .waste-item')],row=rows.at(-1);
+    if(!row) return {};
+    return {facility:row.querySelector('.i-company')?.value||'',item:(row.querySelector('.i-name')?.value||'').replace(/^産廃：/,'').replace(/（.*）$/,'')};
+  }
 
   function wpmFindWasteCard(){
     const cards = [...document.querySelectorAll('#reportPage .card')];
@@ -20,7 +39,6 @@
     const wasteCard = wpmFindWasteCard();
     if(!wasteCard) return;
 
-    /* 旧「産業廃棄物（タップ入力）」は廃材処分単価へ一本化したため非表示 */
     wasteCard.style.display = 'none';
     wasteCard.setAttribute('aria-hidden','true');
 
@@ -31,7 +49,7 @@
     card.id = 'wastePriceCard';
     card.innerHTML = `
       <h2>廃材処分単価（税別）</h2>
-      <div class="note">処分場と品目を選ぶと、処分費を自動計算して日報へ追加できます。</div>
+      <div class="note">処分場と品目を選ぶと、処分費を自動計算して日報へ追加できます。前回使った処分場・品目は次回から自動表示します。</div>
       <div class="grid2" style="margin-top:10px">
         <div><label>処分場</label><select id="wpmFacility"><option value="">読込中…</option></select></div>
         <div><label>品目・単価</label><select id="wpmRate"><option value="">処分場を選択</option></select></div>
@@ -42,7 +60,7 @@
       </div>
       <div id="wpmCalc" class="row" style="margin-top:10px"><b>単価を選択してください。</b></div>
       <button id="wpmAdd" type="button" class="btn dark" style="width:100%;margin-top:10px" disabled>＋ この廃材を日報へ追加</button>
-      <div class="note" style="margin-top:8px">金額はすべて税別。kg単価はt入力にも自動換算します（1t＝1,000kg）。</div>`;
+      <div class="note" style="margin-top:8px">追加後は処分場・品目・単価・金額を日報へ自動反映します。金額は税別。kg単価はt入力にも自動換算します（1t＝1,000kg）。</div>`;
     wasteCard.insertAdjacentElement('afterend', card);
 
     const fac = document.getElementById('wpmFacility');
@@ -50,10 +68,10 @@
     const qty = document.getElementById('wpmQty');
     const unit = document.getElementById('wpmQtyUnit');
     const add = document.getElementById('wpmAdd');
-    fac.addEventListener('change', wpmRenderRates);
-    rate.addEventListener('change', wpmRenderCalc);
+    fac.addEventListener('change', () => {wpmRenderRates();wpmRemember();});
+    rate.addEventListener('change', () => {wpmRenderCalc();wpmRemember();});
     qty.addEventListener('input', wpmRenderCalc);
-    unit.addEventListener('change', wpmRenderCalc);
+    unit.addEventListener('change', () => {wpmRenderCalc();wpmRemember();});
     add.addEventListener('click', wpmAddToReport);
   }
 
@@ -65,22 +83,30 @@
   function wpmRenderFacilities(){
     const fac = document.getElementById('wpmFacility');
     if(!fac) return;
-    const current = fac.value;
+    const current = fac.value, saved=wpmReadSaved(), fromRow=wpmLastWasteFromForm();
     const names = [...new Set(wpmRows.map(r => r.facility).filter(Boolean))];
     fac.innerHTML = '<option value="">処分場を選択</option>' + names.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
-    if(names.includes(current)) fac.value = current;
-    wpmRenderRates();
+    const desired=names.includes(current)?current:names.includes(saved.facility)?saved.facility:names.includes(fromRow.facility)?fromRow.facility:names.length===1?names[0]:'';
+    fac.value=desired;
+    wpmRenderRates(saved.rateId||'',fromRow.item||'');
   }
 
-  function wpmRenderRates(){
+  function wpmRenderRates(preferredId='',preferredItem=''){
     const fac = document.getElementById('wpmFacility');
     const rate = document.getElementById('wpmRate');
     if(!fac || !rate) return;
-    const rows = wpmRows.filter(r => r.facility === fac.value && r.active !== false);
+    const current=rate.value, rows = wpmRows.filter(r => r.facility === fac.value && r.active !== false);
     rate.innerHTML = rows.length
       ? '<option value="">品目を選択</option>' + rows.map(r => `<option value="${escHtml(r.id)}">${escHtml(wpmRateLabel(r))}</option>`).join('')
       : '<option value="">品目を選択</option>';
+    let desired=rows.some(r=>String(r.id)===String(current))?current:rows.some(r=>String(r.id)===String(preferredId))?String(preferredId):'';
+    if(!desired&&preferredItem){const matched=rows.find(r=>norm(r.waste_type)===norm(preferredItem)||norm(wpmRateLabel(r)).startsWith(norm(preferredItem)));if(matched)desired=String(matched.id);}
+    if(!desired&&rows.length===1)desired=String(rows[0].id);
+    rate.value=desired;
+    const saved=wpmReadSaved(),unit=document.getElementById('wpmQtyUnit');
     wpmRenderCalc();
+    if(unit&&saved.unit&&[...unit.options].some(option=>option.value===saved.unit)){wpmRestoring=true;unit.value=saved.unit;wpmRestoring=false;wpmRenderCalc();}
+    wpmRemember();
   }
 
   function wpmSelected(){
@@ -96,7 +122,6 @@
       : r.rate_basis === 'm3' ? [['m3','m³']]
       : r.rate_basis === 'piece' ? [['piece','枚']]
       : r.rate_basis === 'vehicle' ? [['vehicle','台']] : [];
-    // Preserve kg/t when changing quantity or a unit; do not reset the selection.
     const previous = unit.value;
     const html = allowed.map(([value,label]) => `<option value="${value}">${label}</option>`).join('');
     if(unit.dataset.rateBasis !== r.rate_basis){
@@ -162,12 +187,11 @@
     const rows = [...document.querySelectorAll('#items .item')];
     const last = rows[rows.length - 1];
     if(last){
-      // Keep the master rate with this report row. The saved report still stores
-      // the final yen amount exactly as before; this only removes repeated typing.
       last.dataset.wpmRateBasis = r.rate_basis;
       last.dataset.wpmUnitPrice = String(r.unit_price);
       last.dataset.wpmFacility = r.facility || '';
-      const qtyInput=last.querySelector('.i-qty'),unitInput=last.querySelector('.i-unit'),priceInput=last.querySelector('.i-price');
+      last.dataset.wpmRateId = String(r.id);
+      const nameInput=last.querySelector('.i-name'),companyInput=last.querySelector('.i-company'),qtyInput=last.querySelector('.i-qty'),unitInput=last.querySelector('.i-unit'),priceInput=last.querySelector('.i-price');
       const recalc=()=>{
         if(!qtyInput||!unitInput||!priceInput)return;
         const q=Number(qtyInput.value||0),u=unitInput.value;
@@ -176,19 +200,19 @@
       };
       qtyInput?.addEventListener('input',recalc);
       unitInput?.addEventListener('input',recalc);
-      if(priceInput){
-        priceInput.readOnly=true;
-        priceInput.setAttribute('aria-label','処分金額（単価マスターから自動計算）');
-        priceInput.style.background='#f3f3f3';
-      }
+      for(const input of [nameInput,companyInput])if(input){input.readOnly=true;input.style.background='#f3f3f3';input.setAttribute('aria-label',(input===nameInput?'品目':'処分場')+'（単価マスターから自動反映）');}
+      if(priceInput){priceInput.readOnly=true;priceInput.setAttribute('aria-label','処分金額（単価マスターから自動計算）');priceInput.style.background='#f3f3f3';}
       const tag = document.createElement('div');
       tag.className = 'note wpm-auto-note';
       tag.style.marginTop = '7px';
-      tag.textContent = `単価：${unitYen(r.unit_price)}/${r.display_unit}（税別）｜金額は数量から自動計算`;
+      tag.textContent = `自動反映｜処分場：${r.facility}｜品目：${name}｜単価：${unitYen(r.unit_price)}/${r.display_unit}（税別）｜数量変更で金額も自動変更`;
       last.appendChild(tag);
       recalc();
       last.scrollIntoView({behavior:'smooth', block:'center'});
     }
+    wpmRemember();
+    qtyEl.value='1';
+    wpmRenderCalc();
   }
 
   async function wpmLoad(){
@@ -209,7 +233,10 @@
       if(error) throw error;
       wpmRows = data || [];
       wpmLoaded = true;
+      wpmRestoring=true;
       wpmRenderFacilities();
+      wpmRestoring=false;
+      wpmRemember();
     }catch(e){
       console.error('廃材単価マスター読込エラー', e);
       const fac = document.getElementById('wpmFacility');
@@ -218,10 +245,6 @@
       wpmLoading = false;
     }
   }
-
-  document.addEventListener('change', (e) => {
-    if(e.target && e.target.id === 'wpmQtyUnit') e.target.dataset.userChosen = '1';
-  });
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => {wpmEnsureUI(); wpmLoad();});
   else {wpmEnsureUI(); wpmLoad();}
