@@ -110,11 +110,12 @@
     const current = fac.value, saved=wpmReadSaved(), fromRow=wpmLastWasteFromForm();
     const names = [...new Set(wpmRows.map(r => r.facility).filter(Boolean))];
     fac.innerHTML = '<option value="">処分場を選択</option>' + names.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
-    const desired=names.includes(current)?current:names.includes(fromRow.facility)?fromRow.facility:names.includes(saved.facility)?saved.facility:names.includes(wpmCloudLast?.facility)?wpmCloudLast.facility:names.length===1?names[0]:'';
+    const validSaved=wpmRows.some(r=>r.facility===saved.facility&&String(r.id)===String(saved.rateId));
+    const desired=names.includes(current)?current:names.includes(fromRow.facility)?fromRow.facility:validSaved?saved.facility:names.includes(wpmCloudLast?.facility)?wpmCloudLast.facility:names.length===1?names[0]:'';
     fac.value=desired;
     const preferred=desired===fromRow.facility?fromRow.item:'';
-    const preferredId=desired===saved.facility?saved.rateId:desired===wpmCloudLast?.facility?wpmCloudLast.rateId:'';
-    wpmRenderRates(preferredId||'',preferred||wpmCloudLast?.item||'');
+    const preferredId=preferred?'':desired===saved.facility&&validSaved?saved.rateId:desired===wpmCloudLast?.facility?wpmCloudLast.rateId:'';
+    wpmRenderRates(preferredId||'',preferred||((desired===wpmCloudLast?.facility)?wpmCloudLast.item:'')||'');
   }
 
   function wpmRenderRates(preferredId='',preferredItem=''){
@@ -207,7 +208,8 @@
       qty,
       price: Math.round(amount),
       company: r.facility,
-      disposalSite: r.facility,
+      // The rate-master facility is a pricing label, not necessarily the
+      // legal manifest disposal-site address; do not fabricate that field.
       isWaste: true,
       manifestType: 'none'
     });
