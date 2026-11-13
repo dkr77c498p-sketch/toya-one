@@ -1,0 +1,26 @@
+name: Verify site month and waste autofill
+on:
+  push:
+    branches: [fix/month-crossing-and-waste-autofill-20261113]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check JavaScript syntax
+        run: |
+          node --check docs/company-per-site-sales-r1.js
+          node --check docs/waste-price-master.js
+          node --check docs/site-period-ledger.r1.js
+      - name: Verify ledger calculations and no duplicate revenue
+        run: node tests/site-period-ledger.cjs
+      - name: Verify updated loaders and safe fields
+        run: |
+          grep -F 'company-per-site-sales-r1.js?v=20261113-monthly-lifetime-r3' docs/index.html
+          grep -F 'waste-price-master.js?v=20261113-cloud-last-r2' docs/index.html
+          grep -F 'wpmCloudLast=await wpmCloudPrevious()' docs/waste-price-master.js
+          grep -F 'ここまでの利益' docs/company-per-site-sales-r1.js
+          git diff --check
