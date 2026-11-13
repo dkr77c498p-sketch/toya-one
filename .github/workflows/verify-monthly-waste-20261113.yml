@@ -21,6 +21,6 @@ jobs:
         run: |
           grep -F 'company-per-site-sales-r1.js?v=20261113-monthly-lifetime-r3' docs/index.html
           grep -F 'waste-price-master.js?v=20261113-cloud-last-r2' docs/index.html
-          grep -F 'disposalSite: r.facility' docs/waste-price-master.js
+          grep -F 'wpmCloudLast=await wpmCloudPrevious()' docs/waste-price-master.js
           grep -F 'ここまでの利益' docs/company-per-site-sales-r1.js
           git diff --check
