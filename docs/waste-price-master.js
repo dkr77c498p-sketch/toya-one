@@ -6,6 +6,7 @@
   let wpmLoaded = false;
   let wpmLoading = false;
   let wpmRestoring = false;
+  let wpmCloudLast = null;
 
   const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const yen = (n) => '¥' + Math.round(Number(n || 0)).toLocaleString();
@@ -49,7 +50,7 @@
     card.id = 'wastePriceCard';
     card.innerHTML = `
       <h2>廃材処分単価（税別）</h2>
-      <div class="note">処分場と品目を選ぶと、処分費を自動計算して日報へ追加できます。前回使った処分場・品目は次回から自動表示します。</div>
+      <div class="note">処分場と品目を選ぶと、処分費を自動計算して日報へ追加できます。前回の処分場・品目を初期表示します。今回の搬入先・廃材が正しいか確認して追加してください。</div>
       <div class="grid2" style="margin-top:10px">
         <div><label>処分場</label><select id="wpmFacility"><option value="">読込中…</option></select></div>
         <div><label>品目・単価</label><select id="wpmRate"><option value="">処分場を選択</option></select></div>
@@ -80,15 +81,40 @@
     return `${r.waste_type}${vehicle}｜${unitYen(r.unit_price)} / ${r.display_unit}`;
   }
 
+  // Reuse only a real, previously saved waste row whose facility and item
+  // exactly match an active master entry. Never invent a disposal destination.
+  async function wpmCloudPrevious(){
+    if(!cloudClient||!cloudProfile?.company_id)return null;
+    const {data,error}=await cloudClient.from('daily_reports')
+      .select('company_id,report_date,report_data')
+      .eq('company_id',cloudProfile.company_id)
+      .order('report_date',{ascending:false}).limit(80);
+    if(error)throw error;
+    for(const report of data||[]){
+      if(report.company_id!==cloudProfile.company_id)continue;
+      const items=Array.isArray(report.report_data?.items)?report.report_data.items:[];
+      for(const item of [...items].reverse()){
+        if(item?.isWaste!==true&&item?.isWaste!=='true')continue;
+        const facility=String(item.company||'').trim();
+        const itemName=norm(String(item.name||'').replace(/^産廃：/,''));
+        const match=wpmRows.find(r=>r.active!==false&&r.facility===facility&&norm(r.waste_type+(r.vehicle_class?'（'+r.vehicle_class+'）':''))===itemName);
+        if(match)return {facility:match.facility,rateId:String(match.id),item:match.waste_type,unit:item.unit||''};
+      }
+    }
+    return null;
+  }
+
   function wpmRenderFacilities(){
     const fac = document.getElementById('wpmFacility');
     if(!fac) return;
     const current = fac.value, saved=wpmReadSaved(), fromRow=wpmLastWasteFromForm();
     const names = [...new Set(wpmRows.map(r => r.facility).filter(Boolean))];
     fac.innerHTML = '<option value="">処分場を選択</option>' + names.map(n => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
-    const desired=names.includes(current)?current:names.includes(saved.facility)?saved.facility:names.includes(fromRow.facility)?fromRow.facility:names.length===1?names[0]:'';
+    const desired=names.includes(current)?current:names.includes(fromRow.facility)?fromRow.facility:names.includes(saved.facility)?saved.facility:names.includes(wpmCloudLast?.facility)?wpmCloudLast.facility:names.length===1?names[0]:'';
     fac.value=desired;
-    wpmRenderRates(saved.rateId||'',fromRow.item||'');
+    const preferred=desired===fromRow.facility?fromRow.item:'';
+    const preferredId=desired===saved.facility?saved.rateId:desired===wpmCloudLast?.facility?wpmCloudLast.rateId:'';
+    wpmRenderRates(preferredId||'',preferred||wpmCloudLast?.item||'');
   }
 
   function wpmRenderRates(preferredId='',preferredItem=''){
@@ -181,6 +207,7 @@
       qty,
       price: Math.round(amount),
       company: r.facility,
+      disposalSite: r.facility,
       isWaste: true,
       manifestType: 'none'
     });
@@ -233,6 +260,7 @@
       if(error) throw error;
       wpmRows = data || [];
       wpmLoaded = true;
+      try{wpmCloudLast=await wpmCloudPrevious();}catch(e){console.warn('前回の廃材を取得できませんでした。手動選択できます。',e);}
       wpmRestoring=true;
       wpmRenderFacilities();
       wpmRestoring=false;
