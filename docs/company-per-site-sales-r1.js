@@ -119,7 +119,12 @@
   return rows.map(row=>{
    const profit=row.profit==null?(row.revenue==null?'売上未入力':'原価未確認'):yen(row.profit);
    const [year,month]=row.month.split('-');
-   return '<div class="cm-ps-month"><b>'+esc(year+'年'+Number(month)+'月')+'</b><div class="cm-ps-month-grid"><span>売上：'+esc(row.revenue==null?'未入力':yen(row.revenue))+'</span><span>原価：'+esc(row.cost==null?'記録なし':yen(row.cost))+'</span><span>利益：'+esc(profit)+'</span></div></div>';
+   // Cumulative fields are produced by the read-only ledger. Never replace
+   // missing revenue with zero or double-count issued invoices / contracts.
+   const runningRevenue=row.cumulativeRevenue==null?(row.cumulativeKnown>0?yen(row.cumulativeKnown)+'（入力済み分）':'未入力あり'):yen(row.cumulativeRevenue);
+   const runningCost=row.cumulativeCost==null?'記録なし':yen(row.cumulativeCost);
+   const runningProfit=row.cumulativeProfit==null?'未確定':yen(row.cumulativeProfit);
+   return '<div class="cm-ps-month"><b>'+esc(year+'年'+Number(month)+'月')+'</b><div class="cm-ps-month-grid"><span>月売上：'+esc(row.revenue==null?'未入力':yen(row.revenue))+'</span><span>月原価：'+esc(row.cost==null?'記録なし':yen(row.cost))+'</span><span>月利益：'+esc(profit)+'</span></div><div class="cm-ps-month-grid" style="margin-top:8px;padding-top:8px;border-top:1px solid #ddd"><span>ここまでの売上：'+esc(runningRevenue)+'</span><span>ここまでの原価：'+esc(runningCost)+'</span><span>ここまでの利益：'+esc(runningProfit)+'</span></div></div>';
   }).join('')||'<p class="cm-ps-note">この現場の月別記録はまだありません。</p>';
  }
  async function loadSummaries(sites,m){
@@ -155,7 +160,12 @@
   if(!host)return;
   void loadSummaries(sites,m);
   const html='<h3>各現場の月別・現在合計</h3>'+(sites.length?sites.map(site=>renderCard(site,fallback.get(norm(site.name))||{},summaryMap.get(site.id),m)).join(''):'<p class="cm-ps-note">集計する現場を選んでください。</p>');
-  if(host.dataset.signature!==html){host.innerHTML=html;host.dataset.signature=html;host.querySelectorAll('[data-cm-site-open]').forEach(button=>button.onclick=()=>window.ToyaSitePeriodUI?.open({siteId:button.dataset.cmSiteOpen,month:m.value,edit:true}));}
+  if(host.dataset.signature!==html){
+   const openIds=new Set([...host.querySelectorAll('.cm-ps-card')].filter(node=>node.querySelector('.cm-ps-months')?.open).map(node=>node.dataset.siteId));
+   host.innerHTML=html;host.dataset.signature=html;
+   host.querySelectorAll('.cm-ps-card').forEach(node=>{if(openIds.has(node.dataset.siteId))node.querySelector('.cm-ps-months').open=true;});
+   host.querySelectorAll('[data-cm-site-open]').forEach(button=>button.onclick=()=>window.ToyaSitePeriodUI?.open({siteId:button.dataset.cmSiteOpen,month:m.value,edit:true}));
+  }
   const oldCards=card.querySelector('#cmBreakdown .cm-site-cards'),oldHeading=oldCards?.previousElementSibling;
   if(oldHeading?.tagName==='H3')oldHeading.style.setProperty('display','none','important');
   card.querySelector('.cm-metrics')?.style.setProperty('display','none','important');
