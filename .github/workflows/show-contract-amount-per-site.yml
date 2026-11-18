@@ -1,3 +1,4 @@
+# Keeps each site's registered contract amount visible beside current totals.
 name: Show contract amount per site
 on:
   push:
