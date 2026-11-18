@@ -1,7 +1,11 @@
 name: Show contract amount per site
 on:
   push:
-    branches: [fix/show-contract-amount-per-site-20261119]
+    branches: [main]
+    paths:
+      - '.github/workflows/show-contract-amount-per-site.yml'
+      - 'docs/company-per-site-sales-r1.js'
+      - 'docs/index.html'
   workflow_dispatch:
 permissions:
   contents: write
@@ -23,17 +27,22 @@ jobs:
   const contractAmount=summary?(summary.contractAmount==null?'未登録':yen(summary.contractAmount)):(loading?'全期間集計中…':error||'未集計');
   return '<article class=\"cm-ps-card\" data-site-id=\"'+esc(site.id)+'\"><h3>'+esc(site.name)+'</h3><div class=\"cm-ps-group-title\">'+esc(m.label)+'の月別</div><div class=\"cm-ps-grid\"><div><span>'+esc(m.short)+'の売上</span><strong>'+esc(monthSales)+'</strong></div><div><span>'+esc(m.short)+'の原価</span><strong>'+esc(monthCost)+'</strong></div><div><span>'+esc(m.short)+'の利益</span><strong>'+esc(monthProfit)+'</strong></div></div><div class=\"cm-ps-group-title\">'+esc(currentLabel)+'の現場合計</div><div class=\"cm-ps-grid\"><div><span>請負金額（税別）</span><strong>'+esc(contractAmount)+'</strong></div><div><span>'+esc(currentLabel)+'の売上合計</span><strong>'+esc(totals.sales)+'</strong></div><div><span>'+esc(currentLabel)+'の原価合計</span><strong>'+esc(totals.cost)+'</strong></div><div><span>'+esc(currentLabel)+'の利益</span><strong>'+esc(totals.profit)+'</strong></div></div>'+(totals.note?'<p class=\"cm-ps-note\">'+esc(totals.note)+'</p>':'')+'<details class=\"cm-ps-months\"><summary>月ごとの売上・原価・利益を見る</summary>'+monthRows(summary,m)+'</details><div class=\"cm-ps-actions\"><button type=\"button\" class=\"btn light\" data-cm-site-open=\"'+esc(site.id)+'\">月別売上を入力・変更</button></div></article>';
 """
-          if s.count(old)!=1:
-              raise SystemExit('renderCard target not found exactly once')
-          p.write_text(s.replace(old,new))
+          if '請負金額（税別）' not in s:
+              if s.count(old)!=1:
+                  raise SystemExit('renderCard target not found exactly once')
+              s=s.replace(old,new)
+              p.write_text(s)
 
           index=Path('docs/index.html')
           html=index.read_text()
           old_v='company-per-site-sales-r1.js?v=20261113-monthly-lifetime-r3'
           new_v='company-per-site-sales-r1.js?v=20261119-contract-r4'
-          if html.count(old_v)!=1:
-              raise SystemExit('loader target not found exactly once')
-          index.write_text(html.replace(old_v,new_v))
+          if old_v in html:
+              if html.count(old_v)!=1:
+                  raise SystemExit('loader target found more than once')
+              index.write_text(html.replace(old_v,new_v))
+          elif new_v not in html:
+              raise SystemExit('known loader version was not found')
           PY
       - name: Verify
         run: |
